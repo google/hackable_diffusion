@@ -34,40 +34,66 @@ for parts of the data are also possible.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import math
-import typing
+from typing import Protocol
 
+from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import utils
-
+from hackable_diffusion.lib.hd_typing import typechecked  # pylint: disable=g-multiple-import,g-importing-member
 import jax
 import jax.numpy as jnp
-import jaxtyping
 
-# Type Aliases
-Array = jaxtyping.Array
-Float = jaxtyping.Float
-Key = jaxtyping.Key
-PyTree = jaxtyping.PyTree
-Shaped = jaxtyping.Shaped
+################################################################################
+# MARK: Type Aliases
+################################################################################
 
-Self = typing.Self
+PRNGKey = hd_typing.PRNGKey
+PyTree = hd_typing.PyTree
+
+DataArray = hd_typing.DataArray
+DataTree = hd_typing.DataTree
+TimeArray = hd_typing.TimeArray
+TimeTree = hd_typing.TimeTree
+
+################################################################################
+# MARK: TimeSampler
+################################################################################
 
 
-class TimeSampler(typing.Protocol):
-  """Time sampler protocol."""
+class TimeSampler(Protocol):
+  """Time sampler protocol operating on arrays or on pytrees."""
 
   def __call__(
-      self, key: Key, data_spec: PyTree[Shaped[Array, "*data"]]
-  ) -> PyTree[Float[Array, "*#data"]]:
-    """Returns a pytree of time arrays with the same structure as the data."""
+      self, key: PRNGKey, data_spec: DataArray | DataTree
+  ) -> TimeArray | TimeTree:
+    """Returns a time array or a pytree of time arrays.
+
+    The assumption is that data_spec is either an array or a pytree. We
+    also assume that the first dimension of each array in data_spec is a batched
+    dimension. The function is expected to return a time array having the same
+    structure as `data_spec`, meaning that the first batch dimension is the
+    same, while the other dimensions are going to be broadcastable to
+    `data_spec`. This is the case e.g. for image diffusion where `data_spec` has
+    shape `(B, h, w, c)`, and each image has a single time value, so the time
+    array will have shape `(B, 1, 1, 1)`. IMPORTANT: We do not enforce on the
+    interface level that output of `__call__(key, pytree)` is a pytree and not
+    an array -- this is the user responsibility.
+
+    Args:
+      key: The PRNG key to use for sampling.
+      data_spec: The data specification to use for sampling.
+
+    Returns:
+      A time array or a pytree of time arrays.
+    """
 
 
-#  _____ ___ __  __ _____      ____    _    __  __ ____  _     _____ ____  ____
-# |_   _|_ _|  \/  | ____|    / ___|  / \  |  \/  |  _ \| |   | ____|  _ \/ ___|
-#   | |  | || |\/| |  _|      \___ \ / _ \ | |\/| | |_) | |   |  _| | |_) \___ \
-#   | |  | || |  | | |___      ___) / ___ \| |  | |  __/| |___| |___|  _ < ___)
-#   |_| |___|_|  |_|_____|    |____/_/   \_\_|  |_|_|   |_____|_____|_| \_\____/
+################################################################################
 # MARK: UniformTimeSampler
+################################################################################
+
+
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class UniformTimeSampler(TimeSampler):
   """Uniform time sampler for a single data array.
@@ -81,62 +107,44 @@ class UniformTimeSampler(TimeSampler):
       each image has a single time value, so the time array will have shape `(B,
       1, 1, 1)`.
     time_range: The range of times to sample from. Default is [0.0, 1.0].
+    safety_epsilon: The safety epsilon to add to the minval and subtract from
+      the maxval. Default is 0.0.
   """
 
   axes: tuple[int, ...] = (0,)
   time_range: tuple[float, float] = (0.0, 1.0)
+  safety_epsilon: float = 0.0
 
-  def __call__(
-      self, key: Key, data_spec: Shaped[Array, "*data"]
-  ) -> Float[Array, "*#data"]:
+  def __post_init__(self):
+    if 0 not in self.axes:
+      raise ValueError(
+          "axes must include 0. Broadcasting over the batch is not supported."
+      )
+
+    if self.safety_epsilon < 0.0 or self.safety_epsilon > 1.0:
+      raise ValueError(
+          "safety_epsilon must be between 0.0 and 1.0, got"
+          f" {self.safety_epsilon}"
+      )
+
+    if self.safety_epsilon == 0.0:
+      logging.warning(
+          "safety_epsilon is 0.0 which can lead to numerical issues."
+      )
+
+  @typechecked
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
     shape = utils.get_broadcastable_shape(data_spec.shape, self.axes)
     minval, maxval = self.time_range
+    if self.safety_epsilon > 0:
+      minval += self.safety_epsilon
+      maxval -= self.safety_epsilon
     return jax.random.uniform(key, shape=shape, minval=minval, maxval=maxval)
 
-  @classmethod
-  def from_safety_epsilon(cls, safety_epsilon: float, **kwargs) -> Self:
-    """Returns a time sampler with a time range adjusted for safety."""
-    return cls(
-        time_range=(0.0 + safety_epsilon, 1.0 - safety_epsilon),
-        **kwargs,
-    )
 
-
-# MARK: NestedTimeSampler
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedTimeSampler(TimeSampler):
-  """Wrapper to support a nested pytree of time samplers.
-
-  The structure of the samplers should match the structure of the data.
-
-  Usage Example:
-    ```
-    time_sampler = NestedTimeSampler(
-        samplers={
-            "image": UniformTimeSampler(),
-            "label": BetaTimeSampler(alpha=1.0, beta=1.0),
-        }
-    )
-    ```
-
-  Attributes:
-    samplers: A pytree of time samplers matching the structure of the data.
-  """
-
-  samplers: PyTree[TimeSampler]
-
-  def __call__(
-      self, key: Key, data_spec: PyTree[Shaped[Array, "*data"]]
-  ) -> PyTree[Float[Array, "*#data"]]:
-    def _call_sampler(key, sampler, data_spec):
-      return sampler(key, data_spec)
-
-    return utils.tree_map_with_key(_call_sampler, key, self.samplers, data_spec)
-
-
+################################################################################
 # MARK: Specialized Samplers
+################################################################################
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -154,9 +162,20 @@ class UniformStratifiedTimeSampler(TimeSampler):
   axes: tuple[int, ...] = (0,)
   time_range: tuple[float, float] = (0.0, 1.0)
 
-  def __call__(
-      self, key: Key, data_spec: Shaped[Array, "*data"]
-  ) -> Float[Array, "*#data"]:
+  def __post_init__(self):
+    min_val, max_val = self.time_range
+    if not (0.0 <= min_val <= 1.0 and 0.0 <= max_val <= 1.0):
+      raise ValueError(
+          f"time_range must be within [0, 1], but got {self.time_range}"
+      )
+    if min_val >= max_val:
+      raise ValueError(
+          "min_val must be smaller than max_val in time_range, but got"
+          f" {self.time_range}"
+      )
+
+  @typechecked
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
     shape = utils.get_broadcastable_shape(data_spec.shape, self.axes)
     tensor_dim = math.prod(shape)
 
@@ -191,9 +210,8 @@ class UnbalancedTimestepSampler(TimeSampler):
 
   p_equal: float = 0.5
 
-  def __call__(
-      self, key: Key, data_spec: dict[str, Shaped[Array, "*data"]]
-  ) -> dict[str, Float[Array, "*#data"]]:
+  @typechecked
+  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
     # Check that the keys match the data.
     if set(data_spec.keys()) != {self.key1, self.key2}:
       raise KeyError(
@@ -216,3 +234,74 @@ class UnbalancedTimestepSampler(TimeSampler):
     equal_mask = jax.random.bernoulli(switch_key, p=self.p_equal, shape=shape1)
     g = jax.lax.select(equal_mask, 1 - f, g)
     return {self.key1: f, self.key2: g}
+
+
+################################################################################
+# MARK: NestedTimeSampler
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class NestedTimeSampler(TimeSampler):
+  """Wrapper to support a nested pytree of time samplers.
+
+  The structure of the samplers should match the structure of the data.
+
+  Usage Example:
+    ```
+    time_sampler = NestedTimeSampler(
+        samplers={
+            "image": UniformTimeSampler(),
+            "label": BetaTimeSampler(alpha=1.0, beta=1.0),
+        }
+    )
+    ```
+
+  Attributes:
+    samplers: A pytree of time samplers matching the structure of the data.
+  """
+
+  samplers: PyTree[TimeSampler]
+
+  @typechecked
+  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
+    def _call_sampler(key, sampler, data_spec):
+      return sampler(key, data_spec)
+
+    return utils.tree_map_with_key(_call_sampler, key, self.samplers, data_spec)
+
+
+################################################################################
+# MARK: JointNestedTimeSampler
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class JointNestedTimeSampler(TimeSampler):
+  """Wrapper to support a nested pytree of time samplers.
+
+  The structure of the samplers should match the structure of the data.
+  Contrary to NestedTimeSampler, the samplers are called with a joint key.
+
+  Usage Example:
+    ```
+    time_sampler = JointNestedTimeSampler(
+        samplers={
+            "image": UniformTimeSampler(),
+            "label": BetaTimeSampler(alpha=1.0, beta=1.0),
+        }
+    )
+    ```
+
+  Attributes:
+    samplers: A pytree of time samplers matching the structure of the data.
+  """
+
+  samplers: PyTree[TimeSampler]
+
+  @typechecked
+  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
+    def _call_sampler(sampler, data_spec):
+      return sampler(key, data_spec)
+
+    return jax.tree.map(_call_sampler, self.samplers, data_spec)

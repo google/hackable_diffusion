@@ -12,11 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Test for time sampling."""
+
+import chex
 from hackable_diffusion.lib import time_sampling
 import jax
 import jax.numpy as jnp
 from absl.testing import absltest
 from absl.testing import parameterized
+
+################################################################################
+# MARK: Tests
+################################################################################
 
 
 class TimeSamplersTest(parameterized.TestCase):
@@ -33,9 +40,9 @@ class TimeSamplersTest(parameterized.TestCase):
     self.assertTrue(jnp.all(time <= 1.0))
 
     # Test with different batch_axes
-    sampler = time_sampling.UniformTimeSampler(axes=(1,))
+    sampler = time_sampling.UniformTimeSampler(axes=(0, 1))
     time = sampler(key, data_shape)
-    self.assertEqual(time.shape, (1, 3, 1))
+    self.assertEqual(time.shape, (2, 3, 1))
     self.assertTrue(jnp.all(time >= 0.0))
     self.assertTrue(jnp.all(time <= 1.0))
 
@@ -47,10 +54,12 @@ class TimeSamplersTest(parameterized.TestCase):
     self.assertTrue(jnp.all(time <= 0.8))
 
   def test_from_safety_epsilon(self):
-    sampler = time_sampling.UniformTimeSampler.from_safety_epsilon(
-        safety_epsilon=0.1
-    )
-    self.assertEqual(sampler.time_range, (0.1, 0.9))
+    sampler = time_sampling.UniformTimeSampler(safety_epsilon=0.4)
+    data_shape = jnp.zeros((100, 2, 3))
+    key = jax.random.PRNGKey(0)
+    time = sampler(key, data_shape)
+    self.assertGreaterEqual(jnp.min(time), 0.4)
+    self.assertLessEqual(jnp.max(time), 0.6)
 
   @parameterized.named_parameters(
       dict(
@@ -75,28 +84,54 @@ class TimeSamplersTest(parameterized.TestCase):
     self.assertTrue(jnp.all(time <= sampler.time_range[1]))
 
     # Test with different axes
-    sampler = sampler_cls(**sampler_kwargs, axes=(1, 2))
+    sampler = sampler_cls(**sampler_kwargs, axes=(0, 2))
     time = sampler(key, data_shape)
-    self.assertEqual(time.shape, (1, 3, 5))
+    self.assertEqual(time.shape, (2, 1, 5))
 
   def test_nested_time_sampler(self):
     key = jax.random.PRNGKey(0)
     data_spec = {
         "image": jnp.zeros((2, 3, 4)),
-        "label": jnp.zeros((2,)),
+        "modality": {"label": jnp.zeros((2,))},
     }
 
     sampler = time_sampling.NestedTimeSampler(
         samplers={
             "image": time_sampling.UniformTimeSampler(axes=(0, 1)),
-            "label": time_sampling.UniformTimeSampler(),
+            "modality": {"label": time_sampling.UniformTimeSampler()},
         }
     )
     time = sampler(key, data_spec)
 
     self.assertIsInstance(time, dict)
     self.assertEqual(time["image"].shape, (2, 3, 1))
-    self.assertEqual(time["label"].shape, (2,))
+    self.assertEqual(time["modality"]["label"].shape, (2,))
+
+  def test_joint_nested_time_sampler(self):
+    """Test that the joint nested time sampler returns the same time for all modalities."""
+
+    key = jax.random.PRNGKey(0)
+    data_spec = {
+        "image": jnp.zeros((2, 3, 4)),
+        "modality": {"label": jnp.zeros((2,))},
+    }
+
+    sampler = time_sampling.JointNestedTimeSampler(
+        samplers={
+            "image": time_sampling.UniformTimeSampler(),
+            "modality": {"label": time_sampling.UniformTimeSampler()},
+        }
+    )
+    time = sampler(key, data_spec)
+
+    self.assertIsInstance(time, dict)
+    self.assertEqual(time["image"].shape, (2, 1, 1))
+    self.assertEqual(time["modality"]["label"].shape, (2,))
+    chex.assert_trees_all_close(
+        time["image"].squeeze(),
+        time["modality"]["label"].squeeze(),
+    )
+    chex.assert_trees_all_equal_structs(time, data_spec)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 # Hackable diffusion
 
+***WARNING*** The library and framework are in active development (29/07/2025)
+
 Hackable Diffusion is a modular toolbox written in Jax to experiment and educate
 around Diffusion modeling.
 
