@@ -1,6 +1,6 @@
 # Hackable diffusion
 
-Hackable Diffusion is a modular toolbox written in Jax to experiment and educate
+Hackable Diffusion (HD) is a modular toolbox written in Jax to experiment and educate
 around Diffusion modeling.
 
 The goal is to provide to the community a tools to:
