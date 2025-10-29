@@ -3,11 +3,36 @@
 Hackable Diffusion is a modular toolbox written in Jax to experiment and educate
 around Diffusion modeling.
 
-The goal is to provide to the community a tools to:
+## Philosophy
 
-  i. learn more about diffusion by showcasing tutorials
+The core philosophy of this library is **hackability**. It is designed from the
+ground up to be modular, composable, and easy to modify, enabling rapid
+experimentation with new research ideas. Key principles include:
 
-  ii. experiment new research ideas in the diffusion paradigm
+*   **Composition over Configuration**: Build models and training loops by composing small, well-defined Python objects.
+*   **Clear Separation of Concerns**: The codebase is organized into logical sub-libraries for architecture, corruption, inference, loss, and sampling.
+*   **Native Multimodality**: The library has first-class support for handling multimodal data (e.g., images and text) through a consistent "Nested" component pattern that applies different diffusion parameters to different parts of the data.
+
+## Tutorials
+
+The `notebooks/` directory contains several tutorials to get you started:
+
+*   **`2d_training.ipynb`**: A minimal example on a 2D toy dataset.
+*   **`mnist.ipynb`**: Standard image diffusion on MNIST.
+*   **`mnist_discrete.ipynb`**: An example of discrete diffusion.
+*   **`mnist_multimodal.ipynb`**: A showcase of the multimodal capabilities, generating images and labels jointly.
+
+## Installation
+
+To install the necessary dependencies, you can use pip with the provided
+`requirements.txt` file:
+
+```bash
+pip install -r requirements.txt
+```
+
+This will install libraries such as JAX, Flax, and other utilities required to
+run the code.
 
 ## Disclaimer
 
