@@ -41,19 +41,6 @@ DataTree = hd_typing.DataTree
 INVALID_INT = -1
 
 ################################################################################
-# MARK: Sharding signatures
-################################################################################
-
-CONV_INPUT_SIGNATURE = ("h", "w", "conv_d_input", "conv_f_input")
-CONV_OUTPUT_SIGNATURE = ("h", "w", "conv_f_output", "conv_d_output")
-
-ATTENTION_INPUT_SIGNATURE = ("attn_d_input", "attn_f_input")
-ATTENTION_OUTPUT_SIGNATURE = ("attn_f_output", "attn_d_output")
-
-MLP_INPUT_SIGNATURE = ("mlp_f_input", "mlp_d_input")
-MLP_OUTPUT_SIGNATURE = ("mlp_d_output", "mlp_f_output")
-
-################################################################################
 # MARK: Enums
 ################################################################################
 

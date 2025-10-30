@@ -60,6 +60,8 @@ class WrappersTest(absltest.TestCase):
     self.assertEqual(params['params']['kernel'].shape, (2, 10))
     self.assertEqual(params['params']['bias'].shape, (10,))
 
+    outputs_linen = mlp_linen.apply(params, inputs=x)
+
     mlp_nnx_converted = wrappers.convert_flax_linen_module_with_params_to_nnx(
         mlp_linen, params['params'], inputs=x
     )
@@ -69,6 +71,9 @@ class WrappersTest(absltest.TestCase):
         jnp.allclose(nnx_params['kernel'], params['params']['kernel'])
     )
     self.assertIsInstance(mlp_nnx_converted.to_nnx__module, nn.Dense)
+
+    outputs_nnx = mlp_nnx_converted(inputs=x)
+    self.assertTrue(jnp.allclose(outputs_nnx, outputs_linen))
 
 
 if __name__ == '__main__':

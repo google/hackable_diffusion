@@ -43,8 +43,6 @@ PyTree = hd_typing.PyTree
 
 ConditioningMechanism = arch_typing.ConditioningMechanism
 EmbeddingMergeMethod = arch_typing.EmbeddingMergeMethod
-MLP_INPUT_SIGNATURE = arch_typing.MLP_INPUT_SIGNATURE
-MLP_OUTPUT_SIGNATURE = arch_typing.MLP_OUTPUT_SIGNATURE
 
 ################################################################################
 # MARK: Base classes
@@ -117,12 +115,8 @@ class SinusoidalTimeEmbedder(BaseTimeEmbedder):
 
   def setup(self):
     self.act = getattr(jax.nn, self.activation)
-    self.init_input = nn.with_logical_partitioning(
-        nn.linear.default_kernel_init, MLP_INPUT_SIGNATURE
-    )
-    self.init_output = nn.with_logical_partitioning(
-        nn.linear.default_kernel_init, MLP_OUTPUT_SIGNATURE
-    )
+    self.init_input = nn.linear.default_kernel_init
+    self.init_output = nn.linear.default_kernel_init
 
   @nn.compact
   @typechecked

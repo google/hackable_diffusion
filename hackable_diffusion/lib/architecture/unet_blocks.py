@@ -44,9 +44,6 @@ Conv3x3 = arch_utils.Conv3x3
 ZerosConv3x3 = arch_utils.ZerosConv3x3
 Conv1x1 = arch_utils.Conv1x1
 
-CONV_OUTPUT_SIGNATURE = arch_typing.CONV_OUTPUT_SIGNATURE
-CONV_INPUT_SIGNATURE = arch_typing.CONV_INPUT_SIGNATURE
-
 BaseInput = Float["batch height width input_channels"]
 BaseOutput = Float["batch height width output_channels"]
 UpsampleOutput = Float["batch height*2 width*2 output_channels"]
@@ -164,12 +161,8 @@ class ConvResidualBlock(nn.Module):
     self.unconditional_norm = self.norm_factory.unconditional_norm_factory()
     self.conditional_norm = self.norm_factory.conditional_norm_factory()
 
-    self.init_input = nn.with_logical_partitioning(
-        kernel_init, CONV_INPUT_SIGNATURE
-    )
-    self.init_output = nn.with_logical_partitioning(
-        nn.initializers.zeros_init(), CONV_OUTPUT_SIGNATURE
-    )
+    self.init_input = kernel_init
+    self.init_output = nn.initializers.zeros_init()
 
   @nn.compact
   @typechecked

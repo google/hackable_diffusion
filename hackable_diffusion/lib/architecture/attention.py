@@ -35,8 +35,6 @@ DType = hd_typing.DType
 
 RoPEPositionType = arch_typing.RoPEPositionType
 INVALID_INT = arch_typing.INVALID_INT
-ATTENTION_INPUT_SIGNATURE = arch_typing.ATTENTION_INPUT_SIGNATURE
-ATTENTION_OUTPUT_SIGNATURE = arch_typing.ATTENTION_OUTPUT_SIGNATURE
 
 ################################################################################
 # MARK: Constants
@@ -184,23 +182,13 @@ class MultiHeadAttention(nn.Module):
   dtype: DType = jnp.float32
 
   def setup(self):
-    self.init_q = nn.with_logical_partitioning(
-        nn.linear.default_kernel_init, ATTENTION_INPUT_SIGNATURE
-    )
-    self.init_k = nn.with_logical_partitioning(
-        nn.linear.default_kernel_init, ATTENTION_INPUT_SIGNATURE
-    )
-    self.init_v = nn.with_logical_partitioning(
-        nn.linear.default_kernel_init, ATTENTION_INPUT_SIGNATURE
-    )
+    self.init_q = nn.linear.default_kernel_init
+    self.init_k = nn.linear.default_kernel_init
+    self.init_v = nn.linear.default_kernel_init
     if self.zero_init_output:
-      self.init_output = nn.with_logical_partitioning(
-          nn.initializers.zeros_init(), ATTENTION_OUTPUT_SIGNATURE
-      )
+      self.init_output = nn.initializers.zeros_init()
     else:
-      self.init_output = nn.with_logical_partitioning(
-          nn.linear.default_kernel_init, ATTENTION_OUTPUT_SIGNATURE
-      )
+      self.init_output = nn.linear.default_kernel_init
 
     self.get_attention_dims = attention_dims_factory(
         head_dim=self.head_dim, num_heads=self.num_heads
