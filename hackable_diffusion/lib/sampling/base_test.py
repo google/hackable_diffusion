@@ -123,7 +123,11 @@ class BaseSamplingTest(parameterized.TestCase):
             'data_discrete': base.DiffusionStep(
                 xt=self.xt['modality']['data_discrete'],
                 step_info=self.step_info['modality']['data_discrete'],
-                aux=dict(),
+                aux={
+                    'logits': self.prediction['modality']['data_discrete'][
+                        'logits'
+                    ]
+                },
             )
         },
     }

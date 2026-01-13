@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Discrete noise processes."""
+"""Simplicial noise processes."""
 
 from __future__ import annotations
 
 import dataclasses
 import enum
-from typing import Protocol, Sequence
+from typing import Sequence
 
 from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import random_utils
 from hackable_diffusion.lib import utils
 from hackable_diffusion.lib.corruption import base
 from hackable_diffusion.lib.corruption import schedules
@@ -40,7 +41,7 @@ TargetInfo = hd_typing.TargetInfo
 TimeArray = hd_typing.TimeArray
 
 CorruptionProcess = base.CorruptionProcess
-DiscreteSchedule = schedules.DiscreteSchedule
+SimplicialSchedule = schedules.SimplicialSchedule
 
 ################################################################################
 # MARK: Enums
@@ -60,71 +61,36 @@ class SamplingPrecisionMode(enum.StrEnum):
 
 
 ################################################################################
-# MARK: Projection functions
-################################################################################
-
-
-class PostCorruptionFn(Protocol):
-  """Post corruption function protocol.
-
-  The purpose of a post corruption function is to project the labels on a new
-  space. For instance in the case of the adjacency graph, we use a symmetric
-  projection function, so that the noisy labels are also symmetric. This is used
-  in DiGress https://arxiv.org/abs/2209.14734u
-  """
-
-  def __call__(self, x: DataArray) -> DataArray:
-    """Project the labels."""
-    ...
-
-
-class IdentityPostCorruptionFn(PostCorruptionFn):
-  """Identity post corruption function."""
-
-  def __call__(self, x: DataArray) -> DataArray:
-    """Project the labels."""
-    return x
-
-
-class SymmetricPostCorruptionFn(PostCorruptionFn):
-  """Symmetric projection function.
-
-  This is used in DiGress https://arxiv.org/abs/2209.14734 in order to noise the
-  adjacency graph.
-  """
-
-  def __call__(self, x: DataArray) -> DataArray:
-    """Project the labels."""
-    if x.ndim != 4:
-      raise ValueError(f'Expected 4D input, got {x.ndim=}.')
-    if x.shape[1] != x.shape[2]:
-      raise ValueError(
-          f'Expected square input, got {x.shape[1]=} and {x.shape[2]=}.'
-      )
-    x_without_trail = x[..., 0]
-    # Take the upper triangle of the input.
-    x_without_trail_tri = jnp.triu(x_without_trail, k=1)
-    # Symmetric projection is the sum of the upper triangle and its transpose.
-    x_without_trail_tri_sym = x_without_trail_tri + jnp.transpose(
-        x_without_trail_tri, axes=(0, 2, 1)
-    )
-    x_sym = x_without_trail_tri_sym[..., None]
-    return x_sym
-
-
-################################################################################
 # MARK: CategoricalProcess
 ################################################################################
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class CategoricalProcess(CorruptionProcess):
-  """Discrete noise processes that corrupt towards a categorical distribution.
+class SimplicialProcess(CorruptionProcess):
+  """Simplicial noise processes that corrupt towards a Dirichlet distribution.
 
   We are mostly using two special cases of this process:
   - masking: invariant_probs = (0.0,) * K + (1.0,)
   - uniform: invariant_probs = (1.0 / K,) * K
   where K is the number of categories.
+  In that case denoting π this invariant probability distribution, the
+  corruption process targets Dir(τ π) where τ is a temperature parameter and Dir
+  is the Dirichlet distribution.
+  For each 0 <= t <= 1, the forward process is given by:
+
+    p_{t|0}(X(t)|X(0)) = Dir(τ(h(t) δ(X(0)) + π)) ,
+
+  where h(t) is a function of the time t and δ(X(0)) is the one-hot encoding of
+  X(0). X(t) represents the corrupted data which is a sample from the Dirichlet
+  distribution p_{t|0} and is therefore a categorical distribution.
+
+  The function h(t) is given by the formula:
+
+    h(t) = α(t) / (1 - α(t))
+
+  In particular, we have that h(0) = +inf and h(1) = 0.
+
+  NOTE: We perform the corruption in log-space for numerical stability.
 
   Attributes:
     schedule: The schedule to use for the corruption process.
@@ -138,23 +104,23 @@ class CategoricalProcess(CorruptionProcess):
       that we require that this unused_mask_value is not in the range of the
       vocabulary, i,e., unused_mask_value < 0 or unused_mask_value >=
       len(invariant_probs) (which is the same as process_num_categories).
-    post_corruption_fn: The projection function to use for the corruption
-      process. This is a function applied at the end of the corruption process.
-      It projects the labels on a new space. For instance in the case of the
-      adjacency graph, we use a symmetric projection function, so that the noisy
-      labels are also symmetric.
+    temperature: The temperature parameter of the Dirichlet distribution. This
+      parameter controls the sharpness of the distribution.
     mode: The mode to use in `jax.random.choice` and `jax.random.bernoulli`. Can
       be set to "high" or "low" for how many bits to use in the Gumbel sampler.
       See https://jax.readthedocs.io/en/latest/jax.random.html#jax.random.choice
       for more information.
+    safety_epsilon: A small constant added to the denominator of the h-function
+      to avoid division by zero.
   """
 
-  schedule: DiscreteSchedule
+  schedule: SimplicialSchedule
   invariant_probs: Sequence[float]
   num_categories: int
   unused_mask_value: int = -1
-  post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn()
+  temperature: float = 1.0
   mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH
+  safety_epsilon: float = 1e-6
 
   def __post_init__(self):
     if (
@@ -197,6 +163,16 @@ class CategoricalProcess(CorruptionProcess):
       ).item()
 
   ##############################################################################
+  # MARK: h-function
+  ##############################################################################
+
+  @typechecked
+  def h(self, time: TimeArray) -> TimeArray:
+    """Returns the h-function of the process."""
+    denominator = 1.0 - self.schedule.alpha(time) + self.safety_epsilon
+    return self.schedule.alpha(time) / denominator
+
+  ##############################################################################
   # MARK: Methods
   ##############################################################################
 
@@ -207,12 +183,12 @@ class CategoricalProcess(CorruptionProcess):
       data_spec: DataArray,
   ) -> DataArray:
     """Sample from the invariant distribution."""
-    return jax.random.choice(
-        key,
-        a=self.process_num_categories,
-        p=self.invariant_probs_vec,
-        shape=data_spec.shape,
-        mode=self.mode,
+    invariant_dirichlet_params = self.temperature * self.invariant_probs_vec
+    # data_spec is [B, T, 1]
+    # invariant_dirichlet_params is [B, T, K]
+    # output is [B, T, K]
+    return random_utils.log_dirichlet_fast(
+        key, alpha=invariant_dirichlet_params, shape=data_spec.shape[:-1]
     )
 
   @typechecked
@@ -240,40 +216,25 @@ class CategoricalProcess(CorruptionProcess):
       xt: The corrupted data.
       target_info: The target info for the corrupted data.
     """
-    # Broadcast the time to a shape compatible with x0.
-    time = utils.bcast_right(time, x0.ndim)
-
-    # compute alpha
-    alpha = self.schedule.alpha(time)
-
     # get the unused mask
     unused_mask = x0 == self.unused_mask_value
-    # The mask is True if the token is unused.
 
-    # corrupt x0 with probability alpha
-    # We must have alpha of the same shape as x0, since each pixel can be
-    # corrupted independently.
-    alpha_bcast = jnp.broadcast_to(alpha, x0.shape)
-    assert alpha_bcast.shape == x0.shape
-    mask = jax.random.bernoulli(key, p=alpha_bcast, mode=self.mode)
-    key, _ = jax.random.split(key)
+    # compute one-hot encoding of x0
+    x0_oh = jax.nn.one_hot(x0[..., 0], self.process_num_categories)
+    time = utils.bcast_right(time, x0.ndim)
 
-    # compute noise vector
-    noise = self.sample_from_invariant(key, data_spec=x0)
+    # compute Dirichlet parameters
+    dirichlet_param = self.invariant_probs_vec + self.h(time) * x0_oh
+    dirichlet_param = self.temperature * dirichlet_param
+    xt = random_utils.log_dirichlet_fast(key, alpha=dirichlet_param)
 
-    # noise x0 with probability alpha
-    xt = jnp.where(mask, x0, noise)  # mask = (xt == x0)
-    xt = self.post_corruption_fn(xt)
-
-    logits = jax.nn.one_hot(x0[..., 0], self.num_categories)
+    logits = x0_oh
     target_info = {
         'x0': x0,  # Int[*b 1]; Uncorrupted input data.
         'logits': logits,  # Float[*b K] one-hot encoding of x0.
-        'mask': mask,  # Bool[*b 1] mask of the corruption.
-        'unused_mask': unused_mask,  # Bool[*b 1] mask of the unused tokens.
     }
 
-    # Replace the unused tokens with the unused_mask_value.
+    # Replace the unused probabilities with the unused_mask_value.
     xt = jnp.where(unused_mask, self.unused_mask_value, xt)
 
     return xt, target_info
@@ -310,12 +271,13 @@ class CategoricalProcess(CorruptionProcess):
   @classmethod
   def masking_process(
       cls,
-      schedule: DiscreteSchedule,
+      schedule: SimplicialSchedule,
       num_categories: int,
       unused_mask_value: int = -1,
-      post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn(),
+      temperature: float = 1.0,
       mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH,
-  ) -> CategoricalProcess:
+      safety_epsilon: float = 1e-6,
+  ) -> SimplicialProcess:
     """Create a CategoricalProcess from a schedule and invariant probs."""
     if num_categories < 1:
       raise ValueError(
@@ -328,19 +290,21 @@ class CategoricalProcess(CorruptionProcess):
         invariant_probs=invariant_probs,
         num_categories=num_categories,
         unused_mask_value=unused_mask_value,
-        post_corruption_fn=post_corruption_fn,
+        temperature=temperature,
         mode=mode,
+        safety_epsilon=safety_epsilon,
     )
 
   @classmethod
   def uniform_process(
       cls,
-      schedule: DiscreteSchedule,
+      schedule: SimplicialSchedule,
       num_categories: int,
       unused_mask_value: int = -1,
-      post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn(),
+      temperature: float = 1.0,
       mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH,
-  ) -> CategoricalProcess:
+      safety_epsilon: float = 1e-6,
+  ) -> SimplicialProcess:
     """Create a CategoricalProcess from a schedule and invariant probs."""
     if num_categories < 1:
       raise ValueError(
@@ -352,6 +316,7 @@ class CategoricalProcess(CorruptionProcess):
         invariant_probs=invariant_probs,
         num_categories=num_categories,
         unused_mask_value=unused_mask_value,
-        post_corruption_fn=post_corruption_fn,
+        temperature=temperature,
         mode=mode,
+        safety_epsilon=safety_epsilon,
     )

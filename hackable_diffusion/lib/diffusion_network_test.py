@@ -234,7 +234,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
             embedding_dim=16,
             adapt_to_image_like_data=True,
         ),
-        token_projector=discrete.DenseTokenProjector(
+        token_projector=discrete.DenseProjector(
             num_categories=num_categories,
             embedding_dim=16,
             adapt_to_image_like_data=True,

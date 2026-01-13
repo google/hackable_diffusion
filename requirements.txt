@@ -35,3 +35,4 @@ typeguard==4.4.4
 typing_extensions==4.15.0
 wadler_lindig==0.1.7
 zipp==3.23.0
+kauldron==1.3.0

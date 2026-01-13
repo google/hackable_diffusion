@@ -151,7 +151,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         embedding_dim=embedding_dim,
         adapt_to_image_like_data=True,
     )
-    token_projector = discrete.DenseTokenProjector(
+    token_projector = discrete.DenseProjector(
         num_categories=num_categories,
         embedding_dim=embedding_dim,
         adapt_to_image_like_data=True,
@@ -206,7 +206,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         adapt_to_image_like_data=adapt_to_image_like_data,
     )
 
-    token_projector = discrete.DenseTokenProjector(
+    token_projector = discrete.DenseProjector(
         num_categories=num_categories,
         embedding_dim=embedding_dim,
         adapt_to_image_like_data=adapt_to_image_like_data,
@@ -251,7 +251,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         adapt_to_image_like_data=adapt_to_image_like_data,
     )
 
-    token_projector = discrete.DenseTokenProjector(
+    token_projector = discrete.DenseProjector(
         num_categories=num_categories,
         embedding_dim=projector_embedding_dim,
         adapt_to_image_like_data=adapt_to_image_like_data,

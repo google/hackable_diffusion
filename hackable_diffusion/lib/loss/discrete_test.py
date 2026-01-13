@@ -47,13 +47,24 @@ class DiscreteLossTest(parameterized.TestCase):
     self.schedule = schedules.LinearDiscreteSchedule()
 
   @parameterized.named_parameters(
-      ('with_weight_fn', lambda schedule, time: jnp.ones_like(time)),
+      (
+          'with_weight_fn',
+          lambda schedule, preds, targets, time: jnp.ones_like(time),
+      ),
       ('without_weight_fn', None),
   )
   def test_diffusion_cross_entropy_loss_computation(self, weight_fn):
     """Tests loss can be computed with and without a weight function."""
-    loss_fn = discrete.DiffusionCrossEntropyLoss(
-        schedule=self.schedule, weight_fn=weight_fn
+
+    loss_fn = (
+        lambda preds, targets, time: discrete.compute_discrete_diffusion_loss(
+            preds=preds,
+            targets=targets,
+            time=time,
+            schedule=self.schedule,
+            use_mask=False,
+            weight_fn=weight_fn,
+        )
     )
     loss = loss_fn(self.preds, self.targets, self.time)
 
@@ -66,18 +77,18 @@ class DiscreteLossTest(parameterized.TestCase):
         ),
         axis=-1,  # average over sequence length
     )
-    coeff = utils.egrad(self.schedule.alpha)(self.time) / (
-        1.0 - self.schedule.alpha(self.time)
-    )
-    coeff = utils.flatten_non_batch_dims(coeff)[..., 0]
-    expected_loss = coeff * expected_loss
     if weight_fn:
-      expected_loss = (
-          expected_loss
-          * utils.flatten_non_batch_dims(weight_fn(self.schedule, self.time))[
-              ..., 0
-          ]
-      )
+      coeff = utils.flatten_non_batch_dims(
+          weight_fn(
+              schedule=self.schedule,
+              preds=self.preds,
+              targets=self.targets,
+              time=self.time,
+          )
+      )[..., 0]
+    else:
+      coeff = 1.0
+    expected_loss = -1.0 * coeff * expected_loss
 
     self.assertTrue(jnp.allclose(loss, expected_loss, atol=1e-6))
 

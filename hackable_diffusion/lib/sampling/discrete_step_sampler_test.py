@@ -161,12 +161,18 @@ class UnMaskingStepTest(absltest.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=initial_step_info,
     )
+
+    init_logits = jnp.repeat(
+        self.initial_noise, self.process.num_categories, axis=-1
+    )
+    init_logits = jnp.zeros_like(init_logits, dtype=jnp.float32) - jnp.inf
+
     chex.assert_trees_all_equal(
         initial_step,
         DiffusionStep(
             xt=self.initial_noise,
             step_info=initial_step_info,
-            aux=dict(),
+            aux={'logits': init_logits},
         ),
     )
 
@@ -288,12 +294,18 @@ class DiscreteDDIMStepTest(absltest.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=initial_step_info,
     )
+
+    init_logits = jnp.repeat(
+        self.initial_noise, self.process.num_categories, axis=-1
+    )
+    init_logits = jnp.zeros_like(init_logits, dtype=jnp.float32) - jnp.inf
+
     chex.assert_trees_all_equal(
         initial_step,
         DiffusionStep(
             xt=self.initial_noise,
             step_info=initial_step_info,
-            aux=dict(),
+            aux={'logits': init_logits},
         ),
     )
 

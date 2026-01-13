@@ -57,6 +57,51 @@ TimeArray = hd_typing.TimeArray
 TimeTree = hd_typing.TimeTree
 
 ################################################################################
+# MARK: Utils
+################################################################################
+
+
+def get_sampling_time_interval(
+    time_range: tuple[float, float], safety_epsilon: float
+) -> tuple[float, float]:
+  """Returns the interval to sample from.
+
+  Args:
+    time_range: The range of times to sample from.
+    safety_epsilon: The safety epsilon to add to the minval and subtract from
+      the maxval.
+
+  Returns:
+    The interval to sample from.
+  """
+
+  if safety_epsilon < 0.0 or safety_epsilon > 1.0:
+    raise ValueError(
+        f"safety_epsilon must be between 0.0 and 1.0, got {safety_epsilon}"
+    )
+
+  if safety_epsilon == 0.0:
+    logging.warning("safety_epsilon is 0.0 which can lead to numerical issues.")
+
+  minval, maxval = time_range
+  if safety_epsilon > 0.0:
+    minval += safety_epsilon
+    maxval -= safety_epsilon
+
+  if not (0.0 <= minval <= 1.0 and 0.0 <= maxval <= 1.0):
+    raise ValueError(
+        f"interval must be within [0, 1], but got [{minval:.2f}, {maxval:.2f}]"
+    )
+  if minval >= maxval:
+    raise ValueError(
+        "minval must be smaller than maxval in the computed interval, but got"
+        f" [{minval:.2f}, {maxval:.2f}]"
+    )
+
+  return minval, maxval
+
+
+################################################################################
 # MARK: TimeSampler
 ################################################################################
 
@@ -109,37 +154,79 @@ class UniformTimeSampler(TimeSampler):
     time_range: The range of times to sample from. Default is [0.0, 1.0].
     safety_epsilon: The safety epsilon to add to the minval and subtract from
       the maxval. Default is 0.0.
+    span: The span of the time sampler. Default is [0.0, 1.0]. This is computed
+      from the time_range and safety_epsilon.
   """
 
   axes: tuple[int, ...] = (0,)
   time_range: tuple[float, float] = (0.0, 1.0)
   safety_epsilon: float = 0.0
+  span: tuple[float, float] = dataclasses.field(init=False)
 
   def __post_init__(self):
     if 0 not in self.axes:
       raise ValueError(
           "axes must include 0. Broadcasting over the batch is not supported."
       )
-
-    if self.safety_epsilon < 0.0 or self.safety_epsilon > 1.0:
-      raise ValueError(
-          "safety_epsilon must be between 0.0 and 1.0, got"
-          f" {self.safety_epsilon}"
-      )
-
-    if self.safety_epsilon == 0.0:
-      logging.warning(
-          "safety_epsilon is 0.0 which can lead to numerical issues."
-      )
+    span = get_sampling_time_interval(self.time_range, self.safety_epsilon)
+    object.__setattr__(self, "span", span)
 
   @typechecked
   def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
     shape = utils.get_broadcastable_shape(data_spec.shape, self.axes)
-    minval, maxval = self.time_range
-    if self.safety_epsilon > 0:
-      minval += self.safety_epsilon
-      maxval -= self.safety_epsilon
+    minval, maxval = self.span
     return jax.random.uniform(key, shape=shape, minval=minval, maxval=maxval)
+
+
+################################################################################
+# MARK: LogitNormalTimeSampler
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class LogitNormalTimeSampler(TimeSampler):
+  """Logit normal time sampler for a single data array.
+
+  Sample time following a logit normal distribution from the time_range (default
+  [0.0, 1.0]). We refer to https://arxiv.org/abs/2403.03206 (Equation 19) for
+  more details.
+
+  Attributes:
+    axes: Which data axes to keep the shape of. Default is (0,) which means that
+      the time array will have a shape of `(B, 1, 1, ...)`. This is the case
+      e.g. for image diffusion where `data_spec` has shape `(B, h, w, c)`, and
+      each image has a single time value, so the time array will have shape `(B,
+      1, 1, 1)`.
+    time_range: The range of times to sample from. Default is [0.0, 1.0].
+    safety_epsilon: The safety epsilon to add to the minval and subtract from
+      the maxval. Default is 0.0.
+    mean: The mean of the logit normal distribution. Default is 0.0.
+    scale: The scale of the logit normal distribution. Default is 1.0.
+    span: The span of the time sampler. Default is [0.0, 1.0]. This is computed
+      from the time_range and safety_epsilon.
+  """
+
+  axes: tuple[int, ...] = (0,)
+  time_range: tuple[float, float] = (0.0, 1.0)
+  safety_epsilon: float = 0.0
+  mean: float = 0.0
+  scale: float = 1.0
+  span: tuple[float, float] = dataclasses.field(init=False)
+
+  def __post_init__(self):
+    if 0 not in self.axes:
+      raise ValueError(
+          "axes must include 0. Broadcasting over the batch is not supported."
+      )
+    span = get_sampling_time_interval(self.time_range, self.safety_epsilon)
+    object.__setattr__(self, "span", span)
+
+  @typechecked
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
+    shape = utils.get_broadcastable_shape(data_spec.shape, self.axes)
+    minval, maxval = self.span
+    out = self.mean + self.scale * jax.random.normal(key, shape=shape)
+    return jax.nn.sigmoid(out) * (maxval - minval) + minval
 
 
 ################################################################################
@@ -157,22 +244,20 @@ class UniformStratifiedTimeSampler(TimeSampler):
     axes: Which data axes to keep the shape of. Default is (0,) which means each
       example in the batch will have a single time.
     time_range: The range of times to sample from. Default is [0.0, 1.0].
+    safety_epsilon: The safety epsilon to add to the minval and subtract from
+      the maxval. Default is 0.0.
+    span: The span of the time sampler. Default is [0.0, 1.0]. This is computed
+      from the time_range and safety_epsilon.
   """
 
   axes: tuple[int, ...] = (0,)
   time_range: tuple[float, float] = (0.0, 1.0)
+  safety_epsilon: float = 0.0
+  span: tuple[float, float] = dataclasses.field(init=False)
 
   def __post_init__(self):
-    min_val, max_val = self.time_range
-    if not (0.0 <= min_val <= 1.0 and 0.0 <= max_val <= 1.0):
-      raise ValueError(
-          f"time_range must be within [0, 1], but got {self.time_range}"
-      )
-    if min_val >= max_val:
-      raise ValueError(
-          "min_val must be smaller than max_val in time_range, but got"
-          f" {self.time_range}"
-      )
+    span = get_sampling_time_interval(self.time_range, self.safety_epsilon)
+    object.__setattr__(self, "span", span)
 
   @typechecked
   def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
@@ -182,7 +267,7 @@ class UniformStratifiedTimeSampler(TimeSampler):
     uniform_key, permute_key = jax.random.split(key)
     u = jax.random.uniform(uniform_key)
     t = (jnp.arange(tensor_dim) + u) / tensor_dim
-    minval, maxval = self.time_range
+    minval, maxval = self.span
     t = t * (maxval - minval) + minval
     p = jax.random.permutation(permute_key, tensor_dim)
     return t[p].reshape(shape)

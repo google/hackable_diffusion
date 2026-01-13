@@ -363,6 +363,100 @@ class EncodeConditioningTest(parameterized.TestCase):
     ):
       _ = encoder.init(rng, t, c, is_training=is_training)['params']
 
+  def test_field_selector_embedder(self):
+    """Tests FieldSelector with CROSS_ATTENTION."""
+    batch_size = 4
+    num_features = 32
+    image_shape = (64, 64, 3)
+    conditioning_dropout_rate = 0.0
+    time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=5,
+        num_features=num_features,
+    )
+    image_selector = conditioning_encoder.FieldSelector(
+        field_name='image',
+        data_spec=image_shape,
+    )
+    conditioning_encoders = {'image': image_selector}
+    conditioning_rules = {
+        'time': ConditioningMechanism.ADAPTIVE_NORM,
+        'image': ConditioningMechanism.CROSS_ATTENTION,
+    }
+    embedding_merging_method = EmbeddingMergeMethod.CONCAT
+
+    encoder = conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders=conditioning_encoders,
+        embedding_merging_method=embedding_merging_method,
+        conditioning_rules=conditioning_rules,
+        conditioning_dropout_rate=conditioning_dropout_rate,
+    )
+
+    t = jnp.ones((batch_size,))
+    c = {'image': jnp.ones((batch_size,) + image_shape)}
+    rng = jax.random.PRNGKey(0)
+    params = encoder.init(rng, t, c, is_training=False)['params']
+
+    jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
+    output = jitted_apply(
+        {'params': params}, t, c, is_training=False, rngs={'dropout': rng}
+    )
+
+    self.assertIn(ConditioningMechanism.CROSS_ATTENTION, output)
+    self.assertEqual(
+        output[ConditioningMechanism.CROSS_ATTENTION].shape,
+        (batch_size,) + image_shape,
+    )
+    self.assertTrue(
+        jnp.all(output[ConditioningMechanism.CROSS_ATTENTION] == c['image'])
+    )
+
+    self.assertIn(ConditioningMechanism.ADAPTIVE_NORM, output)
+    self.assertEqual(
+        output[ConditioningMechanism.ADAPTIVE_NORM].shape,
+        (batch_size, num_features),
+    )
+
+  def test_field_selector_embedder_fails_on_missing_key(self):
+    """Tests FieldSelector raises ValueError on missing key."""
+    batch_size = 4
+    num_features = 32
+    image_shape = (64, 64, 3)
+    time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=5,
+        num_features=num_features,
+    )
+    image_selector = conditioning_encoder.FieldSelector(
+        field_name='image',
+        data_spec=image_shape,
+    )
+    conditioning_encoders = {'image': image_selector}
+    conditioning_rules = {
+        'time': ConditioningMechanism.ADAPTIVE_NORM,
+        'image': ConditioningMechanism.CROSS_ATTENTION,
+    }
+    embedding_merging_method = EmbeddingMergeMethod.CONCAT
+
+    encoder = conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders=conditioning_encoders,
+        embedding_merging_method=embedding_merging_method,
+        conditioning_rules=conditioning_rules,
+        conditioning_dropout_rate=0.0,
+    )
+
+    t = jnp.ones((batch_size,))
+    c = {'wrong_key': jnp.ones((batch_size,) + image_shape)}
+    rng = jax.random.PRNGKey(0)
+    with self.assertRaisesRegex(
+        ValueError,
+        'Conditioning key image not found in conditioning. Available keys:'
+        " \\['wrong_key'\\]",
+    ):
+      encoder.init(rng, t, c, is_training=False)
+
   @parameterized.named_parameters(
       (
           'test1',

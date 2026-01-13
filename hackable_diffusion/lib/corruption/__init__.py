@@ -36,4 +36,6 @@ from hackable_diffusion.lib.corruption.schedules import RFSchedule
 from hackable_diffusion.lib.corruption.schedules import Schedule
 from hackable_diffusion.lib.corruption.schedules import ShiftedSchedule
 from hackable_diffusion.lib.corruption.schedules import SquareCosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.simplicial import SimplicialProcess
+from hackable_diffusion.lib.corruption.simplicial import SimplicialSchedule
 # pylint: enable=g-importing-member

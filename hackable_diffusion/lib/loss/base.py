@@ -40,9 +40,15 @@ Schedule = schedules.Schedule
 
 
 class WeightFn(Protocol):
-  """A schedule-dependent loss-weight term that takes `time` as argument."""
+  """A schedule-dependent loss-weight term."""
 
-  def __call__(self, schedule: Schedule, time: TimeArray) -> TimeArray:
+  def __call__(
+      self,
+      schedule: Schedule,
+      preds: TargetInfoTree,
+      targets: TargetInfoTree,
+      time: TimeArray,
+  ) -> TimeArray:
     pass
 
 

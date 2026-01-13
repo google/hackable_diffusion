@@ -14,9 +14,11 @@
 
 """Utility functions."""
 
+import enum
 import functools
 from types import FunctionType  # pylint: disable=g-importing-member
 from typing import Any, Callable, cast
+import zlib
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.hd_typing import typechecked  # pylint: disable=g-multiple-import,g-importing-member
 import jax
@@ -118,11 +120,10 @@ def tree_map_with_key(
 
   def _with_folded_key(path, *args) -> Any:
     # Hash the path to get a unique key per array.
-    # The hash of a path is a 64-bit integer, but fold_in expects a
-    # non-negative 32-bit integer. We use a bitwise AND with 0xffffffff to
-    # truncate the hash to 32 bits, which results in a Python integer within
-    # the valid uint32 range.
-    key_x = jax.random.fold_in(key, jnp.uint32(hash(path) & 0xFFFFFFFF))
+    # We do not use hash(path) because of its non-deterministic behavior which
+    # renders the method non compatible with multi-host training.
+    path_hash = zlib.adler32(jax.tree_util.keystr(path).encode())
+    key_x = jax.random.fold_in(key, jnp.uint32(path_hash))
     return fn(key_x, *args)
 
   return jax.tree.map_with_path(_with_folded_key, tree, *rest, is_leaf=is_leaf)
@@ -202,10 +203,10 @@ def bcast_right(value: Array["*shape"], ndim: int) -> Array["*out_shape"]:
     return value
 
 
-_to_bf16_from_fp32 = (
+_to_bf16_from_fp32 = (  # pylint: disable=invalid-name
     lambda x: x.astype(jnp.bfloat16) if x.dtype == jnp.float32 else x
 )
-_to_fp32_from_bf16 = (
+_to_fp32_from_bf16 = (  # pylint: disable=invalid-name
     lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x
 )
 

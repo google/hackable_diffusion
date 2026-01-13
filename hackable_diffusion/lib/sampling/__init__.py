@@ -17,6 +17,7 @@
 # pylint: disable=g-importing-member
 from hackable_diffusion.lib.sampling.base import DiffusionStep
 from hackable_diffusion.lib.sampling.base import DiffusionStepTree
+from hackable_diffusion.lib.sampling.base import NestedSamplerStep
 from hackable_diffusion.lib.sampling.base import SamplerStep
 from hackable_diffusion.lib.sampling.base import StepInfo
 from hackable_diffusion.lib.sampling.base import StepInfoTree
@@ -36,6 +37,7 @@ from hackable_diffusion.lib.sampling.gaussian_step_sampler import SdeStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import VelocityStep
 from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
 from hackable_diffusion.lib.sampling.sampling import SampleFn
+from hackable_diffusion.lib.sampling.simplicial_step_sampler import SimplicialDDIMStep
 from hackable_diffusion.lib.sampling.time_scheduling import EDMTimeSchedule
 from hackable_diffusion.lib.sampling.time_scheduling import NestedTimeSchedule
 from hackable_diffusion.lib.sampling.time_scheduling import TimeSchedule

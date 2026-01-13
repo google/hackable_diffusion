@@ -28,65 +28,66 @@ from absl.testing import parameterized
 
 class TimeSamplersTest(parameterized.TestCase):
 
-  def test_uniform_time_sampler(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name="uniform",
+          sampler_cls=time_sampling.UniformTimeSampler,
+      ),
+      dict(
+          testcase_name="logit_normal",
+          sampler_cls=time_sampling.LogitNormalTimeSampler,
+      ),
+      dict(
+          testcase_name="uniform_stratified",
+          sampler_cls=time_sampling.UniformStratifiedTimeSampler,
+      ),
+  )
+  def test_time_sampler(self, sampler_cls):
     data_shape = jnp.zeros((2, 3, 4))
     key = jax.random.PRNGKey(0)
 
     # Test with default batch_axes
-    sampler = time_sampling.UniformTimeSampler()
+    sampler = sampler_cls()
     time = sampler(key, data_shape)
     self.assertEqual(time.shape, (2, 1, 1))
     self.assertTrue(jnp.all(time >= 0.0))
     self.assertTrue(jnp.all(time <= 1.0))
 
     # Test with different batch_axes
-    sampler = time_sampling.UniformTimeSampler(axes=(0, 1))
+    sampler = sampler_cls(axes=(0, 1))
     time = sampler(key, data_shape)
     self.assertEqual(time.shape, (2, 3, 1))
     self.assertTrue(jnp.all(time >= 0.0))
     self.assertTrue(jnp.all(time <= 1.0))
 
     # Test with different time_range
-    sampler = time_sampling.UniformTimeSampler(time_range=(0.2, 0.8))
+    sampler = sampler_cls(time_range=(0.2, 0.8))
     time = sampler(key, data_shape)
     self.assertEqual(time.shape, (2, 1, 1))
     self.assertTrue(jnp.all(time >= 0.2))
     self.assertTrue(jnp.all(time <= 0.8))
 
-  def test_from_safety_epsilon(self):
-    sampler = time_sampling.UniformTimeSampler(safety_epsilon=0.4)
+  @parameterized.named_parameters(
+      dict(
+          testcase_name="uniform",
+          sampler_cls=time_sampling.UniformTimeSampler,
+      ),
+      dict(
+          testcase_name="logit_normal",
+          sampler_cls=time_sampling.LogitNormalTimeSampler,
+      ),
+      dict(
+          testcase_name="uniform_stratified",
+          sampler_cls=time_sampling.UniformStratifiedTimeSampler,
+      ),
+  )
+  def test_from_safety_epsilon(self, sampler_cls):
+    sampler = sampler_cls(safety_epsilon=0.4)
     data_shape = jnp.zeros((100, 2, 3))
     key = jax.random.PRNGKey(0)
     time = sampler(key, data_shape)
     self.assertGreaterEqual(jnp.min(time), 0.4)
     self.assertLessEqual(jnp.max(time), 0.6)
-
-  @parameterized.named_parameters(
-      dict(
-          testcase_name="uniform",
-          sampler_cls=time_sampling.UniformTimeSampler,
-          sampler_kwargs={},
-      ),
-      dict(
-          testcase_name="uniform_stratified",
-          sampler_cls=time_sampling.UniformStratifiedTimeSampler,
-          sampler_kwargs={},
-      ),
-  )
-  def test_time_sampler(self, sampler_cls, sampler_kwargs):
-    key = jax.random.PRNGKey(0)
-    data_shape = jnp.zeros((2, 3, 5))
-
-    sampler = sampler_cls(**sampler_kwargs)
-    time = sampler(key, data_shape)
-    self.assertEqual(time.shape, (2, 1, 1))
-    self.assertTrue(jnp.all(time >= sampler.time_range[0]))
-    self.assertTrue(jnp.all(time <= sampler.time_range[1]))
-
-    # Test with different axes
-    sampler = sampler_cls(**sampler_kwargs, axes=(0, 2))
-    time = sampler(key, data_shape)
-    self.assertEqual(time.shape, (2, 1, 5))
 
   def test_nested_time_sampler(self):
     key = jax.random.PRNGKey(0)

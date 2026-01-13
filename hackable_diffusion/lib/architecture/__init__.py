@@ -15,6 +15,7 @@
 """Architecture modules."""
 
 # pylint: disable=g-importing-member
+from hackable_diffusion.lib.architecture.arch_typing import ConditionalBackbone
 from hackable_diffusion.lib.architecture.arch_typing import ConditioningMechanism
 from hackable_diffusion.lib.architecture.arch_typing import DownsampleType
 from hackable_diffusion.lib.architecture.arch_typing import EmbeddingMergeMethod
@@ -27,6 +28,7 @@ from hackable_diffusion.lib.architecture.conditioning_encoder import BaseConditi
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import ConditioningEncoder
+from hackable_diffusion.lib.architecture.conditioning_encoder import FieldSelector
 from hackable_diffusion.lib.architecture.conditioning_encoder import IdentityTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import LabelEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import LinearEmbedder
@@ -34,16 +36,19 @@ from hackable_diffusion.lib.architecture.conditioning_encoder import MLPEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import NestedTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import SinusoidalTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import ZeroTimeEmbedder
+from hackable_diffusion.lib.architecture.discrete import BaseProjector
 from hackable_diffusion.lib.architecture.discrete import BaseTokenEmbedder
-from hackable_diffusion.lib.architecture.discrete import BaseTokenProjector
 from hackable_diffusion.lib.architecture.discrete import ConditionalDiscreteBackbone
-from hackable_diffusion.lib.architecture.discrete import DenseTokenProjector
+from hackable_diffusion.lib.architecture.discrete import DenseProjector
 from hackable_diffusion.lib.architecture.discrete import TokenEmbedder
 from hackable_diffusion.lib.architecture.mlp import ConditionalMLP
 from hackable_diffusion.lib.architecture.mlp_blocks import MLP
 from hackable_diffusion.lib.architecture.sequence_embedders import RandomFourierSequenceEmbedding
 from hackable_diffusion.lib.architecture.sequence_embedders import RoPESequenceEmbedding
 from hackable_diffusion.lib.architecture.sequence_embedders import SinusoidalSequenceEmbedding
+from hackable_diffusion.lib.architecture.simplicial import BaseLogitEmbedder
+from hackable_diffusion.lib.architecture.simplicial import ConditionalSimplicialBackbone
+from hackable_diffusion.lib.architecture.simplicial import DenseEmbedder
 from hackable_diffusion.lib.architecture.unet import Unet
 from hackable_diffusion.lib.architecture.unet_blocks import AttentionResidualBlock
 from hackable_diffusion.lib.architecture.unet_blocks import ConvResidualBlock

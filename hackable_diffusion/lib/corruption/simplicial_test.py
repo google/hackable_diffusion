@@ -12,10 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for discrete corruption processes."""
+"""Tests for simplicial corruption processes.
 
-from hackable_diffusion.lib.corruption import discrete
+The main difference between categorical and simplicial corruption is that xt is
+not of shape [B, T, 1] but [B, T, K]. Instead of tracking a realization of a
+certain categorical distribution, we track a realization of a certain Dirichlet
+distribution. Therefore, to obtain a token, we must convert the probability
+distribution to a token. Here we use the argmax function (we could have also
+used categorical sampling).
+
+Apart from this crucial difference, the tests are mostly identical with the
+difference that we do not allow for post-corruption projection in the simplicial
+corruption process.
+"""
+
 from hackable_diffusion.lib.corruption import schedules
+from hackable_diffusion.lib.corruption import simplicial
 import jax
 import jax.numpy as jnp
 
@@ -24,17 +36,17 @@ from absl.testing import parameterized
 
 
 ################################################################################
-# MARK: CategoricalProcessTest
+# MARK: SimplicialProcessTest
 ################################################################################
 
 
-class CategoricalProcessTest(parameterized.TestCase):
+class SimplicialProcessTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
     self.schedule = schedules.LinearDiscreteSchedule()
     self.num_categories = 5
-    self.process = discrete.CategoricalProcess.uniform_process(
+    self.process = simplicial.SimplicialProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories
     )
     self.key = jax.random.PRNGKey(42)
@@ -55,11 +67,11 @@ class CategoricalProcessTest(parameterized.TestCase):
   def test_corrupt_different_results_with_scalar_time(self, process_type):
     # At t=0, alpha=1, so xt should be x0.
     if process_type == 'masking':
-      process = discrete.CategoricalProcess.masking_process(
+      process = simplicial.SimplicialProcess.masking_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
     elif process_type == 'uniform':
-      process = discrete.CategoricalProcess.uniform_process(
+      process = simplicial.SimplicialProcess.uniform_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
     else:
@@ -72,7 +84,7 @@ class CategoricalProcessTest(parameterized.TestCase):
 
   def test_corrupt_different_results_with_batched_time(self):
     # At t=0, alpha=1, so xt should be x0.
-    process = discrete.CategoricalProcess.masking_process(
+    process = simplicial.SimplicialProcess.masking_process(
         schedule=self.schedule, num_categories=self.num_categories
     )
     x0 = jnp.ones((2, 2, 10, 1), dtype=jnp.int32) * 2
@@ -90,18 +102,22 @@ class CategoricalProcessTest(parameterized.TestCase):
   def test_corrupt_at_t0(self, process_type):
     # At t=0, alpha=1, so xt should be x0.
     if process_type == 'masking':
-      process = discrete.CategoricalProcess.masking_process(
+      process = simplicial.SimplicialProcess.masking_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
     elif process_type == 'uniform':
-      process = discrete.CategoricalProcess.uniform_process(
+      process = simplicial.SimplicialProcess.uniform_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
     else:
       raise ValueError(f'Unknown process type: {process_type}')
     time_0 = jnp.zeros((self.batch_size, self.seq_len, 1))
     xt_init, _ = process.corrupt(self.key, self.x0, time_0)
-    self.assertTrue(jnp.array_equal(xt_init, self.x0))
+    # Contrary to categorical corruption, simplicial corruption does not
+    # preserve x0 at t=0. This is because in that case we have a probability
+    # distribution.
+    xt_init_amax = jnp.argmax(xt_init, axis=-1)[..., None]
+    self.assertTrue(jnp.array_equal(xt_init_amax, self.x0))
 
   @parameterized.named_parameters(
       ('masking', 'masking'),
@@ -110,11 +126,11 @@ class CategoricalProcessTest(parameterized.TestCase):
   def test_corrupt_at_t1(self, process_type):
     # At t=1, alpha=0, so xt should be pure noise.
     if process_type == 'masking':
-      process = discrete.CategoricalProcess.masking_process(
+      process = simplicial.SimplicialProcess.masking_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
     elif process_type == 'uniform':
-      process = discrete.CategoricalProcess.uniform_process(
+      process = simplicial.SimplicialProcess.uniform_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
     else:
@@ -124,12 +140,13 @@ class CategoricalProcessTest(parameterized.TestCase):
     # Use a constant x0 to make it unlikely to be identical to noise.
     x0 = jnp.zeros(self.shape, dtype=jnp.int32)
     xt_final, _ = process.corrupt(key1, x0, time_final)
+    xt_final_amax = jnp.argmax(xt_final, axis=-1)[..., None]
     # Check that corruption happened.
     if process_type == 'masking':
       mask_value = self.num_categories
-      self.assertTrue(jnp.all(xt_final == jnp.ones_like(x0) * mask_value))
+      self.assertTrue(jnp.all(xt_final_amax == jnp.ones_like(x0) * mask_value))
     elif process_type == 'uniform':
-      bincount = jnp.bincount(xt_final.flatten())
+      bincount = jnp.bincount(xt_final_amax.flatten())
       bincount_prob = bincount / (self.batch_size * self.seq_len)
       true_prob = 1.0 / self.num_categories
       # Check that the distribution is uniform.
@@ -139,22 +156,22 @@ class CategoricalProcessTest(parameterized.TestCase):
       raise ValueError(f'Unknown process type: {process_type}')
 
   @parameterized.named_parameters(
-      ('masking_high', 'masking', discrete.SamplingPrecisionMode.HIGH),
-      ('masking_low', 'masking', discrete.SamplingPrecisionMode.LOW),
-      ('uniform_high', 'uniform', discrete.SamplingPrecisionMode.HIGH),
-      ('uniform_low', 'uniform', discrete.SamplingPrecisionMode.LOW),
+      ('masking_high', 'masking', simplicial.SamplingPrecisionMode.HIGH),
+      ('masking_low', 'masking', simplicial.SamplingPrecisionMode.LOW),
+      ('uniform_high', 'uniform', simplicial.SamplingPrecisionMode.HIGH),
+      ('uniform_low', 'uniform', simplicial.SamplingPrecisionMode.LOW),
   )
   def test_corrupt_at_t1_with_mode(self, process_type, mode):
     # At t=1, alpha=0, so xt should be pure noise.
     if process_type == 'masking':
-      process = discrete.CategoricalProcess(
+      process = simplicial.SimplicialProcess(
           schedule=self.schedule,
           invariant_probs=[0.0] * self.num_categories + [1.0],
           num_categories=self.num_categories,
           mode=mode,
       )
     elif process_type == 'uniform':
-      process = discrete.CategoricalProcess(
+      process = simplicial.SimplicialProcess(
           schedule=self.schedule,
           invariant_probs=[1.0 / self.num_categories] * self.num_categories,
           num_categories=self.num_categories,
@@ -168,12 +185,15 @@ class CategoricalProcessTest(parameterized.TestCase):
     # Use a constant x0 to make it unlikely to be identical to noise.
     x0 = jnp.zeros(self.shape, dtype=jnp.int32)
     xt_final, _ = process.corrupt(key1, x0, time_final)
+    xt_final_amax = jnp.argmax(xt_final, axis=-1)[..., None]
     # Check that corruption happened.
     if process_type == 'masking':
       mask_value = self.num_categories
-      self.assertTrue(jnp.all(xt_final == jnp.ones_like(x0) * mask_value))
+      self.assertTrue(jnp.all(xt_final_amax == jnp.ones_like(x0) * mask_value))
     elif process_type == 'uniform':
-      bincount = jnp.bincount(xt_final.flatten(), length=self.num_categories)
+      bincount = jnp.bincount(
+          xt_final_amax.flatten(), length=self.num_categories
+      )
       bincount_prob = bincount / (self.batch_size * self.seq_len)
       true_prob = 1.0 / self.num_categories
       # Check that the distribution is uniform.
@@ -207,7 +227,7 @@ class CategoricalProcessTest(parameterized.TestCase):
 
   def test_non_valid_unused_mask_value(self):
     with self.assertRaises(ValueError):
-      discrete.CategoricalProcess.uniform_process(
+      simplicial.SimplicialProcess.uniform_process(
           schedule=self.schedule,
           num_categories=self.num_categories,
           unused_mask_value=0,
@@ -237,7 +257,7 @@ class CategoricalProcessTest(parameterized.TestCase):
       expected_probs,
   ):
     expected_probs = jnp.array(expected_probs)
-    factory = getattr(discrete.CategoricalProcess, factory_name)
+    factory = getattr(simplicial.SimplicialProcess, factory_name)
     process = factory(schedule=self.schedule, num_categories=num_categories)
     self.assertEqual(
         process.process_num_categories, expected_process_num_categories
@@ -247,35 +267,13 @@ class CategoricalProcessTest(parameterized.TestCase):
 
   def test_factory_methods_raise_for_invalid_num_categories(self):
     with self.assertRaises(ValueError):
-      discrete.CategoricalProcess.uniform_process(
+      simplicial.SimplicialProcess.uniform_process(
           schedule=self.schedule, num_categories=0
       )
     with self.assertRaises(ValueError):
-      discrete.CategoricalProcess.masking_process(
+      simplicial.SimplicialProcess.masking_process(
           schedule=self.schedule, num_categories=0
       )
-
-  def test_symmetric_post_corruption(self):
-    # Create a non-symmetric input
-    x = jnp.array([[[[1], [2]], [[2], [3]]]], dtype=jnp.int32)
-    post_corruption_fn = discrete.SymmetricPostCorruptionFn()
-    projected_x = post_corruption_fn(x)
-    # The symmetric projection takes the upper triangle and transpose it.
-    # Note that we have 0 on the diagonal.
-    expected_x = jnp.array([[[[0], [2]], [[2], [0]]]], dtype=jnp.int32)
-    self.assertTrue(jnp.array_equal(projected_x, expected_x))
-
-  def test_raises_for_non_4d_input(self):
-    x_3d = jnp.ones((2, 2, 1), dtype=jnp.int32)
-    post_corruption_fn = discrete.SymmetricPostCorruptionFn()
-    with self.assertRaisesRegex(ValueError, 'Expected 4D input'):
-      post_corruption_fn(x_3d)
-
-  def test_raises_for_non_square_input(self):
-    x_nonsquare = jnp.ones((1, 2, 3, 1), dtype=jnp.int32)
-    post_corruption_fn = discrete.SymmetricPostCorruptionFn()
-    with self.assertRaisesRegex(ValueError, 'Expected square input'):
-      post_corruption_fn(x_nonsquare)
 
   @parameterized.named_parameters(
       ('masking', 'masking'),
@@ -283,12 +281,12 @@ class CategoricalProcessTest(parameterized.TestCase):
   )
   def test_is_masking(self, process_type):
     if process_type == 'masking':
-      process = discrete.CategoricalProcess.masking_process(
+      process = simplicial.SimplicialProcess.masking_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
       self.assertTrue(process.is_masking)
     elif process_type == 'uniform':
-      process = discrete.CategoricalProcess.uniform_process(
+      process = simplicial.SimplicialProcess.uniform_process(
           schedule=self.schedule, num_categories=self.num_categories
       )
       self.assertFalse(process.is_masking)
@@ -301,14 +299,14 @@ class CategoricalProcessTest(parameterized.TestCase):
   )
   def test_is_masking_by_hand_crafted_invariant_probs(self, process_type):
     if process_type == 'masking':
-      process = discrete.CategoricalProcess(
+      process = simplicial.SimplicialProcess(
           schedule=self.schedule,
           invariant_probs=[0.0] * self.num_categories + [1.0],  # masking
           num_categories=self.num_categories,
       )
       self.assertTrue(process.is_masking)
     elif process_type == 'uniform':
-      process = discrete.CategoricalProcess(
+      process = simplicial.SimplicialProcess(
           schedule=self.schedule,
           invariant_probs=[1.0 / self.num_categories] * self.num_categories,
           num_categories=self.num_categories,

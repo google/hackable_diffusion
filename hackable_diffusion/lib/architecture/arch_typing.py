@@ -59,6 +59,7 @@ class ConditioningMechanism(enum.StrEnum):
   CROSS_ATTENTION = "cross_attention"
   CONCATENATE = "concatenate"
   SUM = "sum"
+  CUSTOM = "custom"
 
 
 class RoPEPositionType(enum.StrEnum):

@@ -12,16 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""API for diffusion losses."""
+"""kdiff modules."""
 
 # pylint: disable=g-importing-member
-from hackable_diffusion.lib.loss.base import DiffusionLoss
-from hackable_diffusion.lib.loss.base import NestedDiffusionLoss
-from hackable_diffusion.lib.loss.base import WeightFn
-from hackable_diffusion.lib.loss.discrete import compute_discrete_diffusion_loss
-from hackable_diffusion.lib.loss.discrete import MD4Loss
-from hackable_diffusion.lib.loss.discrete import NoWeightDiscreteLoss
-from hackable_diffusion.lib.loss.gaussian import compute_continuous_diffusion_loss
-from hackable_diffusion.lib.loss.gaussian import NoWeightGaussianLoss
-from hackable_diffusion.lib.loss.gaussian import SiD2Loss
+from hackable_diffusion.kdiff.core import Diffusion
 # pylint: enable=g-importing-member

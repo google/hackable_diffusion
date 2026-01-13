@@ -50,20 +50,18 @@ class GaussianLossTest(parameterized.TestCase):
     key_pred, key_target = jax.random.split(self.key)
 
     self.preds = {
-        'x0': jax.random.uniform(
-            key_pred, self.shape, minval=-1.0, maxval=1.0
-        )
+        'x0': jax.random.uniform(key_pred, self.shape, minval=-1.0, maxval=1.0)
     }
     self.targets = {
         'x0': jax.random.uniform(
             key_target, self.shape, minval=-1.0, maxval=1.0
         )
     }
-    self.time = jnp.ones((self.bsz, 1, 1, 1,)) * 0.5
+    self.time = jnp.ones((self.bsz, 1, 1, 1)) * 0.5
     self.schedule = schedules.CosineSchedule()
 
   @parameterized.named_parameters(
-      ('no_weight', gaussian.NoWeightLoss, {}, 1e-6),
+      ('no_weight', gaussian.NoWeightGaussianLoss, {}, 1e-6),
       ('sid2_loss_no_bias', gaussian.SiD2Loss, {'bias': 0.0}, 1e-6),
       ('sid2_loss_with_bias', gaussian.SiD2Loss, {'bias': 1.0}, 1e-6),
   )
@@ -86,7 +84,7 @@ class GaussianLossTest(parameterized.TestCase):
     l2 = jnp.square(pred - target)
 
     weight = jnp.ones(self.bsz)
-    if loss_class is gaussian.NoWeightLoss:
+    if loss_class is gaussian.NoWeightGaussianLoss:
       pass  # Weight is 1
     elif loss_class is gaussian.SiD2Loss:
       bias = loss_kwargs.get('bias', 0.0)
@@ -193,7 +191,7 @@ class PredictionConverterTest(parameterized.TestCase):
 
   @parameterized.named_parameters(
       ('with_convert_to_logsnr', True, None),
-      ('with_weight_fn', False, lambda schedule, time: 1.0),
+      ('with_weight_fn', False, lambda schedule, preds, targets, time: 1.0),
   )
   def test_raises_error_if_schedule_is_none_but_required(
       self, convert_to_logsnr_schedule, weight_fn

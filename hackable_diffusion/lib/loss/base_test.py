@@ -15,7 +15,6 @@
 """Test for base losses."""
 
 import chex
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.loss import base as base_loss
 from hackable_diffusion.lib.loss import discrete as discrete_loss
 from hackable_diffusion.lib.loss import gaussian as gaussian_loss
@@ -31,11 +30,8 @@ class BaseLossTest(parameterized.TestCase):
   def test_nested_loss(self):
     """Test that the nested loss is correctly applied."""
 
-    schedule_discrete = schedules.SquareCosineDiscreteSchedule()
-    loss_fn_continuous = gaussian_loss.NoWeightLoss()
-    loss_fn_discrete = discrete_loss.DiffusionCrossEntropyLoss(
-        schedule=schedule_discrete
-    )
+    loss_fn_continuous = gaussian_loss.NoWeightGaussianLoss()
+    loss_fn_discrete = discrete_loss.NoWeightDiscreteLoss()
     loss_fn = base_loss.NestedDiffusionLoss(
         losses={
             "data_continuous": loss_fn_continuous,

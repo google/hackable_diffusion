@@ -142,7 +142,7 @@ class DiffusionSampler(SampleFn):
       inference_fn: InferenceFn,
       rng: PRNGKey,
       initial_noise: DataTree,
-      conditioning: Conditioning,
+      conditioning: Conditioning | None = None,
   ) -> tuple[DiffusionStepTree, DiffusionStepTree]:
     """Performs a full reverse diffusion sampling loop for a single sample.
 

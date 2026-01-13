@@ -273,10 +273,20 @@ class UnMaskingStep(SamplerStep):
       initial_noise: DataArray,
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
+
+    init_logits = jnp.repeat(
+        initial_noise, self.corruption_process.num_categories, axis=-1
+    )
+    init_logits = jnp.zeros_like(init_logits, dtype=jnp.float32) - jnp.inf
+
     return DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
-        aux=dict(),
+        aux={
+            'logits': init_logits,
+            # `logits` need to be passed in `aux` dictionary to a performance
+            # bug when using TPU. Needs to be investigated.
+        },
     )
 
   @typechecked
@@ -353,8 +363,10 @@ class UnMaskingStep(SamplerStep):
     return DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
-        aux=dict(),
+        aux={'logits': logits},
     )
+    # `logits` need to be passed in `aux` dictionary to a performance
+    # bug when using TPU. Needs to be investigated.
 
   @typechecked
   def finalize(
@@ -413,11 +425,19 @@ class DiscreteDDIMStep(SamplerStep):
       initial_noise: DataArray,
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
+
+    init_logits = jnp.repeat(
+        initial_noise, self.corruption_process.num_categories, axis=-1
+    )
+    init_logits = jnp.zeros_like(init_logits, dtype=jnp.float32) - jnp.inf
+
     return DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
-        aux=dict(),
+        aux={'logits': init_logits},
     )
+    # `logits` need to be passed in `aux` dictionary to a performance
+    # bug when using TPU. Needs to be investigated.
 
   @typechecked
   def update(
@@ -492,8 +512,10 @@ class DiscreteDDIMStep(SamplerStep):
     return DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
-        aux=dict(),
+        aux={'logits': logits},
     )
+    # `logits` need to be passed in `aux` dictionary to a performance
+    # bug when using TPU. Needs to be investigated.
 
   @typechecked
   def finalize(

@@ -62,7 +62,7 @@ class TokenEmbedder(BaseTokenEmbedder):
       then the last two dimensions are collapsed leading to <B, H, W, C*F>. This
       is then passed to the base backbone. After base backbone, the outputs are
       uncollapsed from <B, H, W, C*F>, back to <B, H, W, C, F>, and then
-      projected to <B, H, W, C, V>.  and the backbone outputs will be projected
+      projected to <B, H, W, C, V> and the backbone outputs will be projected
       to the vocabulary size. If `False`, it simply uses token_embedder,
       followed by the base backbone, and then projects to the vocabulary size.
     dtype: The dtype to use for the discrete model.
@@ -118,8 +118,8 @@ class TokenEmbedder(BaseTokenEmbedder):
 ################################################################################
 
 
-class BaseTokenProjector(nn.Module, abc.ABC):
-  """Base class for token projectors."""
+class BaseProjector(nn.Module, abc.ABC):
+  """Base class for projectors."""
 
   embedding_dim: int
 
@@ -131,21 +131,19 @@ class BaseTokenProjector(nn.Module, abc.ABC):
     ...
 
 
-class DenseTokenProjector(BaseTokenProjector):
-  """Token projector that uses a dense layer.
+class DenseProjector(BaseProjector):
+  """Projector that uses a dense layer.
 
   Attributes:
-    num_categories: The vocabulary size of the discrete model. Note that for the
-      masking process, it is equal to `K`, while the process_num_categories for
-      `token_embedder` uses `K+1` categories.
-    adapt_to_image_like_data: Whether to adapt the discrete model to image-like
+    num_categories: The vocabulary size of the model.
+    adapt_to_image_like_data: Whether to adapt the model to image-like
       data. If True, the input data is expected to have the shape <B, H, W, C>
       (this means that the channel dimension has been collapsed), which is then
       projected and reshape into projected to <B, H, W, C, V>. If `False`, it
       simply uses token_projector, followed by the base backbone, and then
       projects to the vocabulary size. We refer to TokenEmbedder for more
       details.
-    dtype: The dtype to use for the discrete model.
+    dtype: The dtype to use for the model.
   """
 
   num_categories: int
@@ -192,11 +190,12 @@ class ConditionalDiscreteBackbone(ConditionalBackbone):
     base_backbone: The base backbone to use for the discrete model. Can be any
       conditionl backbone such as MLP or UNet.
     token_embedder: The token embedder to use for the discrete model.
+    token_projector: The token projector to use for the discrete model.
   """
 
   base_backbone: ConditionalBackbone
   token_embedder: BaseTokenEmbedder
-  token_projector: BaseTokenProjector
+  token_projector: BaseProjector
 
   def __post_init__(self):
     super().__post_init__()

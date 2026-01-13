@@ -39,6 +39,7 @@ import jax.numpy as jnp
 
 DType = hd_typing.DType
 Float = hd_typing.Float
+Num = hd_typing.Num
 PyTree = hd_typing.PyTree
 
 ConditioningMechanism = arch_typing.ConditioningMechanism
@@ -95,16 +96,17 @@ class SinusoidalTimeEmbedder(BaseTimeEmbedder):
 
   This module encodes the time step `t` into a dense embedding.
   It performs the following sequence of operations:
+  ```
   > [SinusoidalSequenceEmbedding]
   > [Dense]
   > [Activation]
   > [Dense]
+  ```
 
   Attributes:
     activation: The activation function to use.
     embedding_dim: The dimension of sinusoidal embeddings.
     num_features: Number of features in the dense layers.
-    dropout_rate: The dropout rate to use.
     dtype: The dtype to use.
   """
 
@@ -331,6 +333,36 @@ class MLPEmbedder(BaseEmbedder):
     return mlp_module(all_inputs, is_training=False)
 
 
+class FieldSelector(BaseEmbedder):
+  """Identity embedder.
+
+  This module returns one input without any transformation.
+  One has to specify the data spec explicitly (e.g., `(32, 32, 3)` for a
+  32x32x3 array). The batch dimension is not part of the spec.
+  """
+
+  field_name: str
+  data_spec: tuple[int, ...]
+
+  @property
+  def output_shape(self) -> tuple[int, ...]:
+    """Returns the output shape of the embedder, excluding the batch dim."""
+    return self.data_spec
+
+  @nn.compact
+  @typechecked
+  def __call__(
+      self,
+      conditioning: hd_typing.Conditioning,
+  ) -> Num['batch ...']:
+    if self.field_name not in conditioning:
+      raise ValueError(
+          f'Conditioning key {self.field_name} not found in conditioning.'
+          f' Available keys: {sorted(list(conditioning.keys()))}'
+      )
+    return jnp.array(conditioning[self.field_name])
+
+
 ################################################################################
 # MARK: Process and combine time and conditioning signals
 ################################################################################
@@ -421,7 +453,7 @@ class ConditioningEncoder(BaseConditioningEncoder):
       time: hd_typing.TimeTree,
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> dict[ConditioningMechanism, Float['batch ...']]:
+  ) -> dict[ConditioningMechanism, Num['batch ...']]:
     """Encodes and combines time and conditioning signals.
 
     The output is a dictionary where keys are the embedding mechanisms specified

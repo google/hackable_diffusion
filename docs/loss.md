@@ -126,18 +126,33 @@ print(f"Scalar loss: {loss_scalar}")
 
 For discrete data, the training objective is typically to predict the
 probability distribution of the original token. This is based on
-<https://arxiv.org/abs/2406.04329>.
+<https://arxiv.org/abs/2406.04329>. The core logic is encapsulated in
+`compute_discrete_diffusion_loss`.
 
-### `DiffusionCrossEntropyLoss`
+### `compute_discrete_diffusion_loss`
 
-This loss function is designed for data from a `CategoricalProcess`. It
-calculates a weighted cross-entropy loss between the model's predicted logits
-and the true underlying token.
+This function calculates a weighted cross-entropy loss between the model's
+predicted logits and the true underlying token for data from a
+`CategoricalProcess`.
 
-The loss has a specific weighting `alpha_der / (1 - alpha)` which is derived
-from the continuous-time formulation of discrete diffusion. It can also
-optionally apply an additional `weight_fn`.
+The cross-entropy loss is computed using
+`optax.softmax_cross_entropy_with_integer_labels`. Its flexibility comes from
+`weight_fn`, an optional, arbitrary function of time that applies a weighting to
+the loss.
 
 A key option is `use_mask`. If `True`, it will ignore tokens that were *not*
-corrupted (masked) at a given timestep, focusing the loss only on the tokens the
-model needs to predict.
+corrupted at a given timestep, focusing the loss only on the tokens the model
+needs to predict.
+
+### `MD4Loss`
+
+This loss function implements loss from "Masked Discrete Diffusion in Image
+Tokenizers" <https://arxiv.org/abs/2406.04329>, Eq 5. It uses a specific
+weighting function `weight_fn` derived from continuous-time formulation of
+discrete diffusion, which computes `weight = -alpha_der / (1 - alpha)`. This
+loss requires a `DiscreteSchedule`.
+
+### `NoWeightDiscreteLoss`
+
+This is a concrete implementation that computes discrete diffusion loss without
+any weighting (i.e. weight=1).

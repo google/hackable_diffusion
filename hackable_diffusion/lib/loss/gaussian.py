@@ -157,7 +157,9 @@ def compute_continuous_diffusion_loss(
 
   # Maybe multiply by other weight terms
   if schedule is not None and weight_fn is not None:
-    weight = weight * weight_fn(schedule, time)
+    weight = weight * weight_fn(
+        schedule=schedule, preds=preds, targets=targets, time=time
+    )
 
   weighted_loss = weight * l2
   weighted_loss = utils.flatten_non_batch_dims(weighted_loss)
@@ -173,7 +175,7 @@ def compute_continuous_diffusion_loss(
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NoWeightLoss(base.DiffusionLoss):
+class NoWeightGaussianLoss(base.DiffusionLoss):
   """Loss without weight."""
 
   prediction_type: GaussianPredictionType | None = None
@@ -214,7 +216,12 @@ class SiD2Loss(base.DiffusionLoss):
       targets: TargetInfo,
       time: TimeArray,
   ) -> LossOutput:
-    def _weight_fn(schedule, time):
+    def _weight_fn(
+        schedule: GaussianSchedule,
+        preds: TargetInfo,
+        targets: TargetInfo,
+        time: TimeArray,
+    ) -> TimeArray:
       """Weight function for the sigmoid loss.
 
       The weight function is defined for the `x0` prediction type, see
@@ -225,11 +232,14 @@ class SiD2Loss(base.DiffusionLoss):
 
       Args:
         schedule: The GaussianSchedule to use for the loss.
+        preds: Unused.
+        targets: Unused.
         time: The time array to use for the loss.
 
       Returns:
         The weight function.
       """
+      del preds, targets  # Unused
       return jax.nn.sigmoid(schedule.logsnr(time) - self.bias) * jnp.exp(
           self.bias
       )

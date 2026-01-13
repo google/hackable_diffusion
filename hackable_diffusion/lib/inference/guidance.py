@@ -72,7 +72,7 @@ class ScalarGuidanceFn(GuidanceFn):
   def __call__(
       self,
       xt: DataTree,
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeTree,
       cond_outputs: TargetInfoTree,
       uncond_outputs: TargetInfoTree,
