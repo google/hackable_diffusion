@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for diffusion_network."""
+"""Tests for diffusion_network and its components."""
 
 import chex
 from flax import linen as nn
