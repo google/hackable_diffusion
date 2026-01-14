@@ -14,7 +14,7 @@
 
 """Wrapper around jaxtyping to support short-form array annotations.
 
-I.e. Float["b n d"] instead of Float[Array, "b n d"]
+I.e. Float["b n d"] instead of Float[Array, "b n d"].
 
 Also defines a @typechecked decorator that uses the typeguard typechecker.
 
