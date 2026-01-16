@@ -90,7 +90,8 @@ class SymmetricPostCorruptionFn(PostCorruptionFn):
   """Symmetric projection function.
 
   This is used in DiGress https://arxiv.org/abs/2209.14734 in order to noise the
-  adjacency graph.
+  adjacency graph. This function also zeroes out the diagonal entries, thereby
+  removing any self-loop.
   """
 
   def __call__(self, x: DataArray) -> DataArray:
