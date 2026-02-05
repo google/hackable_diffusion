@@ -21,7 +21,7 @@ numpy==2.3.4
 opt_einsum==3.4.0
 optax==0.2.6
 orbax-checkpoint==0.11.26
-protobuf==6.33.0
+protobuf==6.33.5
 psutil==7.1.2
 Pygments==2.19.2
 PyYAML==6.0.3
