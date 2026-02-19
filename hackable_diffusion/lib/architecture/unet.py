@@ -164,6 +164,7 @@ class Unet(ConditionalBackbone):
       self,
       x: Float["batch height width channels"],
       conditioning_embeddings: dict[ConditioningMechanism, Float["batch ..."]],
+      *,
       is_training: bool,
   ) -> Float["batch height width output_channels"]:
 
