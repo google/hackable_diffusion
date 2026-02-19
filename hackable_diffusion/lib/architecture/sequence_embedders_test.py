@@ -38,7 +38,11 @@ INVALID_INT = arch_typing.INVALID_INT
 def _get_invalid_num_features_params():
   """Generates parameters for testing invalid num_features."""
   params = []
-  modes = ["sinusoidal_embedding", "random_fourier_embedding"]
+  modes = [
+      "sinusoidal_embedding",
+      "random_fourier_embedding",
+      "additive_embedding",
+  ]
   feature_values = [
       ("default", INVALID_INT),
       ("zero", 0),
@@ -100,6 +104,10 @@ class SequenceEmbeddersTest(parameterized.TestCase):
       )
     elif mode == "random_fourier_embedding":
       module = sequence_embedders.RandomFourierSequenceEmbedding(
+          num_features=num_features
+      )
+    elif mode == "additive_embedding":
+      module = sequence_embedders.AdditiveSequenceEmbedding(
           num_features=num_features
       )
     else:
@@ -243,6 +251,30 @@ class SequenceEmbeddersTest(parameterized.TestCase):
     x_rope = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x_rope)
     self.assertEmpty(variables)
+
+  # MARK: AdditiveSequenceEmbedding tests
+
+  def test_additive_embedding_output_shape(self):
+    """Tests the output shape of AdditiveSequenceEmbedding."""
+    module = sequence_embedders.AdditiveSequenceEmbedding(num_features=self.dim)
+    variables = module.init({"params": self.rng}, self.x)
+    output = module.apply(variables, self.x)
+    self.assertEqual(output.shape, self.x.shape)
+
+  def test_additive_embedding_params_are_updated(self):
+    """Tests that AdditiveSequenceEmbedding params are updated."""
+    module = sequence_embedders.AdditiveSequenceEmbedding(num_features=self.dim)
+    variables = module.init({"params": self.rng}, self.x)
+    initial_params = variables["params"]
+
+    def loss_fn(params):
+      output = module.apply({"params": params}, self.x)
+      return jnp.sum(output)
+
+    grads = jax.grad(loss_fn)(initial_params)
+
+    # Check that the gradients are not zero.
+    self.assertFalse(jnp.allclose(grads["PositionalEmbeddingTensor"], 0.0))
 
 
 if __name__ == "__main__":
