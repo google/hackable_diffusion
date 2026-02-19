@@ -186,3 +186,26 @@ class RoPESequenceEmbedding(nn.Module):
 
     out = jnp.asarray(jnp.concatenate(result, axis=-1), x.dtype)
     return out
+
+
+class AdditiveSequenceEmbedding(nn.Module):
+  """Learnable additive sequence positional embedding."""
+
+  num_features: int
+
+  def setup(self):
+    if self.num_features <= 0:
+      raise ValueError("Number of features must be positive.")
+
+  @nn.compact
+  @typechecked
+  def __call__(
+      self, x: Num["batch *#data_shape"]
+  ) -> Float["batch *#data_shape"]:
+    pos_embed = self.param(
+        "PositionalEmbeddingTensor",
+        nn.initializers.normal(stddev=0.02),
+        (1, *x.shape[1:]),
+        x.dtype,
+    )
+    return x + pos_embed
