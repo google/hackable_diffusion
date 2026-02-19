@@ -266,6 +266,7 @@ class AttentionResidualBlock(nn.Module):
       self,
       x: Float["batch height width channels"],
       cross_attention_emb: Float["batch seq cond_dim2"] | None,
+      *,
       is_training: bool,
   ) -> Float["batch height width channels"]:
     skip = x

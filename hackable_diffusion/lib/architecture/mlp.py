@@ -78,6 +78,7 @@ class ConditionalMLP(ConditionalBackbone):
       self,
       x: DataArray,
       conditioning_embeddings: dict[ConditioningMechanism, Float['batch ...']],
+      *,
       is_training: bool,
   ) -> DataArray:
     x_emb = jnp.reshape(x, shape=(x.shape[0], -1))
@@ -92,7 +93,7 @@ class ConditionalMLP(ConditionalBackbone):
           dropout_rate=self.dropout_rate,
           dtype=self.dtype,
           name='PreprocessMLP',
-      )(x_emb, is_training)
+      )(x_emb, is_training=is_training)
 
     # The conditioning was already processed by the `conditioning_encoder`, so
     # here we just need to concatenate it with the `x`.
@@ -125,7 +126,7 @@ class ConditionalMLP(ConditionalBackbone):
         dtype=self.dtype,
         zero_init_output=self.zero_init_output,
         name='PostprocessMLP',
-    )(emb, is_training)
+    )(emb, is_training=is_training)
 
     output = jnp.reshape(output, shape=x.shape)
     output = utils.optional_bf16_to_fp32(output)
