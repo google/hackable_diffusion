@@ -300,11 +300,10 @@ class MultiHeadAttention(nn.Module):
     if self.normalize_qk:
       scale = self.param(
           "norm_qk_scale",
-          nn.initializers.constant(
-              jnp.log2(seq_len_kv**2 - seq_len_kv + SAFETY_EPSILON)
-          ),
-          (1, 1, 1, 1),
+          nn.initializers.zeros_init(),
+(1, 1, 1, 1),
       )
+                scale = jnp.exp2(scale)
 
       norm_q = jnp.linalg.norm(q, ord=2, axis=-1, keepdims=True)
       norm_k = jnp.linalg.norm(k, ord=2, axis=-1, keepdims=True)
