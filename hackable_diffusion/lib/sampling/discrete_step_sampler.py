@@ -696,15 +696,13 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
 
     # Extract invariant probabilities.
     pi = self.invariant_probs_vec
-    pi_xt = pi[xt[..., 0]][..., None]  # The prior prob of the current token
-    # (bsz, *seq_len, 1)
 
     # Calculate q(x_t | x_s).
-    q_xt_given_xs = ratio * xt_oh + (1.0 - ratio) * pi_xt
+    q_xt_given_xs = ratio * xt_oh + (1.0 - ratio) * pi
     # (bsz, *seq_len, M)
 
     # Calculate q(x_t | x_0)'
-    q_xt_given_x0 = alpha_t * xt_oh + (1.0 - alpha_t) * pi_xt
+    q_xt_given_x0 = alpha_t * xt_oh + (1.0 - alpha_t) * pi
     # (bsz, *seq_len, M)
 
     # Calculate integration weights: W(x_0) = p(x_0 | x_t) / q(x_t | x_0).
