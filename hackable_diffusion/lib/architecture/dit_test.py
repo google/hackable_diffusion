@@ -256,6 +256,208 @@ class DiTTest(parameterized.TestCase):
           is_training=self.is_training,
       )
 
+  def test_output_shape_with_cross_attention(self):
+    """Verifies output shape when cross-attention conditioning is provided."""
+    cross_seq_len = 10
+    cross_dim = 24
+    input_shape = (self.batch_size, self.sequence_length, self.embedding_dim)
+    x = jnp.ones(input_shape)
+    conditioning_embeddings = {
+        ConditioningMechanism.ADAPTIVE_NORM: jnp.ones(
+            (self.batch_size, self.cond_dim)
+        ),
+        ConditioningMechanism.CROSS_ATTENTION: jnp.ones(
+            (self.batch_size, cross_seq_len, cross_dim)
+        ),
+    }
+    model = dit.DiT(
+        num_blocks=2,
+        block=dit_blocks.DiTBlockAdaLNZero(
+            hidden_size=self.embedding_dim, num_heads=4
+        ),
+    )
+    variables = model.init(
+        self.key,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    output = model.apply(
+        variables,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    self.assertEqual(output.shape, input_shape)
+
+  def test_output_shape_with_cross_attention_and_mask(self):
+    """Verifies output shape when both cross-attention and mask are provided."""
+    cross_seq_len = 10
+    cross_dim = 24
+    input_shape = (self.batch_size, self.sequence_length, self.embedding_dim)
+    x = jnp.ones(input_shape)
+    conditioning_embeddings = {
+        ConditioningMechanism.ADAPTIVE_NORM: jnp.ones(
+            (self.batch_size, self.cond_dim)
+        ),
+        ConditioningMechanism.CROSS_ATTENTION: jnp.ones(
+            (self.batch_size, cross_seq_len, cross_dim)
+        ),
+        ConditioningMechanism.CROSS_ATTENTION_MASK: jnp.ones(
+            (self.batch_size, cross_seq_len), dtype=jnp.bool_
+        ),
+    }
+    model = dit.DiT(
+        num_blocks=2,
+        block=dit_blocks.DiTBlockAdaLNZero(
+            hidden_size=self.embedding_dim, num_heads=4
+        ),
+    )
+    variables = model.init(
+        self.key,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    output = model.apply(
+        variables,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    self.assertEqual(output.shape, input_shape)
+
+  def test_variable_shapes_with_cross_attention(self):
+    """Verifies that cross-attention params are correctly initialized."""
+    cross_seq_len = 10
+    cross_dim = 24
+    input_shape = (self.batch_size, self.sequence_length, self.embedding_dim)
+    x = jnp.ones(input_shape)
+    conditioning_embeddings = {
+        ConditioningMechanism.ADAPTIVE_NORM: jnp.ones(
+            (self.batch_size, self.cond_dim)
+        ),
+        ConditioningMechanism.CROSS_ATTENTION: jnp.ones(
+            (self.batch_size, cross_seq_len, cross_dim)
+        ),
+    }
+    model = dit.DiT(
+        num_blocks=1,
+        block=dit_blocks.DiTBlockAdaLNZero(
+            hidden_size=self.embedding_dim, num_heads=4
+        ),
+    )
+    variables = model.init(
+        self.key,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    variables_shapes = test_utils.get_pytree_shapes(variables)
+    block_params = variables_shapes['params']['Block_1']
+
+    # Cross-attention gate should be present.
+    self.assertIn('Dense_Gate_Cross', block_params)
+    self.assertEqual(
+        block_params['Dense_Gate_Cross']['kernel'],
+        (self.cond_dim, self.embedding_dim),
+    )
+
+    # Cross-attention module should be present with correct shapes.
+    self.assertIn('cross_attn', block_params)
+    cross_attn = block_params['cross_attn']
+    # Q projects from embedding_dim
+    self.assertEqual(
+        cross_attn['Dense_Q']['kernel'],
+        (self.embedding_dim, self.embedding_dim),
+    )
+    # K and V project from cross_dim
+    self.assertEqual(
+        cross_attn['Dense_K']['kernel'],
+        (cross_dim, self.embedding_dim),
+    )
+    self.assertEqual(
+        cross_attn['Dense_V']['kernel'],
+        (cross_dim, self.embedding_dim),
+    )
+
+  def test_cross_attention_mask_zeros_out_tokens(self):
+    """Verifies that masking all cross-attention tokens changes the output."""
+    cross_seq_len = 10
+    cross_dim = 24
+    input_shape = (self.batch_size, self.sequence_length, self.embedding_dim)
+    x = jax.random.normal(self.key, input_shape)
+    adaptive_norm = jax.random.normal(
+        jax.random.PRNGKey(2), (self.batch_size, self.cond_dim)
+    )
+    cross_emb = jax.random.normal(
+        jax.random.PRNGKey(1), (self.batch_size, cross_seq_len, cross_dim)
+    )
+
+    model = dit.DiT(
+        num_blocks=1,
+        block=dit_blocks.DiTBlockAdaLNZero(
+            hidden_size=self.embedding_dim, num_heads=4
+        ),
+    )
+
+    # Init with cross-attention to get correct params.
+    conditioning_with_cross = {
+        ConditioningMechanism.ADAPTIVE_NORM: adaptive_norm,
+        ConditioningMechanism.CROSS_ATTENTION: cross_emb,
+        ConditioningMechanism.CROSS_ATTENTION_MASK: jnp.ones(
+            (self.batch_size, cross_seq_len), dtype=jnp.bool_
+        ),
+    }
+    variables = model.init(
+        self.key,
+        x=x,
+        conditioning_embeddings=conditioning_with_cross,
+        is_training=False,
+    )
+
+    # The cross-attention gate (Dense_Gate_Cross) is zero-initialized, so
+    # replace it with ones so the gate is active and masking has an effect.
+    params = variables['params']
+    gate_cross = params['Block_1']['Dense_Gate_Cross']
+    gate_cross = jax.tree.map(jnp.ones_like, gate_cross)
+    params['Block_1']['Dense_Gate_Cross'] = gate_cross
+    variables = {'params': params}
+
+    # Run with all tokens masked out (False = masked).
+    conditioning_all_masked = {
+        ConditioningMechanism.ADAPTIVE_NORM: adaptive_norm,
+        ConditioningMechanism.CROSS_ATTENTION: cross_emb,
+        ConditioningMechanism.CROSS_ATTENTION_MASK: jnp.zeros(
+            (self.batch_size, cross_seq_len), dtype=jnp.bool_
+        ),
+    }
+    # Run with all tokens unmasked.
+    conditioning_all_unmasked = {
+        ConditioningMechanism.ADAPTIVE_NORM: adaptive_norm,
+        ConditioningMechanism.CROSS_ATTENTION: cross_emb,
+        ConditioningMechanism.CROSS_ATTENTION_MASK: jnp.ones(
+            (self.batch_size, cross_seq_len), dtype=jnp.bool_
+        ),
+    }
+
+    output_all_masked = model.apply(
+        variables,
+        x=x,
+        conditioning_embeddings=conditioning_all_masked,
+        is_training=False,
+    )
+    output_all_unmasked = model.apply(
+        variables,
+        x=x,
+        conditioning_embeddings=conditioning_all_unmasked,
+        is_training=False,
+    )
+
+    # The two outputs should differ since masking changes cross-attention.
+    self.assertFalse(jnp.allclose(output_all_masked, output_all_unmasked))
+
 
 if __name__ == '__main__':
   absltest.main()
+
