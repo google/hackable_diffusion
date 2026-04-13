@@ -72,8 +72,10 @@ DataTree = PyTree[Array['batch *_data_shape'], '$T']
 TimeArray = Array['#batch *_data_shape']
 # Corresponding PyTree for the time array.
 TimeTree = PyTree[Array['_batch *_data_shape'], '$T']
+
 # Corresponding schedule tree.
-ScheduleInfoTree = PyTree[dict[str, Array['batch *_data_shape']], '$T']
+ScheduleKey = str  # e.g. 'time', 'alpha', 'sigma', 'logsnr', etc.
+ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']
 
 # A dictionary containing the different training targets. Same structure as
 # DataArray for every different target (e.g. x0, epsilon, score, velocity,
@@ -81,16 +83,18 @@ ScheduleInfoTree = PyTree[dict[str, Array['batch *_data_shape']], '$T']
 # NOTE: The # in data_shape is there because in the discrete case the targets
 # are usually labels (x0 : Int["batch 1"]) while the predictions are
 # logits (x0 : Float["batch K"]).
-TargetInfo = dict[str, Array['batch *_data_shape']]
+TargetKey = str  # e.g. 'x0', 'epsilon', 'score', 'velocity', 'v', 'mask', ...
+TargetInfo = dict[TargetKey, Array['batch *_data_shape']]
 TargetInfoTree = PyTree[Array['batch *_data_shape']]
 
 # Conditioning structures.
-Conditioning = Mapping[str, Array['batch *cond_shape']]
+ConditioningKey = str  # e.g. 'label', 'text', 'image', ...
+Conditioning = Mapping[ConditioningKey, Array['batch *cond_shape']]
 
 # Shape related structures.
 Shape = tuple[int, ...]
 ShapeTree = PyTree[Shape]
-ConditioningShape = dict[str, Shape]
+ConditioningShape = dict[ConditioningKey, Shape]
 
 # Type related structures.
 DType = kt.DType

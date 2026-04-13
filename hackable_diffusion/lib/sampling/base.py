@@ -61,7 +61,7 @@ The `InferenceFn` (pure update function) is visible from the `SamplerStep`
  is called to produce the final clean output sample.
 """
 import dataclasses
-from typing import Any, Protocol
+from typing import Protocol
 import flax.struct
 from hackable_diffusion.lib import hd_typing
 import jax
@@ -76,9 +76,10 @@ Int = hd_typing.Int
 PRNGKey = hd_typing.PRNGKey
 PyTree = hd_typing.PyTree
 
+DataArray = hd_typing.DataArray
 DataTree = hd_typing.DataTree
 TargetInfoTree = hd_typing.TargetInfoTree
-TimeTree = hd_typing.TimeTree
+TimeArray = hd_typing.TimeArray
 
 #################################################################################
 # MARK: StepInfo Data Structure
@@ -99,7 +100,7 @@ class StepInfo:
   """
 
   step: Int
-  time: TimeTree
+  time: TimeArray
   rng: PRNGKey
 
 
@@ -119,14 +120,12 @@ class DiffusionStep:
     aux: Additional data computed by the sampler.
   """
 
-  xt: DataTree
+  xt: DataArray
   step_info: StepInfo
   aux: PyTree
 
 
-# TODO(b/493013032): Revert to PyTree[DiffusionStep] once ktyping supports
-# PyTree structure bindings without traversing into registered JAX PyTree nodes.
-DiffusionStepTree = Any
+DiffusionStepTree = PyTree[DiffusionStep]
 
 ################################################################################
 # MARK: Protocols
