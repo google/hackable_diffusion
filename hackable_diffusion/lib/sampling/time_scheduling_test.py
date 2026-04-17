@@ -152,35 +152,6 @@ class TimeScheduleTest(absltest.TestCase):
     ).time
     chex.assert_trees_all_close(uniform_steps, edm_steps)
 
-  def test_nested_time_schedule(self):
-    # Create a nested time schedule
-    time_schedule_continuous = time_scheduling.UniformTimeSchedule()
-    time_schedule_discrete = time_scheduling.UniformTimeSchedule()
-    time_schedules = {
-        "data_continuous": time_schedule_continuous,
-        "modality": {"data_discrete": time_schedule_discrete},
-    }
-    time_schedule = time_scheduling.NestedTimeSchedule(
-        time_schedules=time_schedules
-    )
-
-    data_spec = {
-        "data_continuous": jnp.zeros((2, 3)),
-        "modality": {"data_discrete": jnp.zeros((2, 4, 5))},
-    }
-    num_steps = 5
-    time_info = time_schedule.all_step_infos(
-        rng=jax.random.PRNGKey(0),
-        num_steps=num_steps,
-        data_spec=data_spec,
-    )
-    self.assertIsInstance(time_info, dict)
-    self.assertEqual(time_info["data_continuous"].time.shape, (5, 2, 1))
-    self.assertEqual(
-        time_info["modality"]["data_discrete"].time.shape, (5, 2, 1, 1)
-    )
-    chex.assert_trees_all_equal_structs(time_schedules, data_spec)
-
 
 if __name__ == "__main__":
   absltest.main()

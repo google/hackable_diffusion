@@ -376,52 +376,6 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   `data_dtype`, `input_rescaler`, and `time_rescaler` are the same as `xt` and
   `time`.
 
-  Example usage:
-
-    backbone = ...
-
-    ConditioningMechanism = arch_typing.ConditioningMechanism
-
-    conditioning_embedders = {
-        'label': conditioning_encoder.LabelEmbedder(
-            num_classes=10,
-            num_features=256,
-            conditioning_key='label',
-        )
-    }
-
-    time_embedder_continuous = conditioning_encoder.SinusoidalTimeEmbedder(
-            activation='gelu', embedding_dim=256, num_features=256
-        )
-    time_embedder_discrete = conditioning_encoder.SinusoidalTimeEmbedder(
-            activation='gelu', embedding_dim=256, num_features=256
-        )
-    time_embedders = {
-        'data_continuous': time_embedder_continuous,
-        'data_discrete': time_embedder_discrete,
-    }
-    time_embedder =
-    conditioning_encoder.NestedTimeEmbedder(time_embedders=time_embedders)
-
-    encoder = conditioning_encoder.ConditioningEncoder(
-        time_embedder=time_embedder,
-        conditioning_embedders=conditioning_embedders,
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.SUM,
-        conditioning_rules={
-            'time': ConditioningMechanism.ADAPTIVE_NORM,
-            'label': ConditioningMechanism.ADAPTIVE_NORM,
-        },
-    )
-
-    network = hd.diffusion_network.MultiModalDiffusionNetwork(
-        backbone_network=backbone,
-        conditioning_encoder=encoder,
-        prediction_type={'data_continuous': 'x0', 'data_discrete': 'logits'},
-        data_dtype={'data_continuous': jnp.float32, 'data_discrete': jnp.int32},
-        input_rescaler=None,
-        time_rescaler=None,
-        )
-
   Attributes:
     backbone_network: The backbone network to use for the diffusion model.
     conditioning_encoder: The conditioning encoder to use for the diffusion
@@ -476,10 +430,7 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       conditioning: Conditioning | None,
       is_training: bool,
   ):
-    # Rescale time and input.
-
     if self.time_rescaler is not None:
-      # lenient alternative to jax.tree.map
       time_rescaled = utils.lenient_map(
           lambda time, time_rescaler: time_rescaler(time)
           if time_rescaler is not None
@@ -491,7 +442,6 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       time_rescaled = time
 
     if self.input_rescaler is not None:
-      # lenient alternative to jax.tree.map
       xt_rescaled = utils.lenient_map(
           lambda time, xt, input_rescaler: input_rescaler(time, xt)
           if input_rescaler is not None
@@ -503,8 +453,6 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
     else:
       xt_rescaled = xt
 
-    # Encode conditioning.
-
     conditioning_embeddings = cast(nn.Module, self.conditioning_encoder).copy(
         name='ConditioningEncoder'
     )(
@@ -513,7 +461,6 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
         is_training=is_training,
     )
 
-    # Run backbone.
     backbone_outputs = cast(nn.Module, self.backbone_network).copy(
         name='Backbone'
     )(
@@ -522,7 +469,6 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
         is_training=is_training,
     )
 
-    # lenient alternative to jax.tree.map
     outputs = utils.lenient_map(
         lambda backbone_output, prediction_type: {
             prediction_type: backbone_output

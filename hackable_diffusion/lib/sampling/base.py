@@ -60,6 +60,7 @@ The `InferenceFn` (pure update function) is visible from the `SamplerStep`
  At the end of the sampling loop for the last step, the `SamplerStep.finalize()`
  is called to produce the final clean output sample.
 """
+
 import dataclasses
 from typing import Protocol
 import flax.struct
@@ -160,69 +161,3 @@ class SamplerStep(Protocol):
   ) -> DiffusionStepTree:
     """Performs the final step to produce the clean output sample."""
     ...
-
-
-################################################################################
-# MARK: Nested wrappers
-################################################################################
-
-
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class NestedSamplerStep(SamplerStep):
-  """A protocol defining the nested diffusion sampling algorithm."""
-
-  sampler_steps: PyTree[SamplerStep]
-
-  @kt.typechecked
-  def initialize(
-      self,
-      initial_noise: DataTree,
-      initial_step_info: StepInfoTree,
-  ) -> DiffusionStepTree:
-    return jax.tree.map(
-        lambda stepper, init_noise, init_step_info: stepper.initialize(
-            initial_noise=init_noise,
-            initial_step_info=init_step_info,
-        ),
-        self.sampler_steps,
-        initial_noise,
-        initial_step_info,
-    )
-
-  @kt.typechecked
-  def update(
-      self,
-      prediction: TargetInfoTree,
-      current_step: DiffusionStepTree,
-      next_step_info: StepInfoTree,
-  ) -> DiffusionStepTree:
-    return jax.tree.map(
-        lambda stepper, pred, current, next_info: stepper.update(
-            prediction=pred,
-            current_step=current,
-            next_step_info=next_info,
-        ),
-        self.sampler_steps,
-        prediction,
-        current_step,
-        next_step_info,
-    )
-
-  @kt.typechecked
-  def finalize(
-      self,
-      prediction: TargetInfoTree,
-      current_step: DiffusionStepTree,
-      last_step_info: StepInfoTree,
-  ) -> DiffusionStepTree:
-    return jax.tree.map(
-        lambda stepper, pred, current, last_info: stepper.finalize(
-            prediction=pred,
-            current_step=current,
-            last_step_info=last_info,
-        ),
-        self.sampler_steps,
-        prediction,
-        current_step,
-        last_step_info,
-    )

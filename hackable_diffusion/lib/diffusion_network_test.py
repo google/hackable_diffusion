@@ -20,6 +20,7 @@ import chex
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import multimodal
 from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import conditioning_encoder
@@ -28,6 +29,9 @@ from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.corruption import schedules
+from hackable_diffusion.lib.inference import diffusion_inference
+from hackable_diffusion.lib.inference import guidance
+from hackable_diffusion.lib.inference import wrappers
 import jax
 import jax.numpy as jnp
 
@@ -248,121 +252,6 @@ class DiffusionNetworkTest(parameterized.TestCase):
     self.assertEqual(
         self.discrete_xt.shape[:-1] + (vocab_size,), output['logits'].shape
     )
-
-  # MARK: MultiModalDiffusionNetwork Tests
-  @parameterized.named_parameters(
-      ('dict', 'dict'),
-      ('list', 'list'),
-      ('tuple', 'tuple'),
-  )
-  def test_multimodal_diffusion_network(self, input_type: str):
-    time_encoder_1 = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=16,
-        num_features=32,
-    )
-    time_encoder_2 = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=16,
-        num_features=32,
-    )
-
-    if input_type == 'dict':
-      t = {
-          'data_1': jnp.ones((self.batch_size,)),
-          'data_2': {'data_3': jnp.ones((self.batch_size,))},
-      }
-      xt = {
-          'data_1': jnp.ones(self.img_shape),
-          'data_2': {'data_3': jnp.ones(self.img_shape)},
-      }
-      conditioning = {
-          'label1': jnp.arange(self.batch_size),
-          'label2': jnp.arange(self.batch_size),
-      }
-      time_embedders = {
-          'data_1': time_encoder_1,
-          'data_2': {'data_3': time_encoder_2},
-      }
-      prediction_type = {'data_1': 'x0', 'data_2': {'data_3': 'velocity'}}
-      data_dtype = {'data_1': jnp.float32, 'data_2': {'data_3': jnp.float32}}
-    elif input_type == 'list':
-      t = [jnp.ones((self.batch_size,)), jnp.ones((self.batch_size,))]
-      xt = [jnp.ones(self.img_shape), jnp.ones(self.img_shape)]
-      conditioning = {
-          'label1': jnp.arange(self.batch_size),
-          'label2': jnp.arange(self.batch_size),
-      }
-      time_embedders = [time_encoder_1, time_encoder_2]
-      prediction_type = ['x0', 'velocity']
-      data_dtype = [jnp.float32, jnp.float32]
-    elif input_type == 'tuple':
-      t = (jnp.ones((self.batch_size,)), jnp.ones((self.batch_size,)))
-      xt = (jnp.ones(self.img_shape), jnp.ones(self.img_shape))
-      conditioning = {
-          'label1': jnp.arange(self.batch_size),
-          'label2': jnp.arange(self.batch_size),
-      }
-      time_embedders = (time_encoder_1, time_encoder_2)
-      prediction_type = ('x0', 'velocity')
-      data_dtype = (jnp.float32, jnp.float32)
-    else:
-      raise ValueError(f'Unknown input type {input_type}')
-
-    time_encoder = conditioning_encoder.NestedTimeEmbedder(
-        time_embedders=time_embedders
-    )
-    cond_encoder = conditioning_encoder.ConditioningEncoder(
-        time_embedder=time_encoder,
-        conditioning_embedders={
-            'label_foo': conditioning_encoder.LabelEmbedder(
-                conditioning_key='label1',
-                num_classes=10,
-                num_features=16,
-            ),
-            'label_bar': conditioning_encoder.LabelEmbedder(
-                conditioning_key='label2',
-                num_classes=10,
-                num_features=16,
-            ),
-        },
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
-        conditioning_rules={
-            'time': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
-            'label_foo': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
-            'label_bar': arch_typing.ConditioningMechanism.CROSS_ATTENTION,
-        },
-    )
-
-    backbone = IdentityBackbone()
-
-    network = diffusion_network.MultiModalDiffusionNetwork(
-        backbone_network=backbone,
-        conditioning_encoder=cond_encoder,
-        prediction_type=prediction_type,
-        data_dtype=data_dtype,
-    )
-
-    variables = network.init(
-        self.key,
-        time=t,
-        xt=xt,
-        conditioning=conditioning,
-        is_training=self.is_training,
-    )
-    output = network.apply(
-        variables,
-        time=t,
-        xt=xt,
-        conditioning=conditioning,
-        is_training=self.is_training,
-    )
-
-    modified_t = jax.tree.map(
-        lambda t, prediction_type: {prediction_type: t}, t, prediction_type
-    )
-
-    chex.assert_trees_all_equal_structs(modified_t, output)
 
 
 ################################################################################
@@ -638,6 +527,251 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
           prediction_type='x0',
           process=self.process,  # type: ignore[wrong-arg-types]
       )
+
+
+################################################################################
+# MARK: MultiModalDiffusionNetwork Tests
+################################################################################
+
+
+class MultiModalDiffusionNetworkTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    self.key = jax.random.PRNGKey(0)
+    self.batch_size = 4
+    self.img_shape = (self.batch_size, 32, 32, 3)
+    self.is_training = True
+
+  @parameterized.named_parameters(
+      ('dict', 'dict'),
+      ('list', 'list'),
+      ('tuple', 'tuple'),
+  )
+  def test_multimodal_diffusion_network(self, input_type: str):
+    time_encoder_1 = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=16,
+        num_features=32,
+    )
+    time_encoder_2 = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=16,
+        num_features=32,
+    )
+
+    if input_type == 'dict':
+      t = {
+          'data_1': jnp.ones((self.batch_size,)),
+          'data_2': {'data_3': jnp.ones((self.batch_size,))},
+      }
+      xt = {
+          'data_1': jnp.ones(self.img_shape),
+          'data_2': {'data_3': jnp.ones(self.img_shape)},
+      }
+      conditioning = {
+          'label1': jnp.arange(self.batch_size),
+          'label2': jnp.arange(self.batch_size),
+      }
+      time_embedders = {
+          'data_1': time_encoder_1,
+          'data_2': {'data_3': time_encoder_2},
+      }
+      prediction_type = {'data_1': 'x0', 'data_2': {'data_3': 'velocity'}}
+      data_dtype = {'data_1': jnp.float32, 'data_2': {'data_3': jnp.float32}}
+    elif input_type == 'list':
+      t = [jnp.ones((self.batch_size,)), jnp.ones((self.batch_size,))]
+      xt = [jnp.ones(self.img_shape), jnp.ones(self.img_shape)]
+      conditioning = {
+          'label1': jnp.arange(self.batch_size),
+          'label2': jnp.arange(self.batch_size),
+      }
+      time_embedders = [time_encoder_1, time_encoder_2]
+      prediction_type = ['x0', 'velocity']
+      data_dtype = [jnp.float32, jnp.float32]
+    elif input_type == 'tuple':
+      t = (jnp.ones((self.batch_size,)), jnp.ones((self.batch_size,)))
+      xt = (jnp.ones(self.img_shape), jnp.ones(self.img_shape))
+      conditioning = {
+          'label1': jnp.arange(self.batch_size),
+          'label2': jnp.arange(self.batch_size),
+      }
+      time_embedders = (time_encoder_1, time_encoder_2)
+      prediction_type = ('x0', 'velocity')
+      data_dtype = (jnp.float32, jnp.float32)
+    else:
+      raise ValueError(f'Unknown input type {input_type}')
+
+    time_encoder = multimodal.NestedTimeEmbedder(time_embedders=time_embedders)
+    cond_encoder = conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders={
+            'label_foo': conditioning_encoder.LabelEmbedder(
+                conditioning_key='label1',
+                num_classes=10,
+                num_features=16,
+            ),
+            'label_bar': conditioning_encoder.LabelEmbedder(
+                conditioning_key='label2',
+                num_classes=10,
+                num_features=16,
+            ),
+        },
+        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        conditioning_rules={
+            'time': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
+            'label_foo': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
+            'label_bar': arch_typing.ConditioningMechanism.CROSS_ATTENTION,
+        },
+    )
+
+    backbone = IdentityBackbone()
+
+    network = diffusion_network.MultiModalDiffusionNetwork(
+        backbone_network=backbone,
+        conditioning_encoder=cond_encoder,
+        prediction_type=prediction_type,
+        data_dtype=data_dtype,
+    )
+
+    variables = network.init(
+        self.key,
+        time=t,
+        xt=xt,
+        conditioning=conditioning,
+        is_training=self.is_training,
+    )
+    output = network.apply(
+        variables,
+        time=t,
+        xt=xt,
+        conditioning=conditioning,
+        is_training=self.is_training,
+    )
+
+    modified_t = jax.tree.map(
+        lambda t, prediction_type: {prediction_type: t}, t, prediction_type
+    )
+
+    chex.assert_trees_all_equal_structs(modified_t, output)
+
+
+################################################################################
+# MARK: NestedDiffusionInference Tests
+################################################################################
+
+
+class NestedDiffusionInferenceTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    self.key = jax.random.PRNGKey(0)
+    self.batch_size = 4
+    self.img_shape = (self.batch_size, 32, 32, 3)
+    self.is_training = True
+    self.schedule = schedules.RFSchedule()
+
+    time_encoder_1 = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=16,
+        num_features=32,
+    )
+    time_encoder_2 = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=16,
+        num_features=32,
+    )
+    time_embedders = {
+        'data_1': time_encoder_1,
+        'data_2': {'data_3': time_encoder_2},
+    }
+    time_encoder = multimodal.NestedTimeEmbedder(time_embedders=time_embedders)
+    self.nested_cond_encoder = conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders={
+            'label_foo': conditioning_encoder.LabelEmbedder(
+                conditioning_key='label_foo',
+                num_classes=10,
+                num_features=16,
+            ),
+            'label_bar': conditioning_encoder.LabelEmbedder(
+                conditioning_key='label_bar',
+                num_classes=10,
+                num_features=16,
+            ),
+        },
+        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        conditioning_rules={
+            'time': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
+            'label_foo': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
+            'label_bar': arch_typing.ConditioningMechanism.CROSS_ATTENTION,
+        },
+    )
+
+    self.nested_t = {
+        'data_1': jnp.ones((self.batch_size,)),
+        'data_2': {'data_3': jnp.ones((self.batch_size,))},
+    }
+    self.nested_xt = {
+        'data_1': jnp.ones(self.img_shape),
+        'data_2': {'data_3': jnp.ones(self.img_shape)},
+    }
+    self.nested_conditioning = {
+        'label_foo': jnp.arange(self.batch_size),
+        'label_bar': jnp.arange(self.batch_size),
+    }
+    self.nested_prediction_type = {
+        'data_1': 'x0',
+        'data_2': {'data_3': 'velocity'},
+    }
+    self.nested_data_dtype = {
+        'data_1': jnp.float32,
+        'data_2': {'data_3': jnp.float32},
+    }
+    self.nested_backbone = IdentityBackbone()
+
+    self.nested_guidance_fn = multimodal.NestedGuidanceFn(
+        guidance_fns={
+            'data_1': guidance.ScalarGuidanceFn(guidance=0.0),
+            'data_2': {'data_3': guidance.ScalarGuidanceFn(guidance=1.0)},
+        }
+    )
+
+  def test_nested_inference(self):
+    layer = diffusion_network.MultiModalDiffusionNetwork(
+        backbone_network=self.nested_backbone,
+        conditioning_encoder=self.nested_cond_encoder,
+        prediction_type=self.nested_prediction_type,
+        data_dtype=self.nested_data_dtype,
+    )
+    variables = layer.init(
+        self.key,
+        time=self.nested_t,
+        xt=self.nested_xt,
+        conditioning=self.nested_conditioning,
+        is_training=self.is_training,
+    )
+    params = variables['params']
+    shifted_params = jax.tree.map(lambda x: x + 1e-4, params)
+    base_inference_fn = wrappers.FlaxLinenInferenceFn(
+        network=layer, params=shifted_params
+    )
+    inference_fn = diffusion_inference.GuidedDiffusionInferenceFn(
+        base_inference_fn=base_inference_fn,
+        guidance_fn=self.nested_guidance_fn,
+    )
+    output = inference_fn(
+        xt=self.nested_xt,
+        conditioning=self.nested_conditioning,
+        time=self.nested_t,
+    )
+    modified_nested_t = jax.tree.map(
+        lambda t, prediction_type: {prediction_type: t},
+        self.nested_t,
+        self.nested_prediction_type,
+    )
+
+    chex.assert_trees_all_equal_structs(output, modified_nested_t)
 
 
 if __name__ == '__main__':

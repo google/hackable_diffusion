@@ -14,7 +14,6 @@
 
 """Tests for projection."""
 
-import chex
 from hackable_diffusion.lib import utils
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.corruption import schedules
@@ -179,32 +178,6 @@ class ProjectionTest(parameterized.TestCase):
     expected_x0 *= jnp.ones_like(self.xt)
     result = proj_fn(self.xt, self.conditioning, self.time, self.x0_outputs)
     self.assertTrue(jnp.allclose(result['x0'], expected_x0))
-
-  def test_nested_projection_fn(self):
-    """Tests that NestedProjectionFn correctly applies projections."""
-    proj_fn = projection.NestedProjectionFn(
-        projection_fns={
-            'data_continuous_1': projection.IdentityProjectionFn(),
-            'modality': {
-                'data_continuous_2': projection.StaticThresholdProjectionFn(
-                    process=self.process
-                )
-            },
-        }
-    )
-    result = proj_fn(
-        self.nested_xt, self.conditioning, self.nested_time, self.nested_outputs
-    )
-    self.assertIsInstance(result, dict)
-    self.assertEqual(
-        result['data_continuous_1']['x0'].shape,
-        self.nested_xt['data_continuous_1'].shape,
-    )
-    self.assertEqual(
-        result['modality']['data_continuous_2']['x0'].shape,
-        self.nested_xt['modality']['data_continuous_2'].shape,
-    )
-    chex.assert_trees_all_equal_structs(result, self.nested_outputs)
 
 
 if __name__ == '__main__':

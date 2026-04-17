@@ -14,7 +14,6 @@
 
 """Test for time sampling."""
 
-import chex
 from hackable_diffusion.lib import time_sampling
 import jax
 import jax.numpy as jnp
@@ -88,51 +87,6 @@ class TimeSamplersTest(parameterized.TestCase):
     time = sampler(key, data_shape)
     self.assertGreaterEqual(jnp.min(time), 0.4)
     self.assertLessEqual(jnp.max(time), 0.6)
-
-  def test_nested_time_sampler(self):
-    key = jax.random.PRNGKey(0)
-    data_spec = {
-        "image": jnp.zeros((2, 3, 4)),
-        "modality": {"label": jnp.zeros((2,))},
-    }
-
-    sampler = time_sampling.NestedTimeSampler(
-        samplers={
-            "image": time_sampling.UniformTimeSampler(axes=(0, 1)),
-            "modality": {"label": time_sampling.UniformTimeSampler()},
-        }
-    )
-    time = sampler(key, data_spec)
-
-    self.assertIsInstance(time, dict)
-    self.assertEqual(time["image"].shape, (2, 3, 1))
-    self.assertEqual(time["modality"]["label"].shape, (2,))
-
-  def test_joint_nested_time_sampler(self):
-    """Test that the joint nested time sampler returns the same time for all modalities."""
-
-    key = jax.random.PRNGKey(0)
-    data_spec = {
-        "image": jnp.zeros((2, 3, 4)),
-        "modality": {"label": jnp.zeros((2,))},
-    }
-
-    sampler = time_sampling.JointNestedTimeSampler(
-        samplers={
-            "image": time_sampling.UniformTimeSampler(),
-            "modality": {"label": time_sampling.UniformTimeSampler()},
-        }
-    )
-    time = sampler(key, data_spec)
-
-    self.assertIsInstance(time, dict)
-    self.assertEqual(time["image"].shape, (2, 1, 1))
-    self.assertEqual(time["modality"]["label"].shape, (2,))
-    chex.assert_trees_all_close(
-        time["image"].squeeze(),
-        time["modality"]["label"].squeeze(),
-    )
-    chex.assert_trees_all_equal_structs(time, data_spec)
 
 
 if __name__ == "__main__":

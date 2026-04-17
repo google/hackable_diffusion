@@ -30,12 +30,12 @@ label, or a video and its audio track) can be processed with different diffusion
 parameters.
 
 This is achieved through a consistent "Nested" pattern. Most core components
-have a `Nested` wrapper:
+have a `Nested` wrapper, all centralized in `lib/multimodal.py`:
 
-*   `NestedProcess` (`lib/corruption/base.py`)
-*   `NestedDiffusionLoss` (`lib/loss/base.py`)
-*   `NestedTimeSchedule` (`lib/sampling/time_scheduling.py`)
-*   `NestedSamplerStep` (`lib/sampling/base.py`)
+*   `NestedProcess`
+*   `NestedDiffusionLoss`
+*   `NestedTimeSchedule`
+*   `NestedSamplerStep`
 
 These wrappers take a PyTree (e.g., a dictionary) of component instances that
 matches the structure of your data. When a method is called on the `Nested`
@@ -44,7 +44,7 @@ pair.
 
 For example, you can define a `NestedProcess` that applies a `GaussianProcess`
 to your images and a `CategoricalProcess` to your labels within the same
-training step, making multimodal diffusion models first-class citizens.
+training step, making multimodal diffusion modeling easy.
 
 ## Codebase Structure
 

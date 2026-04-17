@@ -107,56 +107,6 @@ class EncodeConditioningTest(parameterized.TestCase):
     self.assertEqual(conditional_embedding.shape, expected_shape)
 
   @parameterized.named_parameters(
-      ('dict', 'dict'),
-      ('tuple', 'tuple'),
-      ('list', 'list'),
-  )
-  def test_nested_time_embedder_with_dict(self, input_type: str):
-    num_features = 32
-    batch_size = 4
-
-    time_encoder_1 = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
-    )
-    time_encoder_2 = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
-    )
-    if input_type == 'dict':
-      time_encoder = conditioning_encoder.NestedTimeEmbedder(
-          time_embedders={'data_1': time_encoder_1, 'data_2': time_encoder_2},
-      )
-      time = {
-          'data_1': jnp.ones((batch_size,)),
-          'data_2': jnp.ones((batch_size,)),
-      }
-    elif input_type == 'tuple':
-      time_encoder = conditioning_encoder.NestedTimeEmbedder(
-          time_embedders=(time_encoder_1, time_encoder_2),
-      )
-      time = (jnp.ones((batch_size,)), jnp.ones((batch_size,)))
-    elif input_type == 'list':
-      time_encoder = conditioning_encoder.NestedTimeEmbedder(
-          time_embedders=[time_encoder_1, time_encoder_2],
-      )
-      time = [jnp.ones((batch_size,)), jnp.ones((batch_size,))]
-    else:
-      raise ValueError(f'Unknown input type {input_type}')
-
-    rng = jax.random.PRNGKey(0)
-    params = time_encoder.init(rng, time)['params']
-
-    # Jit the apply function
-    jitted_apply = jax.jit(time_encoder.apply, static_argnames=['is_training'])
-
-    output = jitted_apply({'params': params}, time, rngs={'dropout': rng})
-
-    self.assertEqual(output.shape, (batch_size, num_features))
-
-  @parameterized.named_parameters(
       (
           'test1',
           EmbeddingMergeMethod.SUM,

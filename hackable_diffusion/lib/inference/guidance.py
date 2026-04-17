@@ -27,8 +27,6 @@ import kauldron.ktyping as kt
 # MARK: Type Aliases
 ################################################################################
 
-PyTree = hd_typing.PyTree
-
 Conditioning = hd_typing.Conditioning
 DataArray = hd_typing.DataArray
 DataTree = hd_typing.DataTree
@@ -125,43 +123,6 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
 
     return jax.tree.map(
         lambda x, y: x * (1.0 + local_guidance) - y * local_guidance,
-        cond_outputs,
-        uncond_outputs,
-    )
-
-
-################################################################################
-# MARK: Nested Guidance
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedGuidanceFn(GuidanceFn):
-  """Nested guidance function."""
-
-  guidance_fns: PyTree[GuidanceFn]
-
-  @kt.typechecked
-  def __call__(
-      self,
-      xt: DataTree,
-      conditioning: Conditioning,
-      time: TimeTree,
-      cond_outputs: TargetInfoTree,
-      uncond_outputs: TargetInfoTree,
-  ) -> TargetInfoTree:
-    """Combine conditional and unconditional outputs."""
-    return jax.tree.map(
-        lambda guidance_fn, xt, time, cond_out, uncond_out: guidance_fn(
-            xt=xt,
-            conditioning=conditioning,
-            time=time,
-            cond_outputs=cond_out,
-            uncond_outputs=uncond_out,
-        ),
-        self.guidance_fns,
-        xt,
-        time,
         cond_outputs,
         uncond_outputs,
     )

@@ -14,18 +14,13 @@
 
 """Diffusion Loss functions."""
 
-import dataclasses
 from typing import Protocol
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.corruption import schedules
-import jax
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
-
-PyTree = hd_typing.PyTree
 
 LossOutputTree = hd_typing.LossOutputTree
 TimeArray = hd_typing.TimeArray
@@ -75,39 +70,3 @@ class DiffusionLoss(Protocol):
       averaging to allow for other operations such as masking out loss values
       afterwards.
     """
-
-
-################################################################################
-# MARK: Nested wrappers
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedDiffusionLoss(DiffusionLoss):
-  """Wrapper for a pytree of noise schedules that is mapped over the data.
-
-  Enables using different noise schedules for different input modalities.
-  E.g. a gaussian schedule for the image and a categorical schedule for the
-  labels.
-  """
-
-  losses: PyTree[DiffusionLoss]
-
-  @kt.typechecked
-  def __call__(
-      self,
-      preds: TargetInfoTree,
-      targets: TargetInfoTree,
-      time: TimeTree,
-  ) -> LossOutputTree:
-    return jax.tree.map(
-        lambda loss, target, pred, t: loss(
-            preds=pred,
-            targets=target,
-            time=t,
-        ),
-        self.losses,
-        targets,
-        preds,
-        time,
-    )

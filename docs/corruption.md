@@ -46,6 +46,8 @@ processes must implement. It defines the following key methods:
 
 ### `NestedProcess`
 
+(`lib/multimodal.py`)
+
 For handling complex data structures (pytrees), `NestedProcess` is a wrapper
 that applies different corruption processes to different leaves of the pytree.
 For example, you can use a `GaussianProcess` on an image and a

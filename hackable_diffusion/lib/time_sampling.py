@@ -40,6 +40,7 @@ from typing import Protocol
 
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import utils
+
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -109,9 +110,7 @@ def get_sampling_time_interval(
 class TimeSampler(Protocol):
   """Time sampler protocol operating on arrays or on pytrees."""
 
-  def __call__(
-      self, key: PRNGKey, data_spec: DataArray | DataTree
-  ) -> TimeArray | TimeTree:
+  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
     """Returns a time array or a pytree of time arrays.
 
     The assumption is that data_spec is either an array or a pytree. We
@@ -319,74 +318,3 @@ class UnbalancedTimestepSampler(TimeSampler):
     equal_mask = jax.random.bernoulli(switch_key, p=self.p_equal, shape=shape1)
     g = jax.lax.select(equal_mask, 1 - f, g)
     return {self.key1: f, self.key2: g}
-
-
-################################################################################
-# MARK: NestedTimeSampler
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedTimeSampler(TimeSampler):
-  """Wrapper to support a nested pytree of time samplers.
-
-  The structure of the samplers should match the structure of the data.
-
-  Usage Example:
-    ```
-    time_sampler = NestedTimeSampler(
-        samplers={
-            "image": UniformTimeSampler(),
-            "label": BetaTimeSampler(alpha=1.0, beta=1.0),
-        }
-    )
-    ```
-
-  Attributes:
-    samplers: A pytree of time samplers matching the structure of the data.
-  """
-
-  samplers: PyTree[TimeSampler]
-
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
-    def _call_sampler(key, sampler, data_spec):
-      return sampler(key, data_spec)
-
-    return utils.tree_map_with_key(_call_sampler, key, self.samplers, data_spec)
-
-
-################################################################################
-# MARK: JointNestedTimeSampler
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class JointNestedTimeSampler(TimeSampler):
-  """Wrapper to support a nested pytree of time samplers.
-
-  The structure of the samplers should match the structure of the data.
-  Contrary to NestedTimeSampler, the samplers are called with a joint key.
-
-  Usage Example:
-    ```
-    time_sampler = JointNestedTimeSampler(
-        samplers={
-            "image": UniformTimeSampler(),
-            "label": BetaTimeSampler(alpha=1.0, beta=1.0),
-        }
-    )
-    ```
-
-  Attributes:
-    samplers: A pytree of time samplers matching the structure of the data.
-  """
-
-  samplers: PyTree[TimeSampler]
-
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
-    def _call_sampler(sampler, data_spec):
-      return sampler(key, data_spec)
-
-    return jax.tree.map(_call_sampler, self.samplers, data_spec)

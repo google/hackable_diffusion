@@ -14,7 +14,6 @@
 
 """Tests for the diffusion_inference module."""
 
-import chex
 from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import test_helpers
@@ -135,80 +134,6 @@ class DiffusionInferenceTest(parameterized.TestCase):
         conditioning_rules=CONDITIONING_RULES,
     )
     self.backbone = unet.Unet(**UNET_CONFIG)
-
-    # nested inference
-
-    time_encoder_1 = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=16,
-        num_features=32,
-    )
-    time_encoder_2 = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=16,
-        num_features=32,
-    )
-    time_embedders = {
-        'data_1': time_encoder_1,
-        'data_2': {'data_3': time_encoder_2},
-    }
-    time_encoder = conditioning_encoder.NestedTimeEmbedder(
-        time_embedders=time_embedders
-    )
-    self.nested_cond_encoder = conditioning_encoder.ConditioningEncoder(
-        time_embedder=time_encoder,
-        conditioning_embedders={
-            'label_foo': conditioning_encoder.LabelEmbedder(
-                conditioning_key='label_foo',
-                num_classes=10,
-                num_features=16,
-            ),
-            'label_bar': conditioning_encoder.LabelEmbedder(
-                conditioning_key='label_bar',
-                num_classes=10,
-                num_features=16,
-            ),
-        },
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
-        conditioning_rules={
-            'time': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
-            'label_foo': arch_typing.ConditioningMechanism.ADAPTIVE_NORM,
-            'label_bar': arch_typing.ConditioningMechanism.CROSS_ATTENTION,
-        },
-    )
-
-    self.nested_process = {
-        'data_1': GaussianProcess(schedule=self.schedule),
-        'data_2': {'data_3': GaussianProcess(schedule=self.schedule)},
-    }
-    self.nested_t = {
-        'data_1': jnp.ones((self.batch_size,)),
-        'data_2': {'data_3': jnp.ones((self.batch_size,))},
-    }
-    self.nested_xt = {
-        'data_1': jnp.ones(self.img_shape),
-        'data_2': {'data_3': jnp.ones(self.img_shape)},
-    }
-    self.nested_conditioning = {
-        'label_foo': jnp.arange(self.batch_size),
-        'label_bar': jnp.arange(self.batch_size),
-    }
-    self.nested_prediction_type = {
-        'data_1': 'x0',
-        'data_2': {'data_3': 'velocity'},
-    }
-    self.nested_data_dtype = {
-        'data_1': jnp.float32,
-        'data_2': {'data_3': jnp.float32},
-    }
-    self.nested_backbone = IdentityBackbone()
-
-    self.nested_guidance_fn = guidance.NestedGuidanceFn(
-        guidance_fns={
-            'data_1': guidance.ScalarGuidanceFn(guidance=0.0),
-            'data_2': {'data_3': guidance.ScalarGuidanceFn(guidance=1.0)},
-        }
-    )
 
   # MARK: Helper Functions Tests
 
@@ -380,45 +305,6 @@ class DiffusionInferenceTest(parameterized.TestCase):
     self.assertIn('x0', output)
     self.assertIn('x0', other_output)
     self.assertFalse(jnp.allclose(output['x0'], other_output['x0']))
-
-  def test_nested_inference(self):
-    """Tests that the nested inference function works."""
-    layer = diffusion_network.MultiModalDiffusionNetwork(
-        backbone_network=self.nested_backbone,
-        conditioning_encoder=self.nested_cond_encoder,
-        prediction_type=self.nested_prediction_type,
-        data_dtype=self.nested_data_dtype,
-    )
-    variables = layer.init(
-        self.key,
-        time=self.nested_t,
-        xt=self.nested_xt,
-        conditioning=self.nested_conditioning,
-        is_training=self.is_training,
-    )
-    params = variables['params']
-    shifted_params = jax.tree.map(lambda x: x + 1e-4, params)
-    # shift the params by a small amount to ensure that we are not sensitive to
-    # zero initialization of the params impacting the conditioning embeddings.
-    base_inference_fn = wrappers.FlaxLinenInferenceFn(
-        network=layer, params=shifted_params
-    )
-    inference_fn = diffusion_inference.GuidedDiffusionInferenceFn(
-        base_inference_fn=base_inference_fn,
-        guidance_fn=self.nested_guidance_fn,
-    )
-    output = inference_fn(
-        xt=self.nested_xt,
-        conditioning=self.nested_conditioning,
-        time=self.nested_t,
-    )
-    modified_nested_t = jax.tree.map(
-        lambda t, prediction_type: {prediction_type: t},
-        self.nested_t,
-        self.nested_prediction_type,
-    )
-
-    chex.assert_trees_all_equal_structs(output, modified_nested_t)
 
 
 if __name__ == '__main__':

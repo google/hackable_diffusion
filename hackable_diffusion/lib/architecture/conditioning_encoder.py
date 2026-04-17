@@ -24,7 +24,6 @@ These modules do not cover all possible usecases, but rather provide a reference
 from typing import Protocol, Sequence, cast
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib import utils
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import mlp_blocks
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -39,7 +38,7 @@ import kauldron.ktyping as kt
 DType = hd_typing.DType
 Float = hd_typing.Float
 Num = hd_typing.Num
-PyTree = hd_typing.PyTree
+
 
 ConditioningMechanism = arch_typing.ConditioningMechanism
 EmbeddingMergeMethod = arch_typing.EmbeddingMergeMethod
@@ -160,26 +159,6 @@ class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
   @kt.typechecked
   def __call__(self, time: hd_typing.TimeArray) -> hd_typing.TimeArray:
     return time
-
-
-class NestedTimeEmbedder(nn.Module, BaseTimeEmbedder):
-  """Wrapper for a pytree of time embedders mapped over the time tree."""
-
-  time_embedders: PyTree[BaseTimeEmbedder]
-
-  @nn.compact
-  @kt.typechecked
-  def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:
-    # lenient alternative to jax.tree.map
-    t_emb_tree = utils.lenient_map(
-        lambda x, time_embedder: cast(nn.Module, time_embedder).copy()(x),
-        time,
-        self.time_embedders,
-    )
-    # Add all the time embeddings together.
-    leaves, _ = jax.tree_util.tree_flatten(t_emb_tree)
-    t_emb = jnp.sum(jnp.stack(leaves), axis=0)
-    return t_emb
 
 
 ################################################################################

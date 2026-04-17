@@ -84,6 +84,7 @@ class TimeSchedule(Protocol):
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class TimeScheduleBaseClass(TimeSchedule):
   """Base class for time schedules."""
+
   # Creates a time schedule in
   # [min_time + safety_epsilon, max_time-safety_epsilon].
   min_time: float = 0.0
@@ -179,47 +180,4 @@ class EDMTimeSchedule(TimeScheduleBaseClass):
         step=jnp.arange(num_steps),
         time=steps,
         rng=jax.random.split(rng, num_steps),
-    )
-
-
-################################################################################
-# MARK: Nested Time Schedule
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedTimeSchedule(TimeSchedule):
-  """Wrapper to support a nested pytree of time schedules.
-
-  The structure of the time schedule should match the structure of the data.
-
-  Usage Example:
-    ```
-    time_schedule = NestedTimeSchedule(
-        time_schedules={
-            "image": UniformTimeSchedule(),
-            "label": EDMTimeSchedule(rho=2.0),
-        }
-    )
-    ```
-
-  Attributes:
-    time_schedules: A pytree of time schedules matching the structure of the
-      data.
-  """
-
-  time_schedules: PyTree[TimeSchedule]
-
-  @kt.typechecked
-  def all_step_infos(
-      self,
-      rng: PRNGKey,
-      num_steps: int,
-      data_spec: DataTree,
-  ) -> StepInfoTree:
-    def _call_schedule(rng, time_schedule, data_spec):
-      return time_schedule.all_step_infos(rng, num_steps, data_spec)
-
-    return utils.tree_map_with_key(
-        _call_schedule, rng, self.time_schedules, data_spec
     )

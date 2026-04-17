@@ -19,13 +19,12 @@ from hackable_diffusion.lib.inference.base import InferenceFn
 from hackable_diffusion.lib.inference.diffusion_inference import GuidedDiffusionInferenceFn
 from hackable_diffusion.lib.inference.guidance import GuidanceFn
 from hackable_diffusion.lib.inference.guidance import LimitedIntervalGuidanceFn
-from hackable_diffusion.lib.inference.guidance import NestedGuidanceFn
 from hackable_diffusion.lib.inference.guidance import ScalarGuidanceFn
 from hackable_diffusion.lib.inference.projection import DynamicThresholdProjectionFn
 from hackable_diffusion.lib.inference.projection import IdentityProjectionFn
-from hackable_diffusion.lib.inference.projection import NestedProjectionFn
 from hackable_diffusion.lib.inference.projection import ProjectionFn
 from hackable_diffusion.lib.inference.projection import StaticThresholdProjectionFn
 from hackable_diffusion.lib.inference.wrappers import FlaxLinenInferenceFn
 from hackable_diffusion.lib.inference.wrappers import FlaxNNXInferenceFn
+
 # pylint: enable=g-importing-member

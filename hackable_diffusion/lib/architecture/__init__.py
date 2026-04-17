@@ -33,7 +33,6 @@ from hackable_diffusion.lib.architecture.conditioning_encoder import IdentityTim
 from hackable_diffusion.lib.architecture.conditioning_encoder import LabelEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import LinearEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import MLPEmbedder
-from hackable_diffusion.lib.architecture.conditioning_encoder import NestedTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import SinusoidalTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import ZeroTimeEmbedder
 from hackable_diffusion.lib.architecture.discrete import BaseProjector
@@ -61,4 +60,5 @@ from hackable_diffusion.lib.architecture.unet_blocks import AttentionResidualBlo
 from hackable_diffusion.lib.architecture.unet_blocks import ConvResidualBlock
 from hackable_diffusion.lib.architecture.unet_blocks import InputConvBlock
 from hackable_diffusion.lib.architecture.unet_blocks import OutputConvBlock
+
 # pylint: enable=g-importing-member
