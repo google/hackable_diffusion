@@ -55,6 +55,7 @@ class ConditioningMechanism(enum.StrEnum):
 
   ADAPTIVE_NORM = "adaptive_norm"
   CROSS_ATTENTION = "cross_attention"
+  CROSS_ATTENTION_MASK = "cross_attention_mask"
   CONCATENATE = "concatenate"
   SUM = "sum"
   SELF_CONDITIONING = "self_conditioning"

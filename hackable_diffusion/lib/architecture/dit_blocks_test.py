@@ -118,6 +118,100 @@ class DiTBlockAdaLNZeroTest(parameterized.TestCase):
     output = module.apply(variables, x, cond, is_training=False)
     self.assertTrue(jnp.allclose(output, x, atol=1e-5))
 
+  def test_output_shape_with_cross_cond(self):
+    input_shape = (self.batch, self.n, self.d)
+    cond_shape = (self.batch, self.c)
+    cross_cond_shape = (self.batch, 8, self.d)
+    x = jnp.ones(input_shape)
+    cond = jnp.ones(cond_shape)
+    cross_cond = jnp.ones(cross_cond_shape)
+    module = dit_blocks.DiTBlockAdaLNZero(hidden_size=self.d, num_heads=4)
+    variables = module.init(
+        self.key, x, cond, is_training=False, cross_cond=cross_cond
+    )
+    output = module.apply(
+        variables, x, cond, is_training=False, cross_cond=cross_cond
+    )
+    self.assertEqual(output.shape, input_shape)
+
+  def test_variable_shapes_with_cross_cond(self):
+    input_shape = (self.batch, self.n, self.d)
+    cond_shape = (self.batch, self.c)
+    cross_cond_shape = (self.batch, 8, self.d)
+    x = jnp.ones(input_shape)
+    cond = jnp.ones(cond_shape)
+    cross_cond = jnp.ones(cross_cond_shape)
+    mlp_hidden = int(self.d * 4.0)
+    module = dit_blocks.DiTBlockAdaLNZero(hidden_size=self.d, num_heads=4)
+    variables = module.init(
+        self.key, x, cond, is_training=False, cross_cond=cross_cond
+    )
+    variables_shapes = test_utils.get_pytree_shapes(variables)
+
+    expected_variables_shapes = {
+        'params': {
+            'Dense_Gate_MSA': {
+                'kernel': (self.c, self.d),
+                'bias': (self.d,),
+            },
+            'Dense_Gate_MLP': {
+                'kernel': (self.c, self.d),
+                'bias': (self.d,),
+            },
+            'Dense_Gate_Cross': {
+                'kernel': (self.c, self.d),
+                'bias': (self.d,),
+            },
+            'ConditionalNorm': {
+                'Dense_0': {
+                    'kernel': (self.c, self.d * 2),
+                    'bias': (self.d * 2,),
+                },
+            },
+            'MLP': {
+                'Dense_Hidden_0': {
+                    'kernel': (self.d, mlp_hidden),
+                    'bias': (mlp_hidden,),
+                },
+                'Dense_Output': {
+                    'kernel': (mlp_hidden, self.d),
+                    'bias': (self.d,),
+                },
+            },
+            'attn': {
+                'Dense_Q': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'Dense_K': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'Dense_V': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'Dense_Output': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'norm_qk_scale': (1, 1, 1, 1),
+            },
+            'cross_attn': {
+                'Dense_Q': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'Dense_K': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'Dense_V': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'Dense_Output': {'kernel': (self.d, self.d), 'bias': (self.d,)},
+                'norm_qk_scale': (1, 1, 1, 1),
+            },
+        }
+    }
+    self.assertDictEqual(expected_variables_shapes, variables_shapes)
+
+  def test_zero_init_is_identity_with_cross_cond(self):
+    input_shape = (self.batch, self.n, self.d)
+    cond_shape = (self.batch, self.c)
+    cross_cond_shape = (self.batch, 8, self.d)
+    x = jax.random.normal(self.key, input_shape)
+    cond = jnp.zeros(cond_shape)
+    cross_cond = jax.random.normal(self.key, cross_cond_shape)
+    module = dit_blocks.DiTBlockAdaLNZero(hidden_size=self.d, num_heads=4)
+    variables = module.init(
+        self.key, x, cond, is_training=False, cross_cond=cross_cond
+    )
+    output = module.apply(
+        variables, x, cond, is_training=False, cross_cond=cross_cond
+    )
+    self.assertTrue(jnp.allclose(output, x, atol=1e-5))
+
 
 class PositionalEmbeddingTest(parameterized.TestCase):
 

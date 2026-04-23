@@ -109,6 +109,18 @@ class DiT(nn.Module, ConditionalBackbone):
     if adaptive_norm_emb is None:
       raise ValueError("adaptive_norm_emb must be provided.")
 
+    # Extract conditioning embeddings to use with cross attention.
+    cross_attention_emb = conditioning_embeddings.get(
+        ConditioningMechanism.CROSS_ATTENTION
+    )
+    if cross_attention_emb is not None and cross_attention_emb.ndim == 2:
+      cross_attention_emb = cross_attention_emb[:, jnp.newaxis, :]
+
+    # Extract cross-attention mask.
+    cross_attention_mask = conditioning_embeddings.get(
+        ConditioningMechanism.CROSS_ATTENTION_MASK
+    )
+
     # TODO(agalashov): This assumes that x is already tokenized, which is not
     # true for images.
     if self.use_padding_mask:
@@ -126,7 +138,12 @@ class DiT(nn.Module, ConditionalBackbone):
     cond = adaptive_norm_emb
     for i in range(1, self.num_blocks + 1):
       tokens_emb = self.block.copy(name=f"Block_{i}")(
-          tokens_emb, cond, is_training=is_training, mask=padding_mask
+          tokens_emb,
+          cond,
+          is_training=is_training,
+          mask=padding_mask,
+          cross_cond=cross_attention_emb,
+          cross_mask=cross_attention_mask,
       )
 
     tokens_emb = self.conditional_norm(tokens_emb, c=nn.silu(cond))
