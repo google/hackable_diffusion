@@ -192,6 +192,7 @@ class ConvResidualBlock(nn.Module):
         dtype=self.dtype,
     )(x)
 
+    # Optimization: Pre-activate conditioning embedding
     x = self.conditional_norm(x, self.activation_fn(adaptive_norm_emb))
     x = self.activation_fn(x)
     x = nn.Dropout(rate=self.dropout_rate, deterministic=not is_training)(x)

@@ -158,27 +158,30 @@ class DiTBlockAdaLNZero(nn.Module):
       The output tensor.
     """
 
+    # Precompute activation for conditioning
+    cond_act = nn.silu(cond)
+
     # Attention Branch
-    x_attn_modulated = self.conditional_norm(x, c=nn.silu(cond))
+    x_attn_modulated = self.conditional_norm(x, c=cond_act)
     attn_out = self.attn(x_attn_modulated, c=None, mask=mask)
     # Optional dropout
     if self.dropout_rate > 0.0:
       attn_out = nn.Dropout(rate=self.dropout_rate)(
           attn_out, deterministic=not is_training
       )
-    gate_msa = self.gate_msa(nn.silu(cond))
+    gate_msa = self.gate_msa(cond_act)
     # Add a sequence dimension [...,None,:] to broadcast to [*batch,seq,dim].
     x = x + gate_msa[..., None, :] * attn_out
 
     # MLP Branch
-    x_mlp_modulated = self.conditional_norm(x, c=nn.silu(cond))
+    x_mlp_modulated = self.conditional_norm(x, c=cond_act)
     mlp_out = self.mlp(x_mlp_modulated, is_training=is_training)
     # Optional dropout
     if self.dropout_rate > 0.0:
       mlp_out = nn.Dropout(rate=self.dropout_rate)(
           mlp_out, deterministic=not is_training
       )
-    gate_mlp = self.gate_mlp(nn.silu(cond))
+    gate_mlp = self.gate_mlp(cond_act)
     # Add a sequence dimension [...,None,:] to broadcast to [*batch,seq,dim].
     x = x + gate_mlp[..., None, :] * mlp_out
     return x
@@ -267,7 +270,9 @@ class DePatchify(nn.Module):
     hn = h // hp
     wn = w // wp
 
-    x = self.conditional_norm(x, c=nn.silu(cond))
+    # Optimization: compute silu(cond) once
+    cond_act = nn.silu(cond)
+    x = self.conditional_norm(x, c=cond_act)
     x = nn.Dense(
         features=hp * wp * c,
         name="Dense_Out",

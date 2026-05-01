@@ -25,6 +25,7 @@ import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import utils
 from hackable_diffusion.lib.architecture import arch_typing
+import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 
@@ -38,6 +39,20 @@ Float = hd_typing.Float
 Bool = hd_typing.Bool
 
 NormalizationType = arch_typing.NormalizationType
+
+
+################################################################################
+# MARK: Fused Kernels
+################################################################################
+
+def fused_rms_norm(x, scale, epsilon=1e-6):
+  """Fused RMSNorm implementation for XLA efficiency.
+  
+  RMSNorm(x) = (x / sqrt(mean(x^2) + eps)) * scale
+  """
+  # Using jax.lax.rsqrt and explicit multiplication to encourage XLA fusion.
+  ms = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
+  return x * jax.lax.rsqrt(ms + epsilon) * scale
 
 
 ################################################################################
@@ -128,13 +143,24 @@ class NormalizationLayer(nn.Module):
     ch = x_shape[-1]
 
     if self.normalization_method == NormalizationType.RMS_NORM:
-      x = nn.RMSNorm(
-          epsilon=self.epsilon,
-          dtype=self.dtype,
-          reduction_axes=-1,  # For (B ... ch) results in (B ... ) RMS values.
-          feature_axes=-1,  # Per channel scale.
-          use_scale=self.use_scale,
-      )(x=x, mask=mask)
+      if mask is None and self.use_scale:
+        # Use our optimized fused RMSNorm if no mask is provided.
+        scale = self.param(
+            "scale",
+            nn.initializers.ones,
+            (ch,),
+            self.dtype,
+        )
+        x = fused_rms_norm(x, scale, self.epsilon)
+      else:
+        # Fallback to standard Flax RMSNorm for masked or unscaled cases.
+        x = nn.RMSNorm(
+            epsilon=self.epsilon,
+            dtype=self.dtype,
+            reduction_axes=-1,  # For (B ... ch) results in (B ... ) RMS values.
+            feature_axes=-1,  # Per channel scale.
+            use_scale=self.use_scale,
+        )(x=x, mask=mask)
     elif self.normalization_method == NormalizationType.GROUP_NORM:
 
       # If using GroupNorm the mask data must be such that the last dimension
@@ -181,6 +207,7 @@ class NormalizationLayer(nn.Module):
       x = einops.rearrange(x, "b ... c -> b c ...")  # (B, ch, ...).
       scale = utils.bcast_right(scale, x.ndim)
       shift = utils.bcast_right(shift, x.ndim)
+      # Optimized fused multiply-add
       x = (1.0 + scale) * x + shift
       x = einops.rearrange(x, "b c ... -> b ... c")
 

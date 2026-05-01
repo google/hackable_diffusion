@@ -128,7 +128,7 @@ def _dot_product_attention(
     *,
     mask: Bool["batch sequence_key"] | None = None,
 ) -> Float["batch sequence_query head*dim"]:
-  """Performs dot product attention.
+  """Performs dot product attention using Flash Attention where possible.
 
   Args:
     q: Query tensor.
@@ -143,23 +143,25 @@ def _dot_product_attention(
   """
 
   b, _, t, _ = q.shape
-
-  # Attention scores
-  attn_logits = jnp.einsum("bhtd,bhsd->bhts", q, k) * rescale
-
-  # We apply the mask to the logits before softmax so that the softmax is zero
-  # for masked tokens.
-  if mask is not None:
-    bcast_mask = jnp.expand_dims(mask, axis=(1, 2))
-    attn_logits = jnp.where(bcast_mask, attn_logits, MASK_LOGITS_VALUE)
-
-  # Softmax and attention weights
-  attn_weights = _stable_softmax(logits=attn_logits)
-
-  # Calculate attention output
-  attn_output = jnp.einsum("bhts,bhsd->bhtd", attn_weights, v)
+  
+  # jax.nn.dot_product_attention supports mask of shape (B, H, Q, K)
+  # or broadcastable. Our mask is (B, K).
+  attn_mask = mask[:, jnp.newaxis, jnp.newaxis, :] if mask is not None else None
+  
+  # jax.nn.dot_product_attention uses 1/sqrt(d) scaling by default.
+  # We want (Q * K^T) * rescale.
+  # So we pass Q * (rescale * sqrt(d)) to the optimized function.
+  head_d = q.shape[-1]
+  q_scaled = q * (rescale * jnp.sqrt(head_d))
+  
+  # Use Flash Attention / Optimized Attention kernel
+  attn_output = jax.nn.dot_product_attention(
+      q_scaled, k, v,
+      mask=attn_mask,
+  )
 
   # Merge heads and project to output dimension
+  # attn_output is [batch, head, sequence_query, dim]
   attn_output = attn_output.transpose(0, 2, 1, 3).reshape(b, t, -1)
 
   return attn_output
