@@ -91,9 +91,7 @@ class IdentityBackbone(nn.Module, arch_typing.ConditionalBackbone):
   def __call__(
       self,
       x: arch_typing.DataTree,
-      conditioning_embeddings: dict[
-          arch_typing.ConditioningMechanism, Float['batch ...']
-      ],
+      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       is_training: bool,
   ) -> arch_typing.DataTree:
     return x

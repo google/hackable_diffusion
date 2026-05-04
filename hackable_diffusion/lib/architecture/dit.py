@@ -40,6 +40,7 @@ DataArray = hd_typing.DataArray
 
 ConditionalBackbone = arch_typing.ConditionalBackbone
 ConditioningMechanism = arch_typing.ConditioningMechanism
+ConditioningEmbeddings = arch_typing.ConditioningEmbeddings
 NormalizationType = arch_typing.NormalizationType
 
 ################################################################################
@@ -100,7 +101,7 @@ class DiT(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: DataArray,
-      conditioning_embeddings: dict[ConditioningMechanism, Float["batch ..."]],
+      conditioning_embeddings: ConditioningEmbeddings,
       is_training: bool,
   ) -> DataArray:
     adaptive_norm_emb = conditioning_embeddings.get(

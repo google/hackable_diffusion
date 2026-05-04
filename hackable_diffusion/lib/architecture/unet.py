@@ -39,6 +39,7 @@ RoPEPositionType = arch_typing.RoPEPositionType
 SkipConnectionMethod = arch_typing.SkipConnectionMethod
 ConditionalBackbone = arch_typing.ConditionalBackbone
 ConditioningMechanism = arch_typing.ConditioningMechanism
+ConditioningEmbeddings = arch_typing.ConditioningEmbeddings
 
 ################################################################################
 # MARK: Unet
@@ -163,7 +164,7 @@ class Unet(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: Float["batch height width channels"],
-      conditioning_embeddings: dict[ConditioningMechanism, Float["batch ..."]],
+      conditioning_embeddings: ConditioningEmbeddings,
       *,
       is_training: bool,
   ) -> Float["batch height width output_channels"]:
