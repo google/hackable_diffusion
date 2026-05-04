@@ -275,11 +275,13 @@ class CategoricalProcess(CorruptionProcess):
     assert alpha_bcast.shape == x0.shape
     # Get the mask of the corruption process.  It is true if the token is not
     # corrupted and False if it is corrupted.
-    is_not_corrupted = jax.random.bernoulli(key, p=alpha_bcast, mode=self.mode)
-    key, _ = jax.random.split(key)
+    mask_key, noise_key = jax.random.split(key)
+    is_not_corrupted = jax.random.bernoulli(
+        mask_key, p=alpha_bcast, mode=self.mode
+    )
 
     # compute noise vector
-    noise = self.sample_from_invariant(key, data_spec=x0)
+    noise = self.sample_from_invariant(noise_key, data_spec=x0)
 
     # noise x0 with probability alpha
     xt = jnp.where(is_not_corrupted, x0, noise)  # is_not_corrupted = (xt == x0)

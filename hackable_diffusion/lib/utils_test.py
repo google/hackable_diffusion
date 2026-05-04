@@ -440,6 +440,16 @@ class UtilsTest(parameterized.TestCase):
     with self.assertRaisesRegex(KeyError, 'Paths of the trees must match.'):
       utils.lenient_map(lambda x, y: x + y, tree, other)
 
+  @parameterized.named_parameters(
+      ('empty_dict', {}),
+      ('empty_list', []),
+      ('empty_tuple', ()),
+  )
+  def test_lenient_map_empty_tree(self, empty_tree):
+    """Tests that lenient_map returns an empty tree unchanged."""
+    result = utils.lenient_map(lambda x: x + 1, empty_tree)
+    self.assertEqual(result, empty_tree)
+
 
 class SafeSpanTest(parameterized.TestCase):
 

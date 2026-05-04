@@ -581,24 +581,19 @@ class HeunStep(SamplerStep):
     )["velocity"]
     new_xt = xt - dt * velocity
 
-    aux = current_step.aux
-    # Update the internal counter and current_velocity_step_one.
     internal_counter = jnp.mod(
-        aux["internal_counter"] + 1, self.num_internal_steps
-    )
-    current_velocity_step_one = velocity
-    aux.update(
-        dict(
-            internal_counter=internal_counter,
-            current_velocity_step_one=current_velocity_step_one,
-        )
+        current_step.aux["internal_counter"] + 1, self.num_internal_steps
     )
 
     # Note that we output next_next_step_info and not next_step_info.
     return DiffusionStep(
         xt=new_xt,
         step_info=next_next_step_info,
-        aux=aux,
+        aux=dict(
+            internal_counter=internal_counter,
+            current_update=current_step.aux["current_update"],
+            current_velocity_step_one=velocity,
+        ),
     )
 
   @kt.typechecked
@@ -608,7 +603,7 @@ class HeunStep(SamplerStep):
       current_step: DiffusionStep,
       next_step_info: StepInfo,
   ) -> DiffusionStep:
-    """First step of the Heun sampler.
+    """Second step of the Heun sampler.
 
     This is the second internal step. It should be called when the internal
     counter is 1.
@@ -621,16 +616,15 @@ class HeunStep(SamplerStep):
     Returns:
       The next step.
     """
-    aux = current_step.aux
     xt = current_step.xt
 
-    current_update = aux["current_update"]
-    old_time = current_update.step_info.time
+    prev_update = current_step.aux["current_update"]
+    old_time = prev_update.step_info.time
     next_time = next_step_info.time
     old_time = utils.bcast_right(old_time, xt.ndim)
     next_time = utils.bcast_right(next_time, xt.ndim)
 
-    old_velocity = aux["current_velocity_step_one"]
+    old_velocity = current_step.aux["current_velocity_step_one"]
     intermediate_velocity = self.corruption_process.convert_predictions(
         prediction=prediction,
         xt=xt,
@@ -641,30 +635,28 @@ class HeunStep(SamplerStep):
 
     # Perform the final step.
 
-    old_xt = current_update.xt
+    old_xt = prev_update.xt
     dt = old_time - next_time
     new_xt = old_xt - dt * (old_velocity + intermediate_velocity) / 2
 
-    # Update the internal counter and the current_update
     internal_counter = jnp.mod(
-        aux["internal_counter"] + 1, self.num_internal_steps
-    )
-    current_update = DiffusionStep(
-        xt=new_xt,
-        step_info=next_step_info,
-        aux=dict(),
-    )
-    aux.update(
-        dict(
-            internal_counter=internal_counter,
-            current_update=current_update,
-        )
+        current_step.aux["internal_counter"] + 1, self.num_internal_steps
     )
 
     return DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
-        aux=aux,
+        aux=dict(
+            internal_counter=internal_counter,
+            current_update=DiffusionStep(
+                xt=new_xt,
+                step_info=next_step_info,
+                aux=dict(),
+            ),
+            current_velocity_step_one=current_step.aux[
+                "current_velocity_step_one"
+            ],
+        ),
     )
 
   @kt.typechecked

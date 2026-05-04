@@ -145,6 +145,8 @@ def lenient_map(
     KeyError: If the structures of `tree` and `rest` do not match.
   """
   path_vals, struct = jax.tree.flatten_with_path(tree, is_leaf=is_leaf)
+  if not path_vals:
+    return tree  # Return empty tree unchanged.
   paths, _ = zip(*path_vals)
   restructured_rest = []
   for r in rest:
