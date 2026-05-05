@@ -699,6 +699,80 @@ class EncodeConditioningTest(parameterized.TestCase):
         jnp.all(output_eval['adaptive_norm'] == time_embedding_train)
     )
 
+  def test_copy_conditioning_encoder(self):
+    """Tests the CopyConditioningEncoder."""
+    batch_size = 4
+    encoder = conditioning_encoder.CopyConditioningEncoder()
+    t = jnp.ones((batch_size,))
+    conditioning = {
+        'label': jnp.arange(batch_size),
+        'arbitrary_pytree': dict(
+            a=jnp.ones((batch_size, 127, 199)),
+            b=dict(c=jnp.ones((batch_size, 127, 199))),
+        ),
+    }
+    rng = jax.random.PRNGKey(0)
+    variables = encoder.init(rng, t, conditioning, is_training=True)
+    jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
+    output = jitted_apply(
+        variables,
+        t,
+        conditioning,
+        is_training=True,
+        rngs={'dropout': rng},
+    )
+    # Compare the pytree structure and leaves individually.
+    output_leaves, output_treedef = jax.tree.flatten(output)
+    cond_leaves, cond_treedef = jax.tree.flatten(conditioning)
+    self.assertEqual(output_treedef, cond_treedef)
+    for out_leaf, cond_leaf in zip(output_leaves, cond_leaves):
+      self.assertTrue(jnp.array_equal(out_leaf, cond_leaf))
+
+  def test_copy_conditioning_encoder_with_time_embedder(self):
+    """Tests the CopyConditioningEncoder."""
+    batch_size = 4
+    num_features = 17
+    time_embedder = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=5,
+        num_features=num_features,
+    )
+
+    encoder = conditioning_encoder.CopyConditioningEncoder(
+        time_embedder=time_embedder
+    )
+    t = jnp.ones((batch_size,))
+    conditioning = {
+        'label': jnp.arange(batch_size),
+        'arbitrary_pytree': dict(
+            a=jnp.ones((batch_size, 127, 199)),
+            b=dict(c=jnp.ones((batch_size, 127, 199))),
+        ),
+    }
+    rng = jax.random.PRNGKey(0)
+    variables = encoder.init(rng, t, conditioning, is_training=True)
+    jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
+    output = jitted_apply(
+        variables,
+        t,
+        conditioning,
+        is_training=True,
+        rngs={'dropout': rng},
+    )
+
+    # Verify all conditioning fields are copied through.
+    for key in conditioning:
+      self.assertIn(key, output)
+      out_leaves, out_td = jax.tree.flatten(output[key])
+      cond_leaves, cond_td = jax.tree.flatten(conditioning[key])
+      self.assertEqual(out_td, cond_td)
+      for out_leaf, cond_leaf in zip(out_leaves, cond_leaves):
+        self.assertTrue(jnp.array_equal(out_leaf, cond_leaf))
+
+    # Verify the time embedding shape.
+    self.assertIn('time', output)
+    self.assertEqual(output['time'].shape, (batch_size, num_features))
+
 
 if __name__ == '__main__':
   absltest.main()

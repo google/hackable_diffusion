@@ -23,6 +23,7 @@ from hackable_diffusion.lib.architecture import arch_typing
 ################################################################################
 
 ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditioningEmbeddings = arch_typing.ConditioningEmbeddings
 
 
 class RiemannianConditionalBackbone(nn.Module, ConditionalBackbone):
@@ -35,9 +36,15 @@ class RiemannianConditionalBackbone(nn.Module, ConditionalBackbone):
   manifold: manifolds.Manifold
 
   @nn.compact
-  def __call__(self, x, conditioning_embeddings, is_training=True):
+  def __call__(
+      self, x, conditioning_embeddings: ConditioningEmbeddings, is_training=True
+  ):
 
-    v = self.backbone(x, conditioning_embeddings, is_training=is_training)
+    v = self.backbone(
+        x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=is_training,
+    )
 
     # Project v to tangent space at xt.
     if isinstance(v, dict) and 'velocity' in v:

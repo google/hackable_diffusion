@@ -38,6 +38,7 @@ DataArray = hd_typing.DataArray
 
 ConditionalBackbone = arch_typing.ConditionalBackbone
 ConditioningMechanism = arch_typing.ConditioningMechanism
+ConditioningEmbeddings = arch_typing.ConditioningEmbeddings
 
 ################################################################################
 # MARK: ConditionalMLP
@@ -77,7 +78,7 @@ class ConditionalMLP(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: DataArray,
-      conditioning_embeddings: dict[ConditioningMechanism, Float['batch ...']],
+      conditioning_embeddings: ConditioningEmbeddings,
       *,
       is_training: bool,
   ) -> DataArray:

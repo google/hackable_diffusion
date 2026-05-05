@@ -42,6 +42,7 @@ Num = hd_typing.Num
 
 ConditioningMechanism = arch_typing.ConditioningMechanism
 EmbeddingMergeMethod = arch_typing.EmbeddingMergeMethod
+ConditioningEmbeddings = arch_typing.ConditioningEmbeddings
 
 ################################################################################
 # MARK: Base classes
@@ -76,7 +77,7 @@ class BaseConditioningEncoder(Protocol):
       time: hd_typing.TimeArray,
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> dict[ConditioningMechanism, Float['batch ...']]:
+  ) -> ConditioningEmbeddings:
     ...
 
 
@@ -342,6 +343,28 @@ class FieldSelector(nn.Module, BaseEmbedder):
 ################################################################################
 
 
+class CopyConditioningEncoder(nn.Module, BaseConditioningEncoder):
+  """Copies the conditioning to the output and optionally encodes time."""
+
+  time_embedder: BaseTimeEmbedder | None = None
+
+  @nn.compact
+  def __call__(
+      self,
+      time: hd_typing.TimeArray,
+      conditioning: hd_typing.Conditioning | None,
+      is_training: bool,
+  ) -> ConditioningEmbeddings:
+    cond_embs = {}
+    if self.time_embedder is not None:
+      cond_embs['time'] = cast(nn.Module, self.time_embedder).copy(
+          name='TimeEmbedder'
+      )(time)
+    if conditioning is not None:
+      cond_embs.update(conditioning)
+    return cond_embs
+
+
 class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   """Encodes and combines time and conditioning signals for a diffusion model.
 
@@ -392,7 +415,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   time_embedder: BaseTimeEmbedder
   conditioning_embedders: dict[str, BaseEmbedder]
   embedding_merging_method: EmbeddingMergeMethod
-  conditioning_rules: dict[str, ConditioningMechanism]
+  conditioning_rules: dict[str, str]
   conditioning_dropout_rate: float = 0.0
 
   def setup(self):
@@ -427,7 +450,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
       time: hd_typing.TimeTree,
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> dict[ConditioningMechanism, Num['batch ...']]:
+  ) -> ConditioningEmbeddings:
     """Encodes and combines time and conditioning signals.
 
     The output is a dictionary where keys are the embedding mechanisms specified
