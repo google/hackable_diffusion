@@ -111,7 +111,7 @@ class Diffusion(nn.Module, kw_only=True):
       self,
       x0: DataTree,
       cond: Conditioning | None = None,
-  ) -> dict[str, dict[str, Array] | Array]:
+  ) -> dict[str, dict[str, Array] | Array | dict[str, dict[str, Array]]]:
     """Run the diffusion training step.
 
     Samples timesteps, corrupts the input data according to the corruption
