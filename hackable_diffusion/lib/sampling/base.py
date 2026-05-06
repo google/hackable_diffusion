@@ -79,6 +79,7 @@ PyTree = hd_typing.PyTree
 
 DataArray = hd_typing.DataArray
 DataTree = hd_typing.DataTree
+Conditioning = hd_typing.Conditioning
 TargetInfoTree = hd_typing.TargetInfoTree
 TimeArray = hd_typing.TimeArray
 
@@ -128,6 +129,7 @@ class DiffusionStep:
 
 DiffusionStepTree = PyTree[DiffusionStep]
 
+
 ################################################################################
 # MARK: Protocols
 ################################################################################
@@ -160,4 +162,29 @@ class SamplerStep(Protocol):
       last_step_info: StepInfoTree,
   ) -> DiffusionStepTree:
     """Performs the final step to produce the clean output sample."""
+    ...
+
+
+class UpdateConditioningFn(Protocol):
+  """Protocol for updating conditioning during the sampling loop.
+
+  This allows injecting step-dependent information back into the conditioning
+  dict between sampling steps (e.g. self-conditioning logits from the
+  previous prediction).
+  """
+
+  def __call__(
+      self,
+      conditioning: Conditioning,
+      step_carry: DiffusionStepTree,
+  ) -> Conditioning:
+    """Update conditioning based on the current diffusion step.
+
+    Args:
+      conditioning: The current conditioning dict.
+      step_carry: The current diffusion step state.
+
+    Returns:
+      The updated conditioning dict.
+    """
     ...

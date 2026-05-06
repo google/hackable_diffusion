@@ -47,6 +47,7 @@ StepInfoTree = base.StepInfoTree
 
 InferenceFn = inference_base.InferenceFn
 TimeSchedule = time_scheduling.TimeSchedule
+UpdateConditioningFn = base.UpdateConditioningFn
 
 ################################################################################
 # MARK: Protocols
@@ -130,11 +131,14 @@ class DiffusionSampler(SampleFn):
     time_schedule: Defines the sequence of time steps for the process.
     stepper: The sampling algorithm (e.g., DDIM) that updates the state.
     num_steps: The total number of denoising steps.
+    update_conditioning_fn: An optional function to update the conditioning at
+      each step.
   """
 
   time_schedule: TimeSchedule
   stepper: SamplerStep
   num_steps: int
+  update_conditioning_fn: UpdateConditioningFn | None = None
 
   @kt.typechecked
   def __call__(
@@ -181,9 +185,14 @@ class DiffusionSampler(SampleFn):
 
     def scan_body(step_carry: DiffusionStepTree, next_step_info: StepInfoTree):
       xt, time = _get_input_inference_fn(step_carry)
+      updated_conditioning = conditioning
+      if self.update_conditioning_fn is not None:
+        updated_conditioning = self.update_conditioning_fn(
+            conditioning, step_carry
+        )
       prediction = inference_fn(
           xt=xt,
-          conditioning=conditioning,
+          conditioning=updated_conditioning,
           time=time,
       )
       next_step = self.stepper.update(
@@ -198,9 +207,14 @@ class DiffusionSampler(SampleFn):
     )
 
     xt, time = _get_input_inference_fn(before_last_step)
+    last_conditioning = conditioning
+    if self.update_conditioning_fn is not None:
+      last_conditioning = self.update_conditioning_fn(
+          conditioning, before_last_step
+      )
     last_prediction = inference_fn(
         xt=xt,
-        conditioning=conditioning,
+        conditioning=last_conditioning,
         time=time,
     )
 
