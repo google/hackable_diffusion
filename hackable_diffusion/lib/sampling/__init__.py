@@ -30,6 +30,7 @@ from hackable_diffusion.lib.sampling.discrete_step_sampler import MaxCappedRemas
 from hackable_diffusion.lib.sampling.discrete_step_sampler import NoRemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RescaledRemaskingFn
+from hackable_diffusion.lib.sampling.discrete_step_sampler import truncate_at_stop_tokens
 from hackable_diffusion.lib.sampling.discrete_step_sampler import UnMaskingStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import AdjustedDDIMStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import DDIMStep
