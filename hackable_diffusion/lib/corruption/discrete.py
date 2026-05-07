@@ -27,6 +27,7 @@ from hackable_diffusion.lib.corruption import schedules
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
+import numpy as np
 
 ################################################################################
 # MARK: Constants
@@ -202,10 +203,10 @@ class CategoricalProcess(CorruptionProcess):
       return False
     else:
       invariant_probs_masking = (0.0,) * self.num_categories + (1.0,)
-      invariant_probs_masking_vec = jnp.array(invariant_probs_masking)
-      return jnp.all(
-          self.invariant_probs_vec == invariant_probs_masking_vec
-      ).item()
+      invariant_probs_masking_vec = np.array(invariant_probs_masking)
+      return np.all(
+          np.array(self.invariant_probs) == invariant_probs_masking_vec
+      )
 
   ##############################################################################
   # MARK: Methods
