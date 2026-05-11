@@ -685,7 +685,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         {'params': params}, t, c, is_training=True, rngs={'dropout': rng}
     )
     time_embedding_train = time_encoder.apply(
-        {'params': params['TimeEmbedder']}, t
+        {'params': params['time_embedder']}, t
     )
     self.assertTrue(
         jnp.all(output_train['adaptive_norm'] == time_embedding_train)

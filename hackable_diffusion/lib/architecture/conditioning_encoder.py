@@ -446,7 +446,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
     """
 
     # Embed time.
-    t_emb = cast(nn.Module, self.time_embedder).copy(name='TimeEmbedder')(time)
+    t_emb = self.time_embedder(time)
     batch_size = t_emb.shape[0]
 
     # Encode other conditioning info.
@@ -457,9 +457,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
     if conditioning is not None:
       for embedder_name in self.embedders_names:
         embedder = self.conditioning_embedders[embedder_name]
-        cond_embs[embedder_name] = cast(nn.Module, embedder).copy(
-            name=f'Embedder_{embedder_name}'
-        )(conditioning)
+        cond_embs[embedder_name] = embedder(conditioning)
     else:
       for embedder_name in self.embedders_names:
         embedder = self.conditioning_embedders[embedder_name]

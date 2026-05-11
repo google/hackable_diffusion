@@ -173,17 +173,13 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
 
     # Encode conditioning.
 
-    conditioning_embeddings = cast(nn.Module, self.conditioning_encoder).copy(
-        name='ConditioningEncoder'
-    )(
+    conditioning_embeddings = self.conditioning_encoder(
         time=time_rescaled,
         conditioning=conditioning,
         is_training=is_training,
     )
     # Run backbone.
-    backbone_outputs = cast(nn.Module, self.backbone_network).copy(
-        name='Backbone'
-    )(
+    backbone_outputs = self.backbone_network(
         x=xt_rescaled,
         conditioning_embeddings=conditioning_embeddings,
         is_training=is_training,
@@ -303,9 +299,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
         self.input_rescaler(time, xt) if self.input_rescaler is not None else xt
     )
 
-    conditioning_embeddings = cast(nn.Module, self.conditioning_encoder).copy(
-        name='ConditioningEncoder'
-    )(
+    conditioning_embeddings = self.conditioning_encoder(
         time=time_rescaled,
         conditioning=conditioning,
         is_training=is_training,
@@ -319,9 +313,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
     # First pass: run with zero logits to get initial predictions.
     xt_with_zeros = jnp.concatenate([xt_rescaled, zero_logits], axis=-1)
 
-    backbone_module = cast(nn.Module, self.backbone_network).copy(
-        name='Backbone'
-    )
+    backbone_module = self.backbone_network
     first_output = backbone_module(
         x=xt_with_zeros,
         conditioning_embeddings=conditioning_embeddings,
@@ -453,17 +445,13 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
     else:
       xt_rescaled = xt
 
-    conditioning_embeddings = cast(nn.Module, self.conditioning_encoder).copy(
-        name='ConditioningEncoder'
-    )(
+    conditioning_embeddings = self.conditioning_encoder(
         time=time_rescaled,
         conditioning=conditioning,
         is_training=is_training,
     )
 
-    backbone_outputs = cast(nn.Module, self.backbone_network).copy(
-        name='Backbone'
-    )(
+    backbone_outputs = self.backbone_network(
         x=xt_rescaled,
         conditioning_embeddings=conditioning_embeddings,
         is_training=is_training,
