@@ -519,5 +519,115 @@ class NestedTimeSamplerTest(parameterized.TestCase):
     chex.assert_trees_all_equal_structs(time, data_spec)
 
 
+class NestedSelfConditioningDiffusionNetworkTest(parameterized.TestCase):
+  """Tests for NestedSelfConditioningDiffusionNetwork.
+
+  Uses a DummyBackbone that distinguishes the two forward passes:
+    - Pass 1 (second half is zeros): returns first_half + 1.0
+    - Pass 2 (second half has self-cond data): returns second_half * 10.0
+
+  Expected output encodes the self-conditioning semantics:
+    - 10.0 → self-conditioning is active and passes the correct prediction
+    - 1.0  → self-conditioning is inactive (both passes see zeros)
+  """
+
+  @parameterized.named_parameters(
+      ('training_with_self_cond', 1.0, True, 10.0),
+      ('inference_always_self_conds', 0.0, False, 10.0),
+      ('training_no_self_cond', 0.0, True, 1.0),
+  )
+  def test_nested_self_conditioning_network(
+      self,
+      self_cond_prob: float,
+      is_training: bool,
+      expected_value: float,
+  ):
+    num_categories = 10
+    batch_size = 2
+
+    class DummyBackbone(nn.Module, arch_typing.ConditionalBackbone):
+      """Backbone that reads and uses the self-conditioning logits."""
+
+      @nn.compact
+      def __call__(self, x, conditioning_embeddings, is_training):
+
+        def _forward(arr):
+          first_half = arr[..., : arr.shape[-1] // 2]
+          second_half = arr[..., arr.shape[-1] // 2 :]
+          has_self_cond = jnp.any(second_half != 0)
+          # Pass 1 (zeros in second half): return first_half + 1.0
+          # Pass 2 (prediction in second half): return second_half * 10.0
+          return jnp.where(has_self_cond, second_half * 10.0, first_half + 1.0)
+
+        return jax.tree.map(_forward, x)
+
+    mock_process = mock.create_autospec(
+        discrete.CategoricalProcess, instance=True
+    )
+    mock_process.num_categories = num_categories
+
+    processes = multimodal.NestedProcess(
+        processes={'a': mock_process, 'b': {'c': mock_process}}
+    )
+
+    xt = {
+        'a': jnp.zeros((batch_size, 4, num_categories)),
+        'b': {'c': jnp.zeros((batch_size, num_categories))},
+    }
+    time = {
+        'a': jnp.zeros((batch_size, 1)),
+        'b': {'c': jnp.zeros((batch_size, 1))},
+    }
+
+    class DummyCondEncoder(nn.Module):
+
+      @nn.compact
+      def __call__(self, time, conditioning, is_training):
+        return {}
+
+    network = multimodal.NestedSelfConditioningDiffusionNetwork(
+        backbone_network=DummyBackbone(),
+        conditioning_encoder=DummyCondEncoder(),
+        prediction_type={'a': 'logits', 'b': {'c': 'logits'}},
+        processes=processes,
+        self_cond_prob=self_cond_prob,
+    )
+
+    key = jax.random.PRNGKey(0)
+    params_key, sc_key = jax.random.split(key)
+
+    variables = network.init(
+        {'params': params_key, 'self_conditioning': sc_key},
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=is_training,
+    )
+
+    apply_kwargs = dict(
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=is_training,
+    )
+    if is_training:
+      apply_kwargs['rngs'] = {'self_conditioning': sc_key}
+
+    output = network.apply(variables, **apply_kwargs)
+
+    expected_output = {
+        'a': {
+            'logits': jnp.full((batch_size, 4, num_categories), expected_value)
+        },
+        'b': {
+            'c': {
+                'logits': jnp.full((batch_size, num_categories), expected_value)
+            }
+        },
+    }
+
+    chex.assert_trees_all_close(output, expected_output)
+
+
 if __name__ == '__main__':
   absltest.main()
