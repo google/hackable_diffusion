@@ -63,10 +63,10 @@ Array = hd_typing.Array
 Conditioning = hd_typing.Conditioning
 DataTree = hd_typing.DataTree
 LossOutput = hd_typing.LossOutput
+PyTree = hd_typing.PyTree
 TargetInfo = hd_typing.TargetInfo
 TimeArray = hd_typing.TimeArray
 typechecked = hd_typing.typechecked
-
 
 ################################################################################
 # MARK: Diffusion
@@ -113,7 +113,7 @@ class Diffusion(nn.Module, kw_only=True):
       self,
       x0: DataTree,
       cond: Conditioning | None = None,
-  ) -> dict[str, dict[str, Array] | Array]:
+  ) -> dict[str, PyTree]:
     """Run the diffusion training step.
 
     Samples timesteps, corrupts the input data according to the corruption
