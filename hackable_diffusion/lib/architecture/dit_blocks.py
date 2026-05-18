@@ -127,12 +127,18 @@ class DiTBlockAdaLNZero(nn.Module):
         bias_init=nn.initializers.zeros_init(),
         name="Dense_Gate_MLP",
     )
-    self.conditional_norm = normalization.NormalizationLayerFactory(
+    self.conditional_norm_attn = normalization.NormalizationLayerFactory(
         normalization_method=NormalizationType.LAYER_NORM,
         dtype=self.dtype,
         use_bias=False,
         use_scale=False,
-    ).conditional_norm()
+    ).conditional_norm(norm_name="ConditionalNorm_Attention")
+    self.conditional_norm_mlp = normalization.NormalizationLayerFactory(
+        normalization_method=NormalizationType.LAYER_NORM,
+        dtype=self.dtype,
+        use_bias=False,
+        use_scale=False,
+    ).conditional_norm(norm_name="ConditionalNorm_MLP")
 
   @kt.typechecked
   @nn.compact
@@ -159,7 +165,7 @@ class DiTBlockAdaLNZero(nn.Module):
     """
 
     # Attention Branch
-    x_attn_modulated = self.conditional_norm(x, c=nn.silu(cond))
+    x_attn_modulated = self.conditional_norm_attn(x, c=nn.silu(cond))
     attn_out = self.attn(x_attn_modulated, c=None, mask=mask)
     # Optional dropout
     if self.dropout_rate > 0.0:
@@ -171,7 +177,7 @@ class DiTBlockAdaLNZero(nn.Module):
     x = x + gate_msa[..., None, :] * attn_out
 
     # MLP Branch
-    x_mlp_modulated = self.conditional_norm(x, c=nn.silu(cond))
+    x_mlp_modulated = self.conditional_norm_mlp(x, c=nn.silu(cond))
     mlp_out = self.mlp(x_mlp_modulated, is_training=is_training)
     # Optional dropout
     if self.dropout_rate > 0.0:

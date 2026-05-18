@@ -29,7 +29,6 @@ from absl.testing import parameterized
 ################################################################################
 
 
-
 ################################################################################
 # MARK: Tests
 ################################################################################
@@ -126,7 +125,7 @@ class DiTTest(parameterized.TestCase):
             'kernel': (self.cond_dim, self.embedding_dim),
             'bias': (self.embedding_dim,),
         },
-        'ConditionalNorm': {
+        'ConditionalNorm_Attention': {
             'Dense_0': {
                 'kernel': (self.cond_dim, self.embedding_dim * 2),
                 'bias': (self.embedding_dim * 2,),
@@ -140,6 +139,12 @@ class DiTTest(parameterized.TestCase):
             'Dense_Output': {
                 'kernel': (mlp_hidden, self.embedding_dim),
                 'bias': (self.embedding_dim,),
+            },
+        },
+        'ConditionalNorm_MLP': {
+            'Dense_0': {
+                'kernel': (self.cond_dim, self.embedding_dim * 2),
+                'bias': (self.embedding_dim * 2,),
             },
         },
         'attn': {
