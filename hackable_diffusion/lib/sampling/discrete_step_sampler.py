@@ -590,6 +590,9 @@ class UnMaskingStep(SamplerStep):
       initial_noise: DataArray,
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
+    discrete.assert_discrete_shape_is_valid(
+        initial_noise, x_name='initial_noise'
+    )
 
     init_logits = jnp.repeat(
         initial_noise, self.corruption_process.num_categories, axis=-1
@@ -616,6 +619,7 @@ class UnMaskingStep(SamplerStep):
 
     current_step_info = current_step.step_info
     xt = current_step.xt
+    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
 
     unused_mask = xt == self.corruption_process.unused_token
     # The mask is True if the token is unused.
@@ -636,6 +640,13 @@ class UnMaskingStep(SamplerStep):
         candidate_key,
         self.temperature,
     )
+    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
+
+    if xt.shape != x0.shape:
+      raise ValueError(
+          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
+          f' {x0.shape=}.'
+      )
 
     currently_masked = self.corruption_mask_fn(xt)  # (bsz, seq_len, 1)
 
@@ -813,6 +824,9 @@ class DiscreteDDIMStep(SamplerStep):
       initial_noise: DataArray,
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
+    discrete.assert_discrete_shape_is_valid(
+        initial_noise, x_name='initial_noise'
+    )
 
     init_logits = jnp.repeat(
         initial_noise, self.corruption_process.num_categories, axis=-1
@@ -837,7 +851,7 @@ class DiscreteDDIMStep(SamplerStep):
 
     current_step_info = current_step.step_info
     xt = current_step.xt
-
+    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
     unused_mask = xt == self.corruption_process.unused_token
 
     time = current_step_info.time
@@ -856,6 +870,12 @@ class DiscreteDDIMStep(SamplerStep):
         candidate_key,
         self.temperature,
     )
+    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
+    if xt.shape != x0.shape:
+      raise ValueError(
+          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
+          f' {x0.shape=}.'
+      )
 
     # Schedule
     alpha_s = self.corruption_process.schedule.alpha(next_time_bcast)
@@ -961,6 +981,9 @@ class DiscreteFlowMatchingStep(SamplerStep):
       initial_noise: DataArray,
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
+    discrete.assert_discrete_shape_is_valid(
+        initial_noise, x_name='initial_noise'
+    )
 
     init_logits = jnp.repeat(
         initial_noise, self.corruption_process.num_categories, axis=-1
@@ -983,6 +1006,7 @@ class DiscreteFlowMatchingStep(SamplerStep):
 
     current_step_info = current_step.step_info
     xt = current_step.xt
+    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
 
     unused_mask = xt == self.corruption_process.unused_token
 
@@ -1002,6 +1026,12 @@ class DiscreteFlowMatchingStep(SamplerStep):
         candidate_key,
         self.temperature,
     )
+    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
+    if xt.shape != x0.shape:
+      raise ValueError(
+          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
+          f' {x0.shape=}.'
+      )
 
     # Denoising rates
     alpha_s = self.corruption_process.schedule.alpha(next_time_bcast)
@@ -1141,7 +1171,9 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
       initial_noise: DataArray,
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
-
+    discrete.assert_discrete_shape_is_valid(
+        initial_noise, x_name='initial_noise'
+    )
     init_logits = jnp.repeat(
         initial_noise, self.corruption_process.num_categories, axis=-1
     )
@@ -1164,6 +1196,8 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
   ) -> DiffusionStep:
 
     xt = current_step.xt
+    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
+
     unused_mask = xt == self.corruption_process.unused_token
 
     time = jax_helpers.bcast_right(current_step.step_info.time, xt.ndim)
@@ -1171,9 +1205,19 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
     key = next_step_info.rng
 
     # Extract predictions.
-    logits = self.corruption_process.convert_predictions(prediction, xt, time)[
-        'logits'
-    ]
+    pred_converted = self.corruption_process.convert_predictions(
+        prediction, xt, time
+    )
+    logits = pred_converted['logits']
+    x0 = pred_converted['x0']
+    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
+
+    if xt.shape != x0.shape:
+      raise ValueError(
+          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
+          f' {x0.shape=}.'
+      )
+
     logits = logits / self.temperature
     p_x0 = jax.nn.softmax(logits, axis=-1)
     # (bsz, *seq_len, M)

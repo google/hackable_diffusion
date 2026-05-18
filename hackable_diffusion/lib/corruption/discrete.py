@@ -260,6 +260,8 @@ class CategoricalProcess(CorruptionProcess):
         which is True if the token is corrupted and not equal to the
         `unused_token`, False otherwise. The shape of both masks is (*b, 1).
     """
+    assert_discrete_shape_is_valid(x0, x_name='x0')
+
     # Broadcast the time to a shape compatible with x0.
     time = jax_helpers.bcast_right(time, x0.ndim)
 
@@ -384,4 +386,17 @@ class CategoricalProcess(CorruptionProcess):
         unused_token=unused_token,
         post_corruption_fn=post_corruption_fn,
         mode=mode,
+    )
+
+################################################################################
+# MARK: Helper Functions
+################################################################################
+
+
+def assert_discrete_shape_is_valid(x: DataArray, x_name: str = 'x0'):
+  """Asserts that the discrete shape is valid."""
+  if x.shape[-1] != 1:
+    raise ValueError(
+        f'Expected {x_name} to have a trailing dimension of 1, got'
+        f' {x.shape[-1]=}.'
     )

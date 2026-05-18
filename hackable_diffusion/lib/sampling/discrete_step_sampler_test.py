@@ -176,6 +176,21 @@ class UnMaskingStepTest(absltest.TestCase):
         ),
     )
 
+  def test_initialize_raises_for_invalid_trailing_dimension(self):
+    initial_noise_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([1.0, 1.0])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected initial_noise to have a trailing dimension of 1'
+    ):
+      self.unmasking_step.initialize(
+          initial_noise=initial_noise_bad,
+          initial_step_info=initial_step_info,
+      )
+
   def test_update(self):
     initial_step_info = StepInfo(
         step=0,
@@ -220,6 +235,60 @@ class UnMaskingStepTest(absltest.TestCase):
         next_step_info=next_step_info_no_unmask,
     )
     chex.assert_trees_all_equal(next_step_no_unmask.xt, initial_step.xt)
+
+  def test_update_raises_for_invalid_xt_trailing_dimension(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    xt_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step = DiffusionStep(
+        xt=xt_bad,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                (2, 4, 3, self.process.num_categories), dtype=jnp.float32
+            )
+        },
+    )
+    prediction = {'logits': jnp.zeros((2, 4, 3, self.process.num_categories))}
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.0, 0.0])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
+      self.unmasking_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
+
+  def test_update_raises_for_shape_mismatch(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.unmasking_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = {'logits': jnp.zeros((2, 8, self.process.num_categories))}
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.0, 0.0])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaises(ValueError):
+      self.unmasking_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
 
   def test_finalize(self):
     initial_step_info = StepInfo(
@@ -341,9 +410,15 @@ class UnMaskingStepTest(absltest.TestCase):
         time=jnp.array([0.5, 0.5]),
         rng=jax.random.PRNGKey(0),
     )
-    initial_step = self.unmasking_step.initialize(
-        initial_noise=noise_2d,
-        initial_step_info=initial_step_info,
+    initial_step = DiffusionStep(
+        xt=noise_2d,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                noise_2d.shape + (self.process.num_categories,),
+                dtype=jnp.float32,
+            )
+        },
     )
     # Logits must be (B, L, V) to match the model output convention.
     logits = jnp.zeros(noise_2d.shape + (self.process.num_categories,))
@@ -354,7 +429,9 @@ class UnMaskingStepTest(absltest.TestCase):
         time=jnp.array([0.0, 0.0]),
         rng=jax.random.PRNGKey(1),
     )
-    with self.assertRaisesRegex(ValueError, 'In _generate_candidates'):
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
       self.unmasking_step.update(
           prediction=prediction,
           current_step=initial_step,
@@ -412,6 +489,21 @@ class DiscreteDDIMStepTest(absltest.TestCase):
         ),
     )
 
+  def test_initialize_raises_for_invalid_trailing_dimension(self):
+    initial_noise_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([1.0, 1.0])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected initial_noise to have a trailing dimension of 1'
+    ):
+      self.ddim_step.initialize(
+          initial_noise=initial_noise_bad,
+          initial_step_info=initial_step_info,
+      )
+
   def test_update(self):
     initial_step_info = StepInfo(
         step=0,
@@ -441,6 +533,65 @@ class DiscreteDDIMStepTest(absltest.TestCase):
 
     self.assertEqual(next_step.xt.shape, self.initial_noise.shape)
     self.assertEqual(next_step.xt.dtype, self.initial_noise.dtype)
+
+  def test_update_raises_for_invalid_xt_trailing_dimension(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    xt_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step = DiffusionStep(
+        xt=xt_bad,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                (2, 4, 3, self.process.process_num_categories),
+                dtype=jnp.float32,
+            )
+        },
+    )
+    prediction = {
+        'logits': jnp.zeros((2, 4, 3, self.process.process_num_categories))
+    }
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
+      self.ddim_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
+
+  def test_update_raises_for_shape_mismatch(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.ddim_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = {
+        'logits': jnp.zeros((2, 8, self.process.process_num_categories))
+    }
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaises(ValueError):
+      self.ddim_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
 
   def test_finalize(self):
     initial_step_info = StepInfo(
@@ -537,9 +688,15 @@ class DiscreteDDIMStepTest(absltest.TestCase):
         time=jnp.array([0.5, 0.5]),
         rng=jax.random.PRNGKey(0),
     )
-    initial_step = self.ddim_step.initialize(
-        initial_noise=noise_2d,
-        initial_step_info=initial_step_info,
+    initial_step = DiffusionStep(
+        xt=noise_2d,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                noise_2d.shape + (self.process.process_num_categories,),
+                dtype=jnp.float32,
+            )
+        },
     )
     logits = jnp.zeros(noise_2d.shape + (self.process.process_num_categories,))
     logits = logits.at[..., 1].set(10.0)
@@ -549,7 +706,9 @@ class DiscreteDDIMStepTest(absltest.TestCase):
         time=jnp.array([0.0, 0.0]),
         rng=jax.random.PRNGKey(1),
     )
-    with self.assertRaisesRegex(ValueError, 'In _generate_candidates'):
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
       self.ddim_step.update(
           prediction=prediction,
           current_step=initial_step,
@@ -609,6 +768,21 @@ class IntegratedDiscreteDDIMStepTest(absltest.TestCase):
         ),
     )
 
+  def test_initialize_raises_for_invalid_trailing_dimension(self):
+    initial_noise_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([1.0, 1.0])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected initial_noise to have a trailing dimension of 1'
+    ):
+      self.integrated_ddim_step.initialize(
+          initial_noise=initial_noise_bad,
+          initial_step_info=initial_step_info,
+      )
+
   def test_update(self):
     initial_step_info = StepInfo(
         step=0,
@@ -638,6 +812,67 @@ class IntegratedDiscreteDDIMStepTest(absltest.TestCase):
 
     self.assertEqual(next_step.xt.shape, self.initial_noise.shape)
     self.assertEqual(next_step.xt.dtype, self.initial_noise.dtype)
+
+  def test_update_raises_for_invalid_xt_trailing_dimension(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    xt_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step = DiffusionStep(
+        xt=xt_bad,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                (2, 4, 3, self.process.process_num_categories),
+                dtype=jnp.float32,
+            )
+        },
+    )
+    prediction = {
+        'logits': jnp.zeros((2, 4, 3, self.process.process_num_categories))
+    }
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
+      self.integrated_ddim_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
+
+  def test_update_raises_for_shape_mismatch(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.integrated_ddim_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = {
+        'logits': jnp.zeros((2, 8, self.process.process_num_categories))
+    }
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt and x0 to have the same shape'
+    ):
+      self.integrated_ddim_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
 
   def test_finalize(self):
     initial_step_info = StepInfo(
@@ -844,6 +1079,21 @@ class DiscreteFlowMatchingStepTest(absltest.TestCase):
         ),
     )
 
+  def test_initialize_raises_for_invalid_trailing_dimension(self):
+    initial_noise_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([1.0, 1.0])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected initial_noise to have a trailing dimension of 1'
+    ):
+      self.dfm_step.initialize(
+          initial_noise=initial_noise_bad,
+          initial_step_info=initial_step_info,
+      )
+
   def test_update(self):
     initial_step_info = StepInfo(
         step=0,
@@ -886,6 +1136,60 @@ class DiscreteFlowMatchingStepTest(absltest.TestCase):
         next_step_info=next_step_info_no,
     )
     chex.assert_trees_all_equal(next_step_no.xt, initial_step.xt)
+
+  def test_update_raises_for_invalid_xt_trailing_dimension(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    xt_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step = DiffusionStep(
+        xt=xt_bad,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                (2, 4, 3, self.process.num_categories), dtype=jnp.float32
+            )
+        },
+    )
+    prediction = {'logits': jnp.zeros((2, 4, 3, self.process.num_categories))}
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.4, 0.4])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
+      self.dfm_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
+
+  def test_update_raises_for_shape_mismatch(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.dfm_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = {'logits': jnp.zeros((2, 8, self.process.num_categories))}
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.4, 0.4])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaises(ValueError):
+      self.dfm_step.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
 
   def _reference_dfm_routing(self, alpha_s, alpha_t, stoch_coeff=0.0):
     """Compute expected routing weights from the paper formulas."""
@@ -1033,9 +1337,15 @@ class DiscreteFlowMatchingStepTest(absltest.TestCase):
         time=jnp.array([0.5, 0.5]),
         rng=jax.random.PRNGKey(0),
     )
-    initial_step = self.dfm_step.initialize(
-        initial_noise=noise_2d,
-        initial_step_info=initial_step_info,
+    initial_step = DiffusionStep(
+        xt=noise_2d,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                noise_2d.shape + (self.process.num_categories,),
+                dtype=jnp.float32,
+            )
+        },
     )
     logits = jnp.zeros(noise_2d.shape + (self.process.num_categories,))
     logits = logits.at[..., 1].set(10.0)
@@ -1045,7 +1355,9 @@ class DiscreteFlowMatchingStepTest(absltest.TestCase):
         time=jnp.array([0.4, 0.4]),
         rng=jax.random.PRNGKey(1),
     )
-    with self.assertRaisesRegex(ValueError, 'In _generate_candidates'):
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
       self.dfm_step.update(
           prediction=prediction,
           current_step=initial_step,
@@ -1200,7 +1512,6 @@ class DDIMRoutingEquivalenceTest(absltest.TestCase):
             xt_val, x0_val, 0.3, 0.7, invariant_probs
         )
         chex.assert_trees_all_close(p_exact, p_route, atol=1e-6)
-
 
 
 class ApplyRoutingTest(absltest.TestCase):

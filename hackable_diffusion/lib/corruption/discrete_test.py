@@ -320,6 +320,14 @@ class CategoricalProcessTest(parameterized.TestCase):
     else:
       raise ValueError(f'Unknown process type: {process_type}')
 
+  def test_corrupt_raises_for_invalid_trailing_dimension(self):
+    x0_bad = jnp.zeros((self.batch_size, self.seq_len, 3), dtype=jnp.int32)
+    time = jnp.ones((self.batch_size,)) * 0.5
+    with self.assertRaisesRegex(
+        ValueError, 'Expected x0 to have a trailing dimension of 1'
+    ):
+      self.process.corrupt(self.key, x0_bad, time)
+
   @parameterized.named_parameters(
       ('masking', 'masking'),
       ('uniform', 'uniform'),
