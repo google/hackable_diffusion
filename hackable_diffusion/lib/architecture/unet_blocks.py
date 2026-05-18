@@ -98,7 +98,7 @@ class OutputConvBlock(nn.Module):
   dtype: DType = jnp.float32
 
   def setup(self):
-    self.unconditional_norm = self.norm_factory.unconditional_norm_factory()
+    self.unconditional_norm = self.norm_factory.unconditional_norm()
 
     if self.zero_init:
       self.output_conv = ZerosConv3x3
@@ -157,8 +157,8 @@ class ConvResidualBlock(nn.Module):
     if self.resample_type == "up" and self.upsample_fn is None:
       raise ValueError("upsample_fn must be provided for up-resampling.")
 
-    self.unconditional_norm = self.norm_factory.unconditional_norm_factory()
-    self.conditional_norm = self.norm_factory.conditional_norm_factory()
+    self.unconditional_norm = self.norm_factory.unconditional_norm()
+    self.conditional_norm = self.norm_factory.conditional_norm()
 
     self.init_input = kernel_init
     self.init_output = nn.initializers.zeros_init()
@@ -257,7 +257,7 @@ class AttentionResidualBlock(nn.Module):
   dtype: DType = jnp.float32
 
   def setup(self):
-    self.unconditional_norm = self.norm_factory.unconditional_norm_factory()
+    self.unconditional_norm = self.norm_factory.unconditional_norm()
 
   @nn.compact
   @kt.typechecked

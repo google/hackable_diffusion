@@ -154,9 +154,7 @@ class Unet(nn.Module, ConditionalBackbone):
         dtype=self.dtype,
     )
 
-    self.post_unconditional_norm = (
-        self.norm_factory.unconditional_norm_factory()
-    )
+    self.post_unconditional_norm = self.norm_factory.unconditional_norm()
 
   @nn.compact
   @kt.typechecked

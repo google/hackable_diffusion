@@ -229,29 +229,31 @@ class NormalizationLayerFactory:
     self.use_bias = use_bias
     self.use_scale = use_scale
 
-  @property
-  def unconditional_norm_factory(self):
+  def unconditional_norm(
+      self, norm_name: str = "UnconditionalNorm"
+  ) -> NormalizationLayer:
     """Returns a factory for creating unconditional normalization layers."""
-    return lambda: NormalizationLayer(
+    return NormalizationLayer(
         normalization_method=self.normalization_method,
         conditional=False,
         num_groups=self.num_groups,
         epsilon=self.epsilon,
-        name="UnconditionalNorm",
+        name=norm_name,
         dtype=self.dtype,
         use_bias=self.use_bias,
         use_scale=self.use_scale,
     )
 
-  @property
-  def conditional_norm_factory(self):
+  def conditional_norm(
+      self, norm_name: str = "ConditionalNorm"
+  ) -> NormalizationLayer:
     """Returns a factory for creating conditional normalization layers."""
-    return lambda: NormalizationLayer(
+    return NormalizationLayer(
         normalization_method=self.normalization_method,
         conditional=True,
         num_groups=self.num_groups,
         epsilon=self.epsilon,
-        name="ConditionalNorm",
+        name=norm_name,
         dtype=self.dtype,
         use_bias=self.use_bias,
         use_scale=self.use_scale,

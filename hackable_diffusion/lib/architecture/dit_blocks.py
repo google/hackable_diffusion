@@ -132,7 +132,7 @@ class DiTBlockAdaLNZero(nn.Module):
         dtype=self.dtype,
         use_bias=False,
         use_scale=False,
-    ).conditional_norm_factory()
+    ).conditional_norm()
 
   @kt.typechecked
   @nn.compact
@@ -255,7 +255,7 @@ class DePatchify(nn.Module):
         dtype=self.dtype,
         use_bias=False,
         use_scale=False,
-    ).conditional_norm_factory()
+    ).conditional_norm()
 
   @nn.compact
   @kt.typechecked

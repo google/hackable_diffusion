@@ -93,7 +93,7 @@ class DiT(nn.Module, ConditionalBackbone):
         dtype=self.dtype,
         use_bias=False,
         use_scale=False,
-    ).conditional_norm_factory()
+    ).conditional_norm()
 
   @kt.typechecked
   @nn.compact
