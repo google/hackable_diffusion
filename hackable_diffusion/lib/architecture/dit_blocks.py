@@ -21,8 +21,8 @@ from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import mlp_blocks
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.hd_typing import typechecked  # pylint: disable=g-multiple-import,g-importing-member
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
@@ -50,7 +50,7 @@ class PositionalEmbedding(nn.Module):
   init_stddev: float = 0.02
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(self, x: Num["batch *data_shape"]) -> Float["batch *data_shape"]:
     pos_embed = self.param(
         "PositionalEmbeddingTensor",
@@ -140,25 +140,49 @@ class DiTBlockAdaLNZero(nn.Module):
         use_scale=False,
     ).conditional_norm(norm_name="ConditionalNorm_MLP")
 
-  @kt.typechecked
+    # Cross-Attention Module
+    self.cross_attn = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        head_dim=self.head_dim,
+        # Note: We typically do NOT use RoPE for cross-attention because
+        # the spatial relationship between text and SMILES is not 1-to-1 linear.
+        use_rope=False,
+        zero_init_output=False,
+        dtype=self.dtype,
+        normalize_qk=True,
+    )
+    self.gate_cross = nn.Dense(
+        self.hidden_size,
+        kernel_init=nn.initializers.zeros_init(),
+        bias_init=nn.initializers.zeros_init(),
+        name="Dense_Gate_Cross",
+    )
+
+  @typechecked
   @nn.compact
   def __call__(
       self,
       x: Float["*batch seq_dim emb_dim"],
-      cond: Float["*#batch cond_dim"],
+      cond: Float["*batch cond_dim"],
       *,
       is_training: bool,
       mask: Bool["batch seq_dim"] | None = None,
+      cross_cond: Float["*batch seq_cross cross_cond_dim"] | None = None,
+      cross_mask: Bool["batch seq_cross"] | None = None,
   ) -> Float["*batch seq_dim emb_dim"]:
     """Calls the DiT block.
 
     Args:
       x: The input tensor.
-      cond: The conditioning tensor.
+      cond: The conditioning tensor for adaptive normalization.
       is_training: Whether the block is in training mode.
       mask: The self-attention padding mask. If the mask is provided, it is
         assumed that the input sequence contains padding tokens that should be
         masked out when computing the self-attention.
+      cross_cond: The cross attention conditioning tensor.
+      cross_mask: The cross-attention padding mask. If the mask is provided, it
+        is assumed that the input sequence contains padding tokens that should
+        be masked out when computing the cross-attention.
 
     Returns:
       The output tensor.
@@ -175,6 +199,20 @@ class DiTBlockAdaLNZero(nn.Module):
     gate_msa = self.gate_msa(nn.silu(cond))
     # Add a sequence dimension [...,None,:] to broadcast to [*batch,seq,dim].
     x = x + gate_msa[..., None, :] * attn_out
+
+    # 2. Cross-Attention Branch (NEW)
+    if cross_cond is not None:
+      x_cross_modulated = self.conditional_norm(x, c=nn.silu(cond))
+      # Pass cross_cond as `c`, and cross_mask as `mask` (which applies to the keys/cross_cond)
+      cross_out = self.cross_attn(
+          x_cross_modulated, c=cross_cond, mask=cross_mask
+      )
+      if self.dropout_rate > 0.0:
+        cross_out = nn.Dropout(rate=self.dropout_rate)(
+            cross_out, deterministic=not is_training
+        )
+      gate_cross = self.gate_cross(nn.silu(cond))
+      x = x + gate_cross[..., None, :] * cross_out
 
     # MLP Branch
     x_mlp_modulated = self.conditional_norm_mlp(x, c=nn.silu(cond))
@@ -210,7 +248,7 @@ class Patchify(nn.Module):
   embedding_dim: int
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self, x: Float["*batch height width channels"]
   ) -> Float["*batch seq_dim emb_dim"]:
@@ -264,7 +302,7 @@ class DePatchify(nn.Module):
     ).conditional_norm()
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self, x: Float["*batch seq_dim emb_dim"], cond: Float["*#batch cond_dim"]
   ) -> Float["*batch height width channels"]:
