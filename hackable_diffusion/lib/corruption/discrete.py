@@ -162,7 +162,7 @@ class CategoricalProcess(CorruptionProcess):
   """
 
   schedule: DiscreteSchedule
-  invariant_probs: Sequence[float]
+  invariant_probs: Sequence[float] = dataclasses.field(repr=False)
   num_categories: int
   unused_token: int = UNUSED_TOKEN
   post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn()

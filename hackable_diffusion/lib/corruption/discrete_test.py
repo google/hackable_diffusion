@@ -361,6 +361,14 @@ class CategoricalProcessTest(parameterized.TestCase):
       self.assertFalse(is_corrupted_mask[1])
       self.assertFalse(is_corrupted_mask[3])
 
+  def test_repr_does_not_include_invariant_probs(self):
+    process = discrete.CategoricalProcess.uniform_process(
+        schedule=self.schedule, num_categories=self.num_categories
+    )
+    process_repr = repr(process)
+    self.assertNotIn('invariant_probs', process_repr)
+    self.assertIn('num_categories', process_repr)
+
 
 if __name__ == '__main__':
   absltest.main()
