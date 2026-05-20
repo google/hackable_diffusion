@@ -200,5 +200,103 @@ class MLPBlocksTest(parameterized.TestCase):
       self.assertEqual(leaf.shape, expected_shapes[path])
 
 
+class SwiGLUTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    self.key = jax.random.PRNGKey(0)
+    self.batch_size = 4
+    self.is_training = True
+    self.input_dim = 48
+    self.ff_size = 32
+    self.output_size = 48
+    self.seq_len = 17
+    self.x = jnp.ones((self.batch_size, self.input_dim))
+    self.sequence_x = jnp.ones((self.batch_size, self.seq_len, self.input_dim))
+
+  def test_swiglu_output_shape(self):
+    """Tests the output shape of the SwiGLU."""
+    module = mlp_blocks.SwiGLU(
+        hidden_size=self.output_size,
+        ff_size=self.ff_size,
+    )
+    variables = module.init(self.key, self.x, is_training=self.is_training)
+    output = module.apply(variables, self.x, is_training=self.is_training)
+    self.assertEqual(output.shape, (self.batch_size, self.output_size))
+
+  def test_swiglu_sequence_output_shape(self):
+    """Tests the output shape of SwiGLU for sequential input."""
+    module = mlp_blocks.SwiGLU(
+        hidden_size=self.output_size,
+        ff_size=self.ff_size,
+    )
+    variables = module.init(
+        self.key, self.sequence_x, is_training=self.is_training
+    )
+    output = module.apply(
+        variables, self.sequence_x, is_training=self.is_training
+    )
+    self.assertEqual(
+        output.shape, (self.batch_size, self.seq_len, self.output_size)
+    )
+
+  def test_swiglu_zero_init_output(self):
+    """Tests that zero_init_output produces a zero output."""
+    module = mlp_blocks.SwiGLU(
+        hidden_size=self.output_size,
+        ff_size=self.ff_size,
+        zero_init_output=True,
+    )
+    variables = module.init(self.key, self.x, is_training=self.is_training)
+    output = module.apply(variables, self.x, is_training=self.is_training)
+    self.assertTrue(jnp.all(output == 0))
+
+  def test_swiglu_sequence_zero_init_output(self):
+    """Tests zero_init_output produces a zero output for sequential input."""
+    module = mlp_blocks.SwiGLU(
+        hidden_size=self.output_size,
+        ff_size=self.ff_size,
+        zero_init_output=True,
+    )
+    variables = module.init(
+        self.key, self.sequence_x, is_training=self.is_training
+    )
+    output = module.apply(
+        variables, self.sequence_x, is_training=self.is_training
+    )
+    self.assertTrue(jnp.all(output == 0))
+
+  def test_swiglu_variables_shape(self):
+    """Tests SwiGLU variables shape."""
+    module = mlp_blocks.SwiGLU(
+        hidden_size=self.output_size,
+        ff_size=self.ff_size,
+    )
+    variables = module.init(self.key, self.x, is_training=self.is_training)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    expected_variables_shapes = {
+        'params': {
+            'Dense_Up': {
+                'kernel': (self.input_dim, self.ff_size * 2),
+            },
+            'Dense_Down': {
+                'kernel': (self.ff_size, self.output_size),
+            },
+        }
+    }
+    self.assertDictEqual(expected_variables_shapes, variables_shapes)
+
+  def test_swiglu_no_bias(self):
+    """Tests that SwiGLU Dense layers have no bias."""
+    module = mlp_blocks.SwiGLU(
+        hidden_size=self.output_size,
+        ff_size=self.ff_size,
+    )
+    variables = module.init(self.key, self.x, is_training=self.is_training)
+    leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
+    for path in leaves_with_paths:
+      self.assertNotIn('bias', path)
+
+
 if __name__ == '__main__':
   absltest.main()

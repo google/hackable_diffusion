@@ -85,3 +85,70 @@ class MLP(nn.Module):
       output = activation_fn(output)
 
     return output
+
+
+################################################################################
+# MARK: SwiGLU
+################################################################################
+
+
+class SwiGLU(nn.Module):
+  """SwiGLU feed-forward network.
+
+  A gated feed-forward network using SiLU (Swish) activation for the gate,
+  following "GLU Variants Improve Transformer" (Shazeer, 2020):
+  https://arxiv.org/abs/2002.05202
+
+  The forward pass is:
+
+    gate_and_val = x @ W_up           # (*, hidden_size) -> (*, ff_size * 2)
+    val, gate = split(gate_and_val)   # (*, ff_size) each
+    x = val * SiLU(gate)              # (*, ff_size)
+    x = dropout(x)
+    x = x @ W_down                    # (*, ff_size) -> (*, hidden_size)
+
+  Attributes:
+    hidden_size: Output dimension (residual stream width).
+    ff_size: Intermediate dimension (before gating).
+    zero_init_output: If True, the down-projection kernel is initialized to
+      zeros so the block starts as identity.
+    dropout_rate: Dropout rate applied after gating.
+    dtype: Data type for computation.
+  """
+
+  hidden_size: int
+  ff_size: int
+  zero_init_output: bool = False
+  dropout_rate: float = 0.0
+  dtype: DType = jnp.float32
+
+  @nn.compact
+  @kt.typechecked
+  def __call__(
+      self, x: Float['batch *other_dims hidden_size'], *, is_training: bool
+  ) -> Float['batch *other_dims hidden_size']:
+    # Up-projection: (*, hidden_size) -> (*, ff_size * 2).
+    gate_and_val = nn.Dense(
+        features=self.ff_size * 2,
+        use_bias=False,
+        dtype=self.dtype,
+        name='Dense_Up',
+    )(x)
+    # Split into value and gate, apply SiLU gating.
+    val, gate = jnp.split(gate_and_val, 2, axis=-1)
+    x = val * nn.silu(gate)
+    x = nn.Dropout(rate=self.dropout_rate, deterministic=not is_training)(x)
+    # Down-projection: (*, ff_size) -> (*, hidden_size).
+    down_kernel_init = (
+        nn.initializers.zeros_init()
+        if self.zero_init_output
+        else nn.initializers.lecun_normal()
+    )
+    x = nn.Dense(
+        features=self.hidden_size,
+        use_bias=False,
+        dtype=self.dtype,
+        kernel_init=down_kernel_init,
+        name='Dense_Down',
+    )(x)
+    return x
