@@ -504,6 +504,57 @@ class AttentionTest(parameterized.TestCase):
 
     self.assertGreater(max_train_val, max_eval_val)
 
+  # MARK: use_bias tests
+
+  @parameterized.named_parameters(
+      ("with_bias", True),
+      ("no_bias", False),
+  )
+  def test_multi_head_attention_use_bias(self, use_bias):
+    """Verifies that use_bias controls bias in all projections."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        use_bias=use_bias,
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
+
+    bias_paths = [p for p in leaves_with_paths if "bias" in p]
+    if use_bias:
+      # Dense_Q, Dense_K, Dense_V, Dense_Output each have a bias
+      self.assertLen(bias_paths, 4)
+    else:
+      self.assertEmpty(bias_paths)
+
+  def test_multi_head_attention_no_bias_output_shape(self):
+    """Verifies output shape is correct when use_bias=False."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        use_bias=False,
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    output = module.apply(variables, self.x, c=None, is_training=False)
+    self.assertEqual(output.shape, self.x.shape)
+
+  def test_multi_head_attention_no_bias_param_shapes(self):
+    """Verifies parameter shapes when use_bias=False."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        use_bias=False,
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)
+
+    expected = {
+        "params": {
+            "Dense_Q": {"kernel": (self.dim, self.dim)},
+            "Dense_K": {"kernel": (self.dim, self.dim)},
+            "Dense_V": {"kernel": (self.dim, self.dim)},
+            "Dense_Output": {"kernel": (self.dim, self.dim)},
+        }
+    }
+    self.assertDictEqual(expected, variables_shapes)
+
 
 if __name__ == "__main__":
   absltest.main()

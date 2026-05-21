@@ -201,6 +201,7 @@ class MultiHeadAttention(nn.Module):
     use_rope: Whether to use rotary positional embeddings on query and key.
     rope_position_type: The type of rotary positional embeddings to use if
       use_rope is True.
+    use_bias: Whether to use bias in the QKV and output projections.
     zero_init_output: If True, the kernel of the final output projection layer
       is initialized to zeros.
     dropout_rate: The dropout rate for the attention weights.
@@ -212,6 +213,7 @@ class MultiHeadAttention(nn.Module):
   normalize_qk: bool = False
   use_rope: bool = False
   rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
+  use_bias: bool = True
   zero_init_output: bool = False
   dropout_rate: float = 0.0
   dtype: DType = jnp.float32
@@ -275,18 +277,21 @@ class MultiHeadAttention(nn.Module):
 
     q = nn.Dense(
         features=d,
+        use_bias=self.use_bias,
         kernel_init=self.init_q,
         dtype=self.dtype,
         name="Dense_Q",
     )(x)
     k = nn.Dense(
         features=d,
+        use_bias=self.use_bias,
         kernel_init=self.init_k,
         dtype=self.dtype,
         name="Dense_K",
     )(y)
     v = nn.Dense(
         features=d,
+        use_bias=self.use_bias,
         kernel_init=self.init_v,
         dtype=self.dtype,
         name="Dense_V",
@@ -337,6 +342,7 @@ class MultiHeadAttention(nn.Module):
 
     attn_output = nn.Dense(
         features=d,
+        use_bias=self.use_bias,
         kernel_init=self.init_output,
         dtype=self.dtype,
         name="Dense_Output",
