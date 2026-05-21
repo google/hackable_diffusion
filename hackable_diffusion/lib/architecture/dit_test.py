@@ -18,6 +18,7 @@ from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import dit
 from hackable_diffusion.lib.architecture import dit_blocks
+from hackable_diffusion.lib.architecture import normalization
 import jax
 import jax.numpy as jnp
 
@@ -27,6 +28,8 @@ from absl.testing import parameterized
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
+
+NormalizationType = arch_typing.NormalizationType
 
 
 ################################################################################
@@ -55,8 +58,14 @@ class DiTTest(parameterized.TestCase):
     x = jnp.ones(input_shape)
     model = dit.DiT(
         num_blocks=2,
-        block=dit_blocks.DiTBlockAdaLNZero(
-            hidden_size=self.embedding_dim, num_heads=4
+        block=dit_blocks.DiTBlock(
+            hidden_size=self.embedding_dim,
+            num_heads=4,
+            norm_factory=normalization.NormalizationLayerFactory(
+                normalization_method=NormalizationType.RMS_NORM,
+                use_conditional_shift=False,
+            ),
+            use_gates=False,
         ),
         encoder=dit_blocks.Patchify(
             patch_size=self.patch_size, embedding_dim=self.embedding_dim
@@ -90,14 +99,24 @@ class DiTTest(parameterized.TestCase):
     x = jnp.ones(input_shape)
     model = dit.DiT(
         num_blocks=2,
-        block=dit_blocks.DiTBlockAdaLNZero(
-            hidden_size=self.embedding_dim, num_heads=4
+        block=dit_blocks.DiTBlock(
+            hidden_size=self.embedding_dim,
+            num_heads=4,
+            norm_factory=normalization.NormalizationLayerFactory(
+                normalization_method=NormalizationType.LAYER_NORM,
+                use_bias=False,
+                use_scale=False,
+            ),
+            use_gates=True,
+            ffn_type='dense',
+            mlp_ratio=4.0,
         ),
         encoder=dit_blocks.Patchify(
             patch_size=self.patch_size, embedding_dim=self.embedding_dim
         ),
         decoder=dit_blocks.DePatchify(
-            patch_size=self.patch_size, output_shape=data_shape
+            patch_size=self.patch_size,
+            output_shape=data_shape,
         ),
         absolute_posenc=dit_blocks.PositionalEmbedding(),
     )
@@ -131,14 +150,12 @@ class DiTTest(parameterized.TestCase):
                 'bias': (self.embedding_dim * 2,),
             },
         },
-        'MLP': {
-            'Dense_Hidden_0': {
+        'ffn': {
+            'Dense_Up': {
                 'kernel': (self.embedding_dim, mlp_hidden),
-                'bias': (mlp_hidden,),
             },
-            'Dense_Output': {
+            'Dense_Down': {
                 'kernel': (mlp_hidden, self.embedding_dim),
-                'bias': (self.embedding_dim,),
             },
         },
         'ConditionalNorm_MLP': {
@@ -195,12 +212,6 @@ class DiTTest(parameterized.TestCase):
                 },
             },
             'decoder': {
-                'ConditionalNorm': {
-                    'Dense_0': {
-                        'kernel': (self.cond_dim, self.embedding_dim * 2),
-                        'bias': (self.embedding_dim * 2,),
-                    },
-                },
                 'Dense_Out': {
                     'kernel': (
                         self.embedding_dim,
@@ -223,8 +234,14 @@ class DiTTest(parameterized.TestCase):
     }
     model = dit.DiT(
         num_blocks=2,
-        block=dit_blocks.DiTBlockAdaLNZero(
-            hidden_size=self.embedding_dim, num_heads=4
+        block=dit_blocks.DiTBlock(
+            hidden_size=self.embedding_dim,
+            num_heads=4,
+            norm_factory=normalization.NormalizationLayerFactory(
+                normalization_method=NormalizationType.RMS_NORM,
+                use_conditional_shift=False,
+            ),
+            use_gates=False,
         ),
     )
     variables = model.init(
@@ -247,8 +264,14 @@ class DiTTest(parameterized.TestCase):
 
     model = dit.DiT(
         num_blocks=1,
-        block=dit_blocks.DiTBlockAdaLNZero(
-            hidden_size=self.embedding_dim, num_heads=4
+        block=dit_blocks.DiTBlock(
+            hidden_size=self.embedding_dim,
+            num_heads=4,
+            norm_factory=normalization.NormalizationLayerFactory(
+                normalization_method=NormalizationType.RMS_NORM,
+                use_conditional_shift=False,
+            ),
+            use_gates=False,
         ),
     )
     with self.assertRaises(

@@ -14,6 +14,8 @@
 
 """DiT building blocks."""
 
+from typing import Any, Literal  # pylint: disable=unused-import
+import dataclasses
 import einops
 from flax import linen as nn
 from hackable_diffusion.lib import hd_typing
@@ -33,9 +35,7 @@ Float = hd_typing.Float
 Bool = hd_typing.Bool
 Num = hd_typing.Num
 
-NormalizationLayer = normalization.NormalizationLayer
 RoPEPositionType = arch_typing.RoPEPositionType
-NormalizationType = arch_typing.NormalizationType
 INVALID_INT = arch_typing.INVALID_INT
 
 
@@ -64,130 +64,269 @@ class PositionalEmbedding(nn.Module):
 
 
 ################################################################################
-# MARK: DiTBlockAdaLNZero
+# MARK: DiTBlock
 ################################################################################
 
 
-class DiTBlockAdaLNZero(nn.Module):
-  """A DiT block with a single unified adaLN-Zero projection.
+class DiTBlock(nn.Module):
+  """A DiT transformer block with configurable adaptive normalization.
+
+  The conditioning behavior is fully determined by three inputs:
+
+  - `norm_factory`: A `NormalizationLayerFactory` that configures the base
+    normalization method (e.g. RMSNorm, LayerNorm) and the conditioning style
+    (scale-only vs scale+shift).
+  - `use_gates`: Whether to apply zero-init gates on residual branches.
+  - `zero_init_output`: Whether to zero-init output projections in attention
+    and FFN. Required to be True for identity-at-init when `use_gates=False`.
+
+  Common configurations:
+
+  - **Flux** (https://github.com/black-forest-labs/flux):
+
+      norm_factory = NormalizationLayerFactory(
+          normalization_method='rms_norm',
+          use_conditional_shift=False,
+      )
+      use_gates = False
+      zero_init_output = True
+
+  - **SD3 / MMDiT** (https://arxiv.org/abs/2403.03206):
+
+      norm_factory = NormalizationLayerFactory(
+          normalization_method='rms_norm',
+          use_scale=False,
+          use_conditional_shift=True,
+      )
+      use_gates = True
+      zero_init_output = False
+
+  - **Original DiT** (https://arxiv.org/abs/2212.09748):
+
+      norm_factory = NormalizationLayerFactory(
+          normalization_method='layer_norm',
+          use_bias=False,
+          use_scale=False,
+          use_conditional_shift=True,
+      )
+      use_gates = True
+      zero_init_output = False
+
+  Identity-at-init: each residual branch computes `x + branch(x)`. At init,
+  the branch output must be zero so that the block acts as identity. This is
+  achieved in one of two ways:
+
+  - When `use_gates=True`: gates are zero-initialized, so
+    `gate * branch(x) = 0` regardless of `branch(x)`.
+  - When `use_gates=False`: the output projections in attention and FFN are
+    zero-initialized (`zero_init_output=True`), so `branch(x) = 0` directly.
 
   Attributes:
     hidden_size: The hidden size of the block.
     num_heads: The number of attention heads.
     head_dim: The dimension of each attention head.
+    norm_factory: Factory for creating conditional normalization layers.
+    use_gates: Whether to use zero-init gates on residual branches.
+    ffn_type: Feed-forward network type. 'swiglu' uses a gated SwiGLU FFN,
+      'dense' uses a standard Dense layer.
+    ffn_use_bias: Whether to use bias in the FFN. Modern DiT architectures tend
+      to avoid bias in the FFN.
+    ffn_activation: Activation function for the FFN.
     mlp_ratio: The ratio of the MLP hidden dimension to the hidden size.
     use_rope: Whether to use RoPE.
+    dropout_rate: The dropout rate.
     rope_position_type: The position type of RoPE.
+    zero_init_output: Whether to zero-init output projections in attention and
+      FFN. Required to be True for identity-at-init when `use_gates=False`.
     dtype: The dtype of the block.
   """
 
   hidden_size: int
+  norm_factory: normalization.NormalizationLayerFactory
   num_heads: int = INVALID_INT
   head_dim: int = INVALID_INT
+  use_gates: bool = True
+  ffn_type: mlp_blocks.FFNType = 'swiglu'
+  ffn_use_bias: bool = False
+  ffn_activation: str = 'gelu'
   mlp_ratio: float = 4.0
   use_rope: bool = False
   dropout_rate: float = 0.0
   rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
+  zero_init_output: bool = True
   dtype: DType = jnp.float32
 
   def setup(self):
     if not self.mlp_ratio > 0:
-      raise ValueError("MLP ratio must be positive.")
+      raise ValueError('MLP ratio must be positive.')
     mlp_hidden_dim = int(self.hidden_size * self.mlp_ratio)
     if not mlp_hidden_dim > 0:
-      raise ValueError("MLP hidden dimension must be positive.")
+      raise ValueError('MLP hidden dimension must be positive.')
 
-    self.mlp = mlp_blocks.MLP(
-        hidden_sizes=[mlp_hidden_dim],
+    if not self.use_gates and not self.zero_init_output:
+      raise ValueError(
+          'zero_init_output must be True when use_gates is False to ensure'
+          ' identity-at-init.'
+      )
+
+    # FFN
+    self.ffn = mlp_blocks.FeedForward(
         output_size=self.hidden_size,
-        activation="gelu",
-        activate_final=False,
-        zero_init_output=False,
+        hidden_size=mlp_hidden_dim,
+        ffn_type=self.ffn_type,
+        zero_init_output=self.zero_init_output,
+        dropout_rate=self.dropout_rate,
         dtype=self.dtype,
-        name="MLP",
+        activation=self.ffn_activation,
+        use_bias=self.ffn_use_bias,
     )
+    # Attention
     self.attn = attention.MultiHeadAttention(
         num_heads=self.num_heads,
         head_dim=self.head_dim,
         use_rope=self.use_rope,
         rope_position_type=self.rope_position_type,
-        zero_init_output=False,
+        zero_init_output=self.zero_init_output,
         dtype=self.dtype,
         normalize_qk=True,
+        dropout_rate=self.dropout_rate,
     )
-    self.gate_msa = nn.Dense(
-        self.hidden_size,
-        kernel_init=nn.initializers.zeros_init(),
-        bias_init=nn.initializers.zeros_init(),
-        name="Dense_Gate_MSA",
+
+    # Adaptive normalization.
+    self.conditional_norm_attn = self.norm_factory.conditional_norm(
+        norm_name='ConditionalNorm_Attention'
     )
-    self.gate_mlp = nn.Dense(
-        self.hidden_size,
-        kernel_init=nn.initializers.zeros_init(),
-        bias_init=nn.initializers.zeros_init(),
-        name="Dense_Gate_MLP",
+    self.conditional_norm_mlp = self.norm_factory.conditional_norm(
+        norm_name='ConditionalNorm_MLP'
     )
-    self.conditional_norm_attn = normalization.NormalizationLayerFactory(
-        normalization_method=NormalizationType.LAYER_NORM,
-        dtype=self.dtype,
-        use_bias=False,
-        use_scale=False,
-    ).conditional_norm(norm_name="ConditionalNorm_Attention")
-    self.conditional_norm_mlp = normalization.NormalizationLayerFactory(
-        normalization_method=NormalizationType.LAYER_NORM,
-        dtype=self.dtype,
-        use_bias=False,
-        use_scale=False,
-    ).conditional_norm(norm_name="ConditionalNorm_MLP")
+
+    # Gates.
+    if self.use_gates:
+      self.gate_msa = nn.Dense(
+          self.hidden_size,
+          kernel_init=nn.initializers.zeros_init(),
+          bias_init=nn.initializers.zeros_init(),
+          name='Dense_Gate_MSA',
+      )
+      self.gate_mlp = nn.Dense(
+          self.hidden_size,
+          kernel_init=nn.initializers.zeros_init(),
+          bias_init=nn.initializers.zeros_init(),
+          name='Dense_Gate_MLP',
+      )
 
   @kt.typechecked
   @nn.compact
   def __call__(
       self,
-      x: Float["*batch seq_dim emb_dim"],
-      cond: Float["*#batch cond_dim"],
+      x: Float['*batch seq_dim emb_dim'],
+      cond: Float['*#batch cond_dim'],
       *,
       is_training: bool,
-      mask: Bool["batch seq_dim"] | None = None,
-  ) -> Float["*batch seq_dim emb_dim"]:
+      mask: Bool['batch seq_dim'] | None = None,
+  ) -> Float['*batch seq_dim emb_dim']:
     """Calls the DiT block.
 
     Args:
       x: The input tensor.
       cond: The conditioning tensor.
       is_training: Whether the block is in training mode.
-      mask: The self-attention padding mask. If the mask is provided, it is
-        assumed that the input sequence contains padding tokens that should be
-        masked out when computing the self-attention.
+      mask: The self-attention padding mask.
 
     Returns:
       The output tensor.
     """
+    cond_activated = nn.silu(cond)
+    use_gates = self.use_gates
 
-    # Attention Branch
-    x_attn_modulated = self.conditional_norm_attn(x, c=nn.silu(cond))
-    attn_out = self.attn(x_attn_modulated, c=None, mask=mask)
-    # Optional dropout
-    if self.dropout_rate > 0.0:
-      attn_out = nn.Dropout(rate=self.dropout_rate)(
-          attn_out, deterministic=not is_training
-      )
-    gate_msa = self.gate_msa(nn.silu(cond))
-    # Add a sequence dimension [...,None,:] to broadcast to [*batch,seq,dim].
-    x = x + gate_msa[..., None, :] * attn_out
+    # Attention Branch.
+    x_normed = self.conditional_norm_attn(x, c=cond_activated)
+    attn_out = self.attn(x_normed, c=None, mask=mask, is_training=is_training)
+    if use_gates:
+      gate_msa = self.gate_msa(cond_activated)
+      attn_out = gate_msa[..., None, :] * attn_out
+    x = x + attn_out
 
-    # MLP Branch
-    x_mlp_modulated = self.conditional_norm_mlp(x, c=nn.silu(cond))
-    mlp_out = self.mlp(x_mlp_modulated, is_training=is_training)
-    # Optional dropout
-    if self.dropout_rate > 0.0:
-      mlp_out = nn.Dropout(rate=self.dropout_rate)(
-          mlp_out, deterministic=not is_training
-      )
-    gate_mlp = self.gate_mlp(nn.silu(cond))
-    # Add a sequence dimension [...,None,:] to broadcast to [*batch,seq,dim].
-    x = x + gate_mlp[..., None, :] * mlp_out
+    # MLP Branch.
+    x_normed = self.conditional_norm_mlp(x, c=cond_activated)
+    mlp_out = self.ffn(x_normed, is_training=is_training)
+    if use_gates:
+      gate_mlp = self.gate_mlp(cond_activated)
+      mlp_out = gate_mlp[..., None, :] * mlp_out
+    x = x + mlp_out
+
     return x
+
+
+################################################################################
+# MARK: Custom DiT Blocks
+################################################################################
+
+
+class DiTBlockFlux(DiTBlock):
+  """FLUX DiTBlock.
+
+  Based on https://github.com/black-forest-labs/flux. It uses RMSNorm and
+  zero-init output projections in attention and FFN to ensure identity-at-init.
+  """
+
+  norm_factory: normalization.NormalizationLayerFactory = dataclasses.field(
+      init=False
+  )
+  use_gates: bool = dataclasses.field(init=False, default=False)
+  zero_init_output: bool = dataclasses.field(init=False, default=True)
+
+  def __post_init__(self):
+    self.norm_factory = normalization.NormalizationLayerFactory(
+        normalization_method=arch_typing.NormalizationType.RMS_NORM,
+        use_conditional_shift=False,
+    )
+    super().__post_init__()
+
+
+class DiTBlockSD3(DiTBlock):
+  """SD3 / MMDiT DiTBlock.
+
+  Based on https://arxiv.org/abs/2403.03206. It uses RMSNorm with scale-only
+  adaptive conditioning and zero-init gates on residual branches.
+  """
+
+  norm_factory: normalization.NormalizationLayerFactory = dataclasses.field(
+      init=False
+  )
+  use_gates: bool = dataclasses.field(init=False, default=True)
+  zero_init_output: bool = dataclasses.field(init=False, default=False)
+
+  def __post_init__(self):
+    self.norm_factory = normalization.NormalizationLayerFactory(
+        normalization_method=arch_typing.NormalizationType.RMS_NORM,
+        use_scale=False,
+        use_conditional_shift=True,
+    )
+    super().__post_init__()
+
+
+class DiTBlockAdaLNZero(DiTBlock):
+  """Original DiTBlock.
+
+  Based on https://arxiv.org/abs/2212.09748. It uses LayerNorm with scale and
+  shift adaptive conditioning and zero-init gates on residual branches.
+  """
+
+  norm_factory: normalization.NormalizationLayerFactory = dataclasses.field(
+      init=False
+  )
+  use_gates: bool = dataclasses.field(init=False, default=True)
+  zero_init_output: bool = dataclasses.field(init=False, default=False)
+
+  def __post_init__(self):
+    self.norm_factory = normalization.NormalizationLayerFactory(
+        normalization_method=arch_typing.NormalizationType.LAYER_NORM,
+        use_bias=False,
+        use_scale=False,
+        use_conditional_shift=True,
+    )
+    super().__post_init__()
 
 
 ################################################################################
@@ -246,6 +385,9 @@ class DePatchify(nn.Module):
   to a sequence of patches. Then reshapes the sequence of patches to the
   original image shape.
 
+  This module is a pure linear projection + reshape. Normalization should be
+  applied before calling this module (e.g. in the DiT backbone).
+
   Attributes:
     patch_size: The size of the patches.
     output_shape: The shape of the output.
@@ -255,28 +397,23 @@ class DePatchify(nn.Module):
   output_shape: tuple[int, int, int]
   dtype: DType = jnp.float32
 
-  def setup(self):
-    self.conditional_norm = normalization.NormalizationLayerFactory(
-        normalization_method=NormalizationType.LAYER_NORM,
-        dtype=self.dtype,
-        use_bias=False,
-        use_scale=False,
-    ).conditional_norm()
-
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float["*batch seq_dim emb_dim"], cond: Float["*#batch cond_dim"]
-  ) -> Float["*batch height width channels"]:
+      self,
+      x: Float['*batch seq_dim emb_dim'],
+      cond: Float['*#batch cond_dim'] | None = None,
+  ) -> Float['*batch height width channels']:
+    del cond  # Unused.
     h, w, c = self.output_shape
     hp, wp = self.patch_size
     hn = h // hp
     wn = w // wp
 
-    x = self.conditional_norm(x, c=nn.silu(cond))
     x = nn.Dense(
         features=hp * wp * c,
-        name="Dense_Out",
+        name='Dense_Out',
+        dtype=self.dtype,
     )(x)
 
     return einops.rearrange(

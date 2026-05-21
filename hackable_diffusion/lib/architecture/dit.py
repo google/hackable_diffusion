@@ -18,7 +18,7 @@ from flax import linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import arch_typing
-from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import dit_blocks
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 
@@ -40,8 +40,6 @@ DataArray = hd_typing.DataArray
 
 ConditionalBackbone = arch_typing.ConditionalBackbone
 
-NormalizationType = arch_typing.NormalizationType
-
 ################################################################################
 # MARK: DiT
 ################################################################################
@@ -52,13 +50,11 @@ class DiT(nn.Module, ConditionalBackbone):
 
   A Diffusion Transformer backbone based on https://arxiv.org/abs/2212.09748.
 
-  Uses adaptive layer norm zero (adaLN-Zero) conditioning mechanism.
-  The architecture consists of repeated DiT blocks with optional encoder/decoder
-  and absolute positional encoding.
+  The conditioning type is determined by the block's `norm_factory`.
 
   Attributes:
     num_blocks: Number of DiT blocks.
-    block: A DiT block module (e.g., DiTBlockAdaLNZero).
+    block: A DiTBlock module.
     encoder: Optional encoder module (e.g., Patchify for image inputs).
     decoder: Optional decoder module (e.g., DePatchify for image outputs).
     absolute_posenc: Optional absolute positional encoding module.
@@ -75,7 +71,7 @@ class DiT(nn.Module, ConditionalBackbone):
 
   num_blocks: int
 
-  block: nn.Module
+  block: dit_blocks.DiTBlock
 
   encoder: nn.Module | None = None
   decoder: nn.Module | None = None
@@ -88,12 +84,7 @@ class DiT(nn.Module, ConditionalBackbone):
   use_padding_mask: bool = False
 
   def setup(self):
-    self.conditional_norm = normalization.NormalizationLayerFactory(
-        normalization_method=NormalizationType.LAYER_NORM,
-        dtype=self.dtype,
-        use_bias=False,
-        use_scale=False,
-    ).conditional_norm()
+    self.conditional_norm = self.block.norm_factory.conditional_norm()
 
   @kt.typechecked
   @nn.compact
@@ -129,6 +120,7 @@ class DiT(nn.Module, ConditionalBackbone):
           tokens_emb, cond, is_training=is_training, mask=padding_mask
       )
 
+    # Apply final adaptive norm.
     tokens_emb = self.conditional_norm(tokens_emb, c=nn.silu(cond))
 
     # Decode the tokens to the output.

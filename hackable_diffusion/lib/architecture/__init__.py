@@ -41,7 +41,10 @@ from hackable_diffusion.lib.architecture.discrete import DenseProjector
 from hackable_diffusion.lib.architecture.discrete import TokenEmbedder
 from hackable_diffusion.lib.architecture.dit import DiT
 from hackable_diffusion.lib.architecture.dit_blocks import DePatchify
+from hackable_diffusion.lib.architecture.dit_blocks import DiTBlock
 from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockAdaLNZero
+from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockFlux
+from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockSD3
 from hackable_diffusion.lib.architecture.dit_blocks import Patchify
 from hackable_diffusion.lib.architecture.mlp import ConditionalMLP
 from hackable_diffusion.lib.architecture.mlp_blocks import MLP
