@@ -14,7 +14,7 @@
 
 """MLP blocks."""
 
-from typing import Sequence
+from typing import Literal, Sequence
 from flax import linen as nn
 from hackable_diffusion.lib import hd_typing
 import jax.numpy as jnp
@@ -26,6 +26,7 @@ import kauldron.ktyping as kt
 
 DType = hd_typing.DType
 Float = hd_typing.Float
+FFNType = Literal["dense", "swiglu"]
 
 ################################################################################
 # MARK: MLP
@@ -88,67 +89,128 @@ class MLP(nn.Module):
 
 
 ################################################################################
-# MARK: SwiGLU
+# MARK: GatingSwiGLU
 ################################################################################
 
 
-class SwiGLU(nn.Module):
-  """SwiGLU feed-forward network.
+class GatingSwiGLU(nn.Module):
+  """A Dense layer variant that outputs SwiGLU gating directly.
 
   A gated feed-forward network using SiLU (Swish) activation for the gate,
   following "GLU Variants Improve Transformer" (Shazeer, 2020):
   https://arxiv.org/abs/2002.05202
 
-  The forward pass is:
-
-    gate_and_val = x @ W_up           # (*, hidden_size) -> (*, ff_size * 2)
-    val, gate = split(gate_and_val)   # (*, ff_size) each
-    x = val * SiLU(gate)              # (*, ff_size)
-    x = dropout(x)
-    x = x @ W_down                    # (*, ff_size) -> (*, hidden_size)
-
-  Attributes:
-    hidden_size: Output dimension (residual stream width).
-    ff_size: Intermediate dimension (before gating).
-    zero_init_output: If True, the down-projection kernel is initialized to
-      zeros so the block starts as identity.
-    dropout_rate: Dropout rate applied after gating.
-    dtype: Data type for computation.
+  Projects the input dimension to features * 2, chunks the result across the
+  last dimension, and gates the activation channel with SiLU.
   """
 
-  hidden_size: int
-  ff_size: int
-  zero_init_output: bool = False
-  dropout_rate: float = 0.0
+  features: int
+  use_bias: bool = False
   dtype: DType = jnp.float32
 
   @nn.compact
   @kt.typechecked
-  def __call__(
-      self, x: Float['batch *other_dims hidden_size'], *, is_training: bool
-  ) -> Float['batch *other_dims hidden_size']:
-    # Up-projection: (*, hidden_size) -> (*, ff_size * 2).
+  def __call__(self, x: Float["*batch d_in"]) -> Float["*batch features"]:
+    # Project to double feature width
     gate_and_val = nn.Dense(
-        features=self.ff_size * 2,
-        use_bias=False,
+        features=self.features * 2,
+        use_bias=self.use_bias,
         dtype=self.dtype,
-        name='Dense_Up',
+        name="Dense_Gate_Val",
     )(x)
-    # Split into value and gate, apply SiLU gating.
+
+    # Split and apply SiLU gating (mirrors torch.chunk(2, dim=-1))
     val, gate = jnp.split(gate_and_val, 2, axis=-1)
-    x = val * nn.silu(gate)
-    x = nn.Dropout(rate=self.dropout_rate, deterministic=not is_training)(x)
-    # Down-projection: (*, ff_size) -> (*, hidden_size).
+    return val * nn.silu(gate)
+
+
+################################################################################
+# MARK: FeedForward Unified Block
+################################################################################
+
+
+class FeedForward(nn.Module):
+  """A unified FeedForward block selecting between SwiGLU or traditional layers.
+
+  Attributes:
+    output_size: Output dimension (residual stream width).
+    hidden_size: Intermediate bottleneck network dimension.
+    ffn_type: Layout type toggle. - 'swiglu' uses a gated SwiGLU projection
+      layer. - 'dense' uses a classic dense projection followed by an
+      activation.
+    activation: Name of the activation function to use when `ffn_type='dense'`.
+      This parameter is explicitly ignored when `ffn_type='swiglu'` because the
+      SwiGLU path uses its own mathematical gating mechanism (SiLU/Swish).
+    use_bias: Whether to use bias in the up and down projection layers. Modern
+      architectures (LLaMA, Flux) typically set this to False.
+    zero_init_output: If True, the terminal linear projections are zeroed out
+      ensuring the block satisfies identity-at-init behavior.
+    dropout_rate: Activation state dropout regularization coefficient.
+    dtype: Numerical precision layout representation format.
+  """
+
+  output_size: int
+  hidden_size: int
+  ffn_type: FFNType = "dense"
+  activation: str = "gelu"
+  use_bias: bool = False
+  zero_init_output: bool = False
+  dropout_rate: float = 0.0
+  dtype: DType = jnp.float32
+
+  def setup(self):
+    # Regularization Dropout Layer
+    self.dropout = nn.Dropout(rate=self.dropout_rate)
+
+    # Down Projection Layer Config
     down_kernel_init = (
         nn.initializers.zeros_init()
         if self.zero_init_output
         else nn.initializers.lecun_normal()
     )
-    x = nn.Dense(
-        features=self.hidden_size,
-        use_bias=False,
-        dtype=self.dtype,
+
+    self.down_proj = nn.Dense(
+        features=self.output_size,
+        use_bias=self.use_bias,
         kernel_init=down_kernel_init,
-        name='Dense_Down',
-    )(x)
+        dtype=self.dtype,
+        name="Dense_Down",
+    )
+
+  @nn.compact
+  @kt.typechecked
+  def __call__(
+      self, x: Float["batch *other_dims output_size"], *, is_training: bool
+  ) -> Float["batch *other_dims output_size"]:
+    # Up-projection step
+    if self.ffn_type == "swiglu":
+      # Project to double feature width
+      gate_and_val = nn.Dense(
+          features=self.hidden_size * 2,
+          use_bias=self.use_bias,
+          dtype=self.dtype,
+          name="Dense_Up",
+      )(x)
+      # Split and apply SiLU gating
+      val, gate = jnp.split(gate_and_val, 2, axis=-1)
+      x = val * nn.silu(gate)
+    elif self.ffn_type == "dense":
+      x = nn.Dense(
+          features=self.hidden_size,
+          use_bias=self.use_bias,
+          dtype=self.dtype,
+          name="Dense_Up",
+      )(x)
+      # Apply the configured activation function
+      activation_fn = getattr(nn, self.activation)
+      x = activation_fn(x)
+    else:
+      raise ValueError(f"Unknown ffn_type mapping strategy: {self.ffn_type!r}")
+
+    # Middle regularization step
+    x = self.dropout(x, deterministic=not is_training)
+
+    # Final down-projection step
+    x = self.down_proj(x)
+
     return x

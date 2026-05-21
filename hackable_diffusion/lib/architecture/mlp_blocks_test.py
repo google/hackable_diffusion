@@ -200,102 +200,226 @@ class MLPBlocksTest(parameterized.TestCase):
       self.assertEqual(leaf.shape, expected_shapes[path])
 
 
-class SwiGLUTest(parameterized.TestCase):
+class GatingSwiGLUTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
     self.key = jax.random.PRNGKey(0)
     self.batch_size = 4
-    self.is_training = True
     self.input_dim = 48
-    self.ff_size = 32
-    self.output_size = 48
-    self.seq_len = 17
+    self.features = 32
     self.x = jnp.ones((self.batch_size, self.input_dim))
-    self.sequence_x = jnp.ones((self.batch_size, self.seq_len, self.input_dim))
 
-  def test_swiglu_output_shape(self):
-    """Tests the output shape of the SwiGLU."""
-    module = mlp_blocks.SwiGLU(
-        hidden_size=self.output_size,
-        ff_size=self.ff_size,
-    )
-    variables = module.init(self.key, self.x, is_training=self.is_training)
-    output = module.apply(variables, self.x, is_training=self.is_training)
-    self.assertEqual(output.shape, (self.batch_size, self.output_size))
+  def test_linear_swiglu_output_shape(self):
+    """Tests the output shape of GatingSwiGLU sub-layer."""
+    module = mlp_blocks.GatingSwiGLU(features=self.features)
+    variables = module.init(self.key, self.x)
+    output = module.apply(variables, self.x)
+    self.assertEqual(output.shape, (self.batch_size, self.features))
 
-  def test_swiglu_sequence_output_shape(self):
-    """Tests the output shape of SwiGLU for sequential input."""
-    module = mlp_blocks.SwiGLU(
-        hidden_size=self.output_size,
-        ff_size=self.ff_size,
-    )
-    variables = module.init(
-        self.key, self.sequence_x, is_training=self.is_training
-    )
-    output = module.apply(
-        variables, self.sequence_x, is_training=self.is_training
-    )
-    self.assertEqual(
-        output.shape, (self.batch_size, self.seq_len, self.output_size)
-    )
-
-  def test_swiglu_zero_init_output(self):
-    """Tests that zero_init_output produces a zero output."""
-    module = mlp_blocks.SwiGLU(
-        hidden_size=self.output_size,
-        ff_size=self.ff_size,
-        zero_init_output=True,
-    )
-    variables = module.init(self.key, self.x, is_training=self.is_training)
-    output = module.apply(variables, self.x, is_training=self.is_training)
-    self.assertTrue(jnp.all(output == 0))
-
-  def test_swiglu_sequence_zero_init_output(self):
-    """Tests zero_init_output produces a zero output for sequential input."""
-    module = mlp_blocks.SwiGLU(
-        hidden_size=self.output_size,
-        ff_size=self.ff_size,
-        zero_init_output=True,
-    )
-    variables = module.init(
-        self.key, self.sequence_x, is_training=self.is_training
-    )
-    output = module.apply(
-        variables, self.sequence_x, is_training=self.is_training
-    )
-    self.assertTrue(jnp.all(output == 0))
-
-  def test_swiglu_variables_shape(self):
-    """Tests SwiGLU variables shape."""
-    module = mlp_blocks.SwiGLU(
-        hidden_size=self.output_size,
-        ff_size=self.ff_size,
-    )
-    variables = module.init(self.key, self.x, is_training=self.is_training)
+  def test_linear_swiglu_variables_shape(self):
+    """Tests GatingSwiGLU parameter tree tracking configurations."""
+    module = mlp_blocks.GatingSwiGLU(features=self.features, use_bias=False)
+    variables = module.init(self.key, self.x)
     variables_shapes = test_helpers.get_pytree_shapes(variables)
     expected_variables_shapes = {
         'params': {
-            'Dense_Up': {
-                'kernel': (self.input_dim, self.ff_size * 2),
-            },
-            'Dense_Down': {
-                'kernel': (self.ff_size, self.output_size),
-            },
+            'Dense_Gate_Val': {
+                'kernel': (self.input_dim, self.features * 2),
+            }
         }
     }
     self.assertDictEqual(expected_variables_shapes, variables_shapes)
 
-  def test_swiglu_no_bias(self):
-    """Tests that SwiGLU Dense layers have no bias."""
-    module = mlp_blocks.SwiGLU(
-        hidden_size=self.output_size,
-        ff_size=self.ff_size,
+
+class FeedForwardTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    self.key = jax.random.PRNGKey(0)
+    self.batch_size = 4
+    self.output_size = 48
+    self.hidden_size = 64
+    self.seq_len = 17
+    self.x = jnp.ones((self.batch_size, self.output_size))
+    self.sequence_x = jnp.ones(
+        (self.batch_size, self.seq_len, self.output_size)
     )
-    variables = module.init(self.key, self.x, is_training=self.is_training)
+
+  @parameterized.named_parameters(
+      ('swiglu_mode', 'swiglu', 'gelu'),  # activation is ignored
+      ('dense_mode_gelu', 'dense', 'gelu'),
+      ('dense_mode_silu', 'dense', 'silu'),
+  )
+  def test_feedforward_output_shapes(
+      self, ffn_type: mlp_blocks.FFNType, activation: str
+  ):
+    """Tests the flat and sequential output shapes across architectures."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        ffn_type=ffn_type,
+        activation=activation,
+    )
+
+    # Flat Input
+    variables = module.init(self.key, self.x, is_training=True)
+    output = module.apply(variables, self.x, is_training=True)
+    self.assertEqual(output.shape, (self.batch_size, self.output_size))
+
+    # Sequential Input
+    output_seq = module.apply(variables, self.sequence_x, is_training=True)
+    self.assertEqual(
+        output_seq.shape, (self.batch_size, self.seq_len, self.output_size)
+    )
+
+  @parameterized.named_parameters(
+      ('swiglu_mode', 'swiglu'),
+      ('dense_mode', 'dense'),
+  )
+  def test_feedforward_zero_init_output(self, ffn_type: mlp_blocks.FFNType):
+    """Verifies that terminal weight projections respect zero initialization."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        ffn_type=ffn_type,
+        zero_init_output=True,
+    )
+    variables = module.init(self.key, self.x, is_training=True)
+    output = module.apply(variables, self.x, is_training=True)
+    self.assertTrue(jnp.all(output == 0))
+
+  def test_feedforward_swiglu_parameter_structure(self):
+    """Ensures SwiGLU pipelines decouple biases on projection maps."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        ffn_type='swiglu',
+    )
+    variables = module.init(self.key, self.x, is_training=True)
     leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
+
+    # Assert true SwiGLU implementation contains no biases anywhere
     for path in leaves_with_paths:
       self.assertNotIn('bias', path)
+
+    variables_shapes = test_helpers.get_pytree_shapes(variables)
+
+    # Updated to match the flattened inline footprint precisely
+    expected_shapes = {
+        'params': {
+            'Dense_Up': {
+                'kernel': (self.output_size, self.hidden_size * 2),
+            },
+            'Dense_Down': {
+                'kernel': (self.hidden_size, self.output_size),
+            },
+        }
+    }
+    self.assertDictEqual(expected_shapes, variables_shapes)
+
+  def test_feedforward_dense_parameter_structure(self):
+    """Ensures dense layout has no biases by default (use_bias=False)."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        ffn_type='dense',
+    )
+    variables = module.init(self.key, self.x, is_training=True)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    expected_shapes = {
+        'params': {
+            'Dense_Up': {
+                'kernel': (self.output_size, self.hidden_size),
+            },
+            'Dense_Down': {
+                'kernel': (self.hidden_size, self.output_size),
+            },
+        }
+    }
+    self.assertDictEqual(expected_shapes, variables_shapes)
+
+  @parameterized.named_parameters(
+      ('swiglu_with_bias', 'swiglu'),
+      ('dense_with_bias', 'dense'),
+  )
+  def test_feedforward_use_bias_true(self, ffn_type: mlp_blocks.FFNType):
+    """Ensures use_bias=True adds bias to both up and down projections."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        ffn_type=ffn_type,
+        use_bias=True,
+    )
+    variables = module.init(self.key, self.x, is_training=True)
+    leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
+
+    # Both Dense_Up and Dense_Down should have bias
+    bias_paths = [p for p in leaves_with_paths if 'bias' in p]
+    self.assertLen(bias_paths, 2)
+
+  def test_feedforward_dropout_handling(self):
+    """Verifies internal regularization scales states deterministically."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        dropout_rate=0.5,
+    )
+    rng1, rng2, rng_drop = jax.random.split(self.key, 3)
+    x_rand = jax.random.normal(rng1, (self.batch_size, self.output_size))
+
+    variables = module.init(rng2, x_rand, is_training=False)
+
+    # Eval mode should be identical
+    out_eval_1 = module.apply(variables, x_rand, is_training=False)
+    out_eval_2 = module.apply(variables, x_rand, is_training=False)
+    np.testing.assert_allclose(out_eval_1, out_eval_2, atol=1e-6)
+
+    # Train mode activation scaling (with .item() wrapping)
+    out_train = module.apply(
+        variables, x_rand, is_training=True, rngs={'dropout': rng_drop}
+    )
+
+    max_train_val = jnp.max(jnp.abs(out_train))
+    max_eval_val = jnp.max(jnp.abs(out_eval_1))
+
+    self.assertGreater(
+        float(max_train_val.item()),
+        float(max_eval_val.item()),
+    )
+
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='swiglu_float32', ffn_type='swiglu', dtype=jnp.float32
+      ),
+      dict(
+          testcase_name='swiglu_bfloat16', ffn_type='swiglu', dtype=jnp.bfloat16
+      ),
+      dict(
+          testcase_name='dense_float32',
+          ffn_type='dense',
+          dtype=jnp.float32,
+      ),
+      dict(
+          testcase_name='dense_bfloat16',
+          ffn_type='dense',
+          dtype=jnp.bfloat16,
+      ),
+  )
+  def test_feedforward_output_dtype(
+      self, ffn_type: mlp_blocks.FFNType, dtype: jnp.dtype
+  ):
+    """Verifies the output dtype matches the configured dtype."""
+    module = mlp_blocks.FeedForward(
+        output_size=self.output_size,
+        hidden_size=self.hidden_size,
+        ffn_type=ffn_type,
+        dtype=dtype,
+    )
+    x = jnp.ones((self.batch_size, self.output_size), dtype=dtype)
+    variables = module.init(self.key, x, is_training=False)
+    output = module.apply(variables, x, is_training=False)
+    self.assertEqual(output.dtype, dtype)
 
 
 if __name__ == '__main__':
