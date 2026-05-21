@@ -111,11 +111,11 @@ and picks the corresponding token from the candidates ``Routing``.
 import dataclasses
 from typing import Protocol
 
-from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.sampling import base
+from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt

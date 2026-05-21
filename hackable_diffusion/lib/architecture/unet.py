@@ -19,7 +19,6 @@ import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import arch_typing
-from hackable_diffusion.lib.architecture import arch_utils
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet_blocks
@@ -34,10 +33,7 @@ import kauldron.ktyping as kt
 DType = hd_typing.DType
 Float = hd_typing.Float
 
-DownsampleType = arch_typing.DownsampleType
-UpsampleType = arch_typing.UpsampleType
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
-SkipConnectionMethod = arch_typing.SkipConnectionMethod
 ConditionalBackbone = arch_typing.ConditionalBackbone
 
 
@@ -95,8 +91,8 @@ class Unet(nn.Module, ConditionalBackbone):
   num_residual_blocks: Sequence[int]
 
   # resampling
-  downsample_method: DownsampleType
-  upsample_method: UpsampleType
+  downsample_fn: unet_blocks.DownsampleFn
+  upsample_fn: unet_blocks.UpsampleFn
 
   # dropout
   dropout_rate: Sequence[float]
@@ -117,7 +113,7 @@ class Unet(nn.Module, ConditionalBackbone):
 
   # other
   activation: str
-  skip_connection_method: SkipConnectionMethod
+  skip_connection_fn: unet_blocks.SkipConnectionFn
 
   output_channels: int | None = None
   zero_init_output: bool = True
@@ -142,13 +138,6 @@ class Unet(nn.Module, ConditionalBackbone):
     self.num_scales = len(self.channels_multiplier)
     self.activation_fn = getattr(jax.nn, self.activation)
 
-    self.downsample_fn = arch_utils.get_downsample_fn(self.downsample_method)
-    self.upsample_fn = arch_utils.get_upsample_fn(self.upsample_method)
-
-    self.skip_connection_fn = arch_utils.get_skip_connection_fn(
-        self.skip_connection_method
-    )
-
     self.norm_factory = normalization.NormalizationLayerFactory(
         normalization_method=self.normalization_type,
         num_groups=self.normalization_num_groups,
@@ -169,14 +158,14 @@ class Unet(nn.Module, ConditionalBackbone):
 
     # Extract conditioning embeddings to use with adaptive normalization.
     adaptive_norm_emb = conditioning_embeddings.get(
-        'adaptive_norm'
+        "adaptive_norm"
     )
     if adaptive_norm_emb is None:
       raise ValueError("adaptive_norm_emb must be provided.")
 
     # Extract conditioning embeddings to use with cross attention.
     cross_attention_emb = conditioning_embeddings.get(
-        'cross_attention'
+        "cross_attention"
     )
     if any(self.cross_attention_bool) and cross_attention_emb is None:
       raise ValueError(
@@ -234,8 +223,7 @@ class Unet(nn.Module, ConditionalBackbone):
             output_channels=self.base_channels * self.channels_multiplier[i],
             activation_fn=self.activation_fn,
             skip_connection_fn=self.skip_connection_fn,
-            resample_type="down",
-            downsample_fn=self.downsample_fn,
+            resample_fn=self.downsample_fn,
             dropout_rate=self.dropout_rate[i],
             dtype=self.dtype,
             name=f"Down_{i}_DownsamplingResidualBlock",
@@ -316,8 +304,7 @@ class Unet(nn.Module, ConditionalBackbone):
             output_channels=self.base_channels * self.channels_multiplier[i],
             activation_fn=self.activation_fn,
             skip_connection_fn=self.skip_connection_fn,
-            upsample_fn=self.upsample_fn,
-            resample_type="up",
+            resample_fn=self.upsample_fn,
             dropout_rate=self.dropout_rate[i],
             dtype=self.dtype,
             name=f"Up_{i}_UpsamplingResidualBlock",
