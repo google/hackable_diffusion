@@ -127,6 +127,8 @@ def _dot_product_attention(
     rescale: Float["..."],
     *,
     mask: Bool["batch sequence_key"] | None = None,
+    dropout_rate: float = 0.0,
+    is_training: bool = True,
 ) -> Float["batch sequence_query head*dim"]:
   """Performs dot product attention.
 
@@ -137,6 +139,8 @@ def _dot_product_attention(
     rescale: Rescale factor for the attention scores.
     mask: Mask tensor. Mask is True for tokens we want to keep and False for
       tokens we want to mask. If None, no masking is performed.
+    dropout_rate: The dropout rate for the attention weights.
+    is_training: Whether the model is in training mode.
 
   Returns:
     The output tensor.
@@ -155,6 +159,11 @@ def _dot_product_attention(
 
   # Softmax and attention weights
   attn_weights = _stable_softmax(logits=attn_logits)
+
+  if dropout_rate > 0.0:
+    attn_weights = nn.Dropout(rate=dropout_rate)(
+        attn_weights, deterministic=not is_training
+    )
 
   # Calculate attention output
   attn_output = jnp.einsum("bhts,bhsd->bhtd", attn_weights, v)
@@ -194,6 +203,7 @@ class MultiHeadAttention(nn.Module):
       use_rope is True.
     zero_init_output: If True, the kernel of the final output projection layer
       is initialized to zeros.
+    dropout_rate: The dropout rate for the attention weights.
     dtype: The data type of the computation.
   """
 
@@ -203,6 +213,7 @@ class MultiHeadAttention(nn.Module):
   use_rope: bool = False
   rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
   zero_init_output: bool = False
+  dropout_rate: float = 0.0
   dtype: DType = jnp.float32
 
   def setup(self):
@@ -226,6 +237,7 @@ class MultiHeadAttention(nn.Module):
       c: Float["batch sequence2 dim2"] | None,
       *,
       mask: Bool["batch sequence1|sequence2"] | None = None,
+      is_training: bool = True,
   ) -> Float["batch sequence1 dim1"]:
     """Computes multi-head attention.
 
@@ -319,6 +331,8 @@ class MultiHeadAttention(nn.Module):
         v=v,
         rescale=scale,
         mask=mask,
+        dropout_rate=self.dropout_rate,
+        is_training=is_training,
     )
 
     attn_output = nn.Dense(

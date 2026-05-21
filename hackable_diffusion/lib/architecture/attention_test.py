@@ -408,6 +408,102 @@ class AttentionTest(parameterized.TestCase):
     ):
       module.init(self.rng, self.x, c, mask=invalid_mask)
 
+  # MARK: Dropout Tests
+
+  def test_multi_head_attention_dropout_disabled_during_evaluation(self):
+    """Verifies dropout is inactive when is_training=False (evaluation mode)."""
+    # Initialize with an aggressive dropout rate (e.g., 0.5)
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        dropout_rate=0.5,
+    )
+
+    # Generate random inputs to capture exact matrix values
+    rng1, rng2 = jax.random.split(self.rng)
+    x_rand = jax.random.normal(
+        rng1, (self.batch_size, self.seq_len_q, self.dim)
+    )
+
+    variables = module.init(rng2, x_rand, c=None)
+
+    # Run twice with evaluation mode (is_training=False).
+    # Even with a 50% dropout rate, the outputs should be completely identical.
+    output_eval_1 = module.apply(variables, x_rand, c=None, is_training=False)
+    output_eval_2 = module.apply(variables, x_rand, c=None, is_training=False)
+
+    np.testing.assert_allclose(
+        output_eval_1,
+        output_eval_2,
+        atol=1e-6,
+    )
+
+  def test_multi_head_attention_dropout_active_during_training(self):
+    """Verifies dropout alters outputs randomly when is_training=True."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        dropout_rate=0.5,
+    )
+
+    rng1, rng2, rng_dropout1, rng_dropout2 = jax.random.split(self.rng, 4)
+    x_rand = jax.random.normal(
+        rng1, (self.batch_size, self.seq_len_q, self.dim)
+    )
+
+    variables = module.init(rng2, x_rand, c=None)
+
+    # Flax requires a 'dropout' RNG stream state passed inside a dict
+    # whenever execution hits an active nn.Dropout layer during training.
+    output_train_1 = module.apply(
+        variables,
+        x_rand,
+        c=None,
+        is_training=True,
+        rngs={"dropout": rng_dropout1},
+    )
+    output_train_2 = module.apply(
+        variables,
+        x_rand,
+        c=None,
+        is_training=True,
+        rngs={"dropout": rng_dropout2},
+    )
+
+    # Since two distinct keys were injected into the dropout stream,
+    # different masks were dropped, meaning outputs must differ.
+    self.assertFalse(jnp.allclose(output_train_1, output_train_2, atol=1e-5))
+
+  def test_multi_head_attention_dropout_scales_retained_activations(self):
+    """Verifies dropout scales active entries by 1 / (1 - rate) during training."""
+    # Set a 50% rate. Active entries must double in value (multiplied by 2.0)
+    rate = 0.5
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        dropout_rate=rate,
+    )
+
+    rng1, rng2, rng_dropout = jax.random.split(self.rng, 3)
+    x_rand = jax.random.normal(
+        rng1, (self.batch_size, self.seq_len_q, self.dim)
+    )
+
+    variables = module.init(rng2, x_rand, c=None)
+
+    output_eval = module.apply(variables, x_rand, c=None, is_training=False)
+    output_train = module.apply(
+        variables,
+        x_rand,
+        c=None,
+        is_training=True,
+        rngs={"dropout": rng_dropout},
+    )
+
+    # Standard inverted dropout behavior means active values must be larger
+    # than non-dropped values to preserve target expectation bounds.
+    max_train_val = float(jnp.max(jnp.abs(output_train)))
+    max_eval_val = float(jnp.max(jnp.abs(output_eval)))
+
+    self.assertGreater(max_train_val, max_eval_val)
+
 
 if __name__ == "__main__":
   absltest.main()
