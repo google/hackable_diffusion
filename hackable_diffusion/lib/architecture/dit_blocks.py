@@ -133,6 +133,7 @@ class DiTBlock(nn.Module):
       to avoid bias in the FFN.
     ffn_activation: Activation function for the FFN.
     attn_normalize_qk: Whether to normalize query and key in attention.
+    attn_qk_norm_method: Normalization method for query and key in attention.
     attn_use_bias: Whether to use bias in the attention QKV and output
       projections.
     mlp_ratio: The ratio of the MLP hidden dimension to the hidden size.
@@ -149,10 +150,11 @@ class DiTBlock(nn.Module):
   num_heads: int = INVALID_INT
   head_dim: int = INVALID_INT
   use_gates: bool = True
-  ffn_type: mlp_blocks.FFNType = 'swiglu'
-  ffn_use_bias: bool = False
+  ffn_type: mlp_blocks.FFNType = 'dense'
+  ffn_use_bias: bool = True
   ffn_activation: str = 'gelu'
   attn_normalize_qk: bool = True
+  attn_qk_norm_method: attention.AttnQKNormMethod = 'l2'
   attn_use_bias: bool = True
   mlp_ratio: float = 4.0
   use_rope: bool = False
@@ -194,6 +196,7 @@ class DiTBlock(nn.Module):
         zero_init_output=self.zero_init_output,
         dtype=self.dtype,
         normalize_qk=self.attn_normalize_qk,
+        qk_norm_method=self.attn_qk_norm_method,
         use_bias=self.attn_use_bias,
         dropout_rate=self.dropout_rate,
     )
@@ -282,7 +285,11 @@ class DiTBlockFlux(DiTBlock):
   use_gates: bool = dataclasses.field(init=False, default=False)
   zero_init_output: bool = dataclasses.field(init=False, default=True)
   attn_normalize_qk: bool = dataclasses.field(init=False, default=True)
+  attn_qk_norm_method: attention.AttnQKNormMethod = dataclasses.field(
+      init=False, default='rms_norm'
+  )
   attn_use_bias: bool = dataclasses.field(init=False, default=False)
+  ffn_use_bias: bool = dataclasses.field(init=False, default=False)
 
   def __post_init__(self):
     self.norm_factory = normalization.NormalizationLayerFactory(
@@ -305,7 +312,11 @@ class DiTBlockSD3(DiTBlock):
   use_gates: bool = dataclasses.field(init=False, default=True)
   zero_init_output: bool = dataclasses.field(init=False, default=False)
   attn_normalize_qk: bool = dataclasses.field(init=False, default=True)
-  attn_use_bias: bool = dataclasses.field(init=False, default=False)
+  attn_qk_norm_method: attention.AttnQKNormMethod = dataclasses.field(
+      init=False, default='rms_norm'
+  )
+  attn_use_bias: bool = dataclasses.field(init=False, default=True)
+  ffn_use_bias: bool = dataclasses.field(init=False, default=True)
 
   def __post_init__(self):
     self.norm_factory = normalization.NormalizationLayerFactory(
@@ -330,6 +341,7 @@ class DiTBlockAdaLNZero(DiTBlock):
   zero_init_output: bool = dataclasses.field(init=False, default=False)
   attn_normalize_qk: bool = dataclasses.field(init=False, default=False)
   attn_use_bias: bool = dataclasses.field(init=False, default=True)
+  ffn_use_bias: bool = dataclasses.field(init=False, default=True)
 
   def __post_init__(self):
     self.norm_factory = normalization.NormalizationLayerFactory(

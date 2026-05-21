@@ -170,9 +170,11 @@ class DiTBlockTest(parameterized.TestCase):
             'ffn': {
                 'Dense_Up': {
                     'kernel': (self.d, mlp_hidden * 2),
+                    'bias': (mlp_hidden * 2,),
                 },
                 'Dense_Down': {
                     'kernel': (mlp_hidden, self.d),
+                    'bias': (self.d,),
                 },
             },
             'attn': {
@@ -226,9 +228,11 @@ class DiTBlockTest(parameterized.TestCase):
             'ffn': {
                 'Dense_Up': {
                     'kernel': (self.d, mlp_hidden),
+                    'bias': (mlp_hidden,),
                 },
                 'Dense_Down': {
                     'kernel': (mlp_hidden, self.d),
+                    'bias': (self.d,),
                 },
             },
             'ConditionalNorm_MLP': {
@@ -375,6 +379,98 @@ class DiTBlockPresetsTest(parameterized.TestCase):
     leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
     gate_paths = [p for p in leaves_with_paths if 'Gate' in p]
     self.assertNotEmpty(gate_paths)
+
+  # MARK: qk_norm_method tests
+
+  @parameterized.named_parameters(
+      ('l2_qk_norm_method', 'l2'),
+      ('rms_norm_qk_norm_method', 'rms_norm'),
+  )
+  def test_preset_qk_norm_method_output_shape(self, qk_norm_method):
+    """Tests that DiTBlock with each qk_norm_method produces correct shape."""
+    x = jnp.ones((self.batch, self.n, self.d))
+    cond = jnp.ones((self.batch, self.c))
+    module = dit_blocks.DiTBlock(
+        hidden_size=self.d,
+        num_heads=4,
+        norm_factory=normalization.NormalizationLayerFactory(
+            normalization_method=NormalizationType.RMS_NORM,
+            use_conditional_shift=False,
+        ),
+        use_gates=False,
+        attn_normalize_qk=True,
+        attn_qk_norm_method=qk_norm_method,
+    )
+    variables = module.init(self.key, x, cond, is_training=False)
+    output = module.apply(variables, x, cond, is_training=False)
+    self.assertEqual(output.shape, (self.batch, self.n, self.d))
+
+  def test_flux_uses_rms_norm_qk(self):
+    """Verifies DiTBlockFlux uses RMSNorm QK normalization."""
+    x = jnp.ones((self.batch, self.n, self.d))
+    cond = jnp.ones((self.batch, self.c))
+    module = dit_blocks.DiTBlockFlux(hidden_size=self.d, num_heads=4)
+    variables = module.init(self.key, x, cond, is_training=False)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    # Flux uses rms_norm method: should have RMSNorm_Q/K, no norm_qk_scale
+    rms_paths = [p for p in leaves if 'RMSNorm_Q' in p or 'RMSNorm_K' in p]
+    self.assertNotEmpty(rms_paths)
+    l2_paths = [p for p in leaves if 'norm_qk_scale' in p]
+    self.assertEmpty(l2_paths)
+
+  def test_sd3_uses_rms_norm_qk(self):
+    """Verifies DiTBlockSD3 uses RMSNorm QK normalization."""
+    x = jnp.ones((self.batch, self.n, self.d))
+    cond = jnp.ones((self.batch, self.c))
+    module = dit_blocks.DiTBlockSD3(hidden_size=self.d, num_heads=4)
+    variables = module.init(self.key, x, cond, is_training=False)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    # SD3 uses rms_norm method: should have RMSNorm_Q/K, no norm_qk_scale
+    rms_paths = [p for p in leaves if 'RMSNorm_Q' in p or 'RMSNorm_K' in p]
+    self.assertNotEmpty(rms_paths)
+    l2_paths = [p for p in leaves if 'norm_qk_scale' in p]
+    self.assertEmpty(l2_paths)
+
+  def test_ada_ln_zero_has_no_qk_norm(self):
+    """Verifies DiTBlockAdaLNZero has no QK normalization params."""
+    x = jnp.ones((self.batch, self.n, self.d))
+    cond = jnp.ones((self.batch, self.c))
+    module = dit_blocks.DiTBlockAdaLNZero(hidden_size=self.d, num_heads=4)
+    variables = module.init(self.key, x, cond, is_training=False)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    norm_paths = [
+        p
+        for p in leaves
+        if 'norm_qk' in p or 'RMSNorm_Q' in p or 'RMSNorm_K' in p
+    ]
+    self.assertEmpty(norm_paths)
+
+  def test_dit_block_no_attn_bias_with_rms_norm_qk(self):
+    """Verifies DiTBlock with use_bias=False and rms_norm QK norm."""
+    x = jnp.ones((self.batch, self.n, self.d))
+    cond = jnp.ones((self.batch, self.c))
+    module = dit_blocks.DiTBlock(
+        hidden_size=self.d,
+        num_heads=4,
+        norm_factory=normalization.NormalizationLayerFactory(
+            normalization_method=NormalizationType.RMS_NORM,
+            use_conditional_shift=False,
+        ),
+        use_gates=False,
+        attn_normalize_qk=True,
+        attn_qk_norm_method='rms_norm',
+        attn_use_bias=False,
+    )
+    variables = module.init(self.key, x, cond, is_training=False)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    # No bias in attention
+    attn_bias_paths = [
+        p for p in leaves if p.startswith('params/attn/') and 'bias' in p
+    ]
+    self.assertEmpty(attn_bias_paths)
+    # Has RMSNorm_Q/K
+    rms_paths = [p for p in leaves if 'RMSNorm_Q' in p or 'RMSNorm_K' in p]
+    self.assertNotEmpty(rms_paths)
 
 
 class PositionalEmbeddingTest(parameterized.TestCase):
