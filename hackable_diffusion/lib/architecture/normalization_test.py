@@ -468,6 +468,126 @@ class NormalizationTest(parameterized.TestCase):
         ),
     )
 
+  def test_conditional_rmsnorm_scale_only_at_init(self):
+    """Tests conditional RMSNorm with scale-only (no shift) at init."""
+    norm_layer = normalization.NormalizationLayer(
+        normalization_method=NormalizationType.RMS_NORM,
+        conditional=True,
+        use_conditional_shift=False,
+    )
+    params = norm_layer.init(self.rng, self.x, self.c)
+    output = norm_layer.apply(params, self.x, self.c)
+    self.assertEqual(output.shape, self.x_shape)
+
+    # At init, scale=0, so output should match plain RMSNorm.
+    x2 = jnp.mean(self.x**2, -1, keepdims=True)
+    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+    np.testing.assert_allclose(output, output_ref, rtol=1e-5, atol=1e-5)
+
+  def test_conditional_rmsnorm_scale_only_perturbed(self):
+    """Tests conditional RMSNorm scale-only with perturbed params."""
+    norm_layer = normalization.NormalizationLayer(
+        normalization_method=NormalizationType.RMS_NORM,
+        conditional=True,
+        use_conditional_shift=False,
+    )
+    params = norm_layer.init(self.rng, self.x, self.c)
+    params_perturbed = _perturb_params(params=params, key=self.rng)
+    output_perturbed = norm_layer.apply(params_perturbed, self.x, self.c)
+
+    # Compute unconditional RMSNorm for comparison.
+    x2 = jnp.mean(self.x**2, -1, keepdims=True)
+    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+
+    self.assertEqual(output_perturbed.shape, self.x_shape)
+    self.assertFalse(
+        np.allclose(output_perturbed, output_ref, rtol=1e-5, atol=1e-5),
+        msg=(
+            "Scale-only conditional output should differ from unconditional"
+            " output after perturbing params."
+        ),
+    )
+
+  def test_conditional_scale_only_projects_to_ch(self):
+    """Tests that scale-only conditioning projects to ch (not ch*2)."""
+    norm_layer = normalization.NormalizationLayer(
+        normalization_method=NormalizationType.RMS_NORM,
+        conditional=True,
+        use_conditional_shift=False,
+    )
+    params = norm_layer.init(self.rng, self.x, self.c)
+    # The Dense layer should project to ch (not ch * 2).
+    dense_kernel = params["params"]["Dense_0"]["kernel"]
+    expected_shape = (self.c_shape[-1], self.x_shape[-1])  # (cond_dim, ch)
+    self.assertEqual(dense_kernel.shape, expected_shape)
+
+  def test_conditional_scale_shift_projects_to_ch_times_2(self):
+    """Tests that scale+shift conditioning projects to ch * 2."""
+    norm_layer = normalization.NormalizationLayer(
+        normalization_method=NormalizationType.RMS_NORM,
+        conditional=True,
+        use_conditional_shift=True,
+    )
+    params = norm_layer.init(self.rng, self.x, self.c)
+    dense_kernel = params["params"]["Dense_0"]["kernel"]
+    expected_shape = (self.c_shape[-1], self.x_shape[-1] * 2)
+    self.assertEqual(dense_kernel.shape, expected_shape)
+
+  def test_conditional_rmsnorm_scale_only_padding_invariance(self):
+    """Tests scale-only conditional RMSNorm padding invariance."""
+    norm_layer = normalization.NormalizationLayer(
+        normalization_method=NormalizationType.RMS_NORM,
+        conditional=True,
+        use_conditional_shift=False,
+    )
+    c_small = jax.random.normal(self.rng, self.c_shape)
+    params = norm_layer.init(self.rng, self.x_small, c_small)
+    params_perturbed = _perturb_params(params=params, key=self.rng)
+
+    out_small = norm_layer.apply(params_perturbed, self.x_small, c_small)
+    out_large = norm_layer.apply(params_perturbed, self.x_large, c_small)
+    np.testing.assert_allclose(
+        out_small[:, :, : self.unpadded_seq_len, :],
+        out_large[:, :, : self.unpadded_seq_len, :],
+        atol=1e-5,
+    )
+
+  @parameterized.product(
+      normalization_method=[
+          NormalizationType.RMS_NORM,
+          NormalizationType.LAYER_NORM,
+          NormalizationType.GROUP_NORM,
+      ],
+      conditional=[False, True],
+      dtype=[jnp.float32, jnp.bfloat16],
+  )
+  def test_output_dtype(self, normalization_method, conditional, dtype):
+    """Tests that the output dtype matches the configured dtype."""
+    num_groups = (
+        self.num_groups
+        if (normalization_method == NormalizationType.GROUP_NORM)
+        else None
+    )
+
+    norm_layer = normalization.NormalizationLayer(
+        normalization_method=normalization_method,
+        conditional=conditional,
+        num_groups=num_groups,
+        dtype=dtype,
+    )
+
+    x = self.x.astype(dtype)
+    if conditional:
+      c = self.c.astype(dtype)
+      params = norm_layer.init(self.rng, x, c)
+      output = norm_layer.apply(params, x, c)
+    else:
+      params = norm_layer.init(self.rng, x)
+      output = norm_layer.apply(params, x)
+
+    self.assertEqual(output.dtype, dtype)
+    self.assertEqual(output.shape, self.x_shape)
+
 
 if __name__ == "__main__":
   absltest.main()

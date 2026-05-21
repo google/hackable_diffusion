@@ -79,6 +79,8 @@ class NormalizationLayer(nn.Module):
     dtype: The data type of the computation.
     use_bias: Whether to use bias in the normalization layer.
     use_scale: Whether to use scale in the normalization layer.
+    use_conditional_shift: Whether to use conditional shift in the normalization
+      layer (only applies when `conditional` is True).
   """
 
   normalization_method: NormalizationType
@@ -88,6 +90,7 @@ class NormalizationLayer(nn.Module):
   dtype: DType = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
+  use_conditional_shift: bool = True
 
   def setup(self):
     if (
@@ -169,18 +172,28 @@ class NormalizationLayer(nn.Module):
       )
 
     if self.conditional:
-
-      scale_and_shift = nn.Dense(
-          ch * 2,
-          kernel_init=nn.zeros_init(),
-          bias_init=nn.zeros_init(),
-          dtype=self.dtype,
-      )(c)
-      scale, shift = jnp.split(scale_and_shift, 2, axis=-1)  # (B, ch) each.
-
       x = einops.rearrange(x, "b ... c -> b c ...")  # (B, ch, ...).
-      scale = jax_helpers.bcast_right(scale, x.ndim)
-      shift = jax_helpers.bcast_right(shift, x.ndim)
+      # Scale + shift adaptive conditioning.
+      if self.use_conditional_shift:
+        scale_and_shift = nn.Dense(
+            ch * 2,
+            kernel_init=nn.zeros_init(),
+            bias_init=nn.zeros_init(),
+            dtype=self.dtype,
+        )(c)
+        scale, shift = jnp.split(scale_and_shift, 2, axis=-1)  # (B, ch) each.
+        scale = jax_helpers.bcast_right(scale, x.ndim)
+        shift = jax_helpers.bcast_right(shift, x.ndim)
+      else:
+        # Scale-only adaptive conditioning (no shift).
+        scale = nn.Dense(
+            ch,
+            kernel_init=nn.zeros_init(),
+            bias_init=nn.zeros_init(),
+            dtype=self.dtype,
+        )(c)
+        scale = jax_helpers.bcast_right(scale, x.ndim)
+        shift = jnp.zeros_like(scale)
       x = (1.0 + scale) * x + shift
       x = einops.rearrange(x, "b c ... -> b ... c")
 
@@ -211,6 +224,8 @@ class NormalizationLayerFactory:
     dtype: The data type of the computation.
     use_bias: Whether to use bias in the normalization layer.
     use_scale: Whether to use scale in the normalization layer.
+    use_conditional_shift: Whether to use conditional shift in the normalization
+      layer (only applies when `conditional` is True).
   """
 
   def __init__(
@@ -221,6 +236,7 @@ class NormalizationLayerFactory:
       dtype: DType = jnp.float32,
       use_bias: bool = True,
       use_scale: bool = True,
+      use_conditional_shift: bool = True,
   ):
     self.normalization_method = normalization_method
     self.epsilon = epsilon
@@ -228,6 +244,7 @@ class NormalizationLayerFactory:
     self.dtype = dtype
     self.use_bias = use_bias
     self.use_scale = use_scale
+    self.use_conditional_shift = use_conditional_shift
 
   def unconditional_norm(
       self, norm_name: str = "UnconditionalNorm"
@@ -242,12 +259,13 @@ class NormalizationLayerFactory:
         dtype=self.dtype,
         use_bias=self.use_bias,
         use_scale=self.use_scale,
+        use_conditional_shift=self.use_conditional_shift,
     )
 
   def conditional_norm(
       self, norm_name: str = "ConditionalNorm"
   ) -> NormalizationLayer:
-    """Returns a factory for creating conditional normalization layers."""
+    """Returns a conditional normalization layer."""
     return NormalizationLayer(
         normalization_method=self.normalization_method,
         conditional=True,
@@ -257,4 +275,5 @@ class NormalizationLayerFactory:
         dtype=self.dtype,
         use_bias=self.use_bias,
         use_scale=self.use_scale,
+        use_conditional_shift=self.use_conditional_shift,
     )
