@@ -555,6 +555,107 @@ class AttentionTest(parameterized.TestCase):
     }
     self.assertDictEqual(expected, variables_shapes)
 
+  # MARK: qk_norm_method tests
+
+  @parameterized.named_parameters(
+      ("l2", "l2"),
+      ("rms_norm", "rms_norm"),
+  )
+  def test_qk_norm_method_output_shape(self, qk_norm_method):
+    """Verifies output shape is correct for each qk_norm_method."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=True,
+        qk_norm_method=qk_norm_method,
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    output = module.apply(variables, self.x, c=None, is_training=False)
+    self.assertEqual(output.shape, self.x.shape)
+
+  def test_qk_norm_l2_param_shapes(self):
+    """Verifies L2 QK normalization creates a norm_qk_scale parameter."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=True,
+        qk_norm_method="l2",
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    # L2 method should have a norm_qk_scale param
+    self.assertIn("params/norm_qk_scale", leaves)
+    self.assertEqual(leaves["params/norm_qk_scale"].shape, (1, 1, 1, 1))
+    # Should NOT have RMSNorm_Q/K
+    rms_paths = [p for p in leaves if "RMSNorm" in p]
+    self.assertEmpty(rms_paths)
+
+  def test_qk_norm_rms_norm_param_shapes(self):
+    """Verifies RMSNorm QK normalization creates RMSNorm_Q/K scale params."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=True,
+        qk_norm_method="rms_norm",
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    # RMSNorm method should have RMSNorm_Q/scale and RMSNorm_K/scale
+    self.assertIn("params/RMSNorm_Q/scale", leaves)
+    self.assertIn("params/RMSNorm_K/scale", leaves)
+    self.assertEqual(leaves["params/RMSNorm_Q/scale"].shape, (self.head_dim,))
+    self.assertEqual(leaves["params/RMSNorm_K/scale"].shape, (self.head_dim,))
+    # Should NOT have norm_qk_scale
+    self.assertNotIn("params/norm_qk_scale", leaves)
+
+  def test_qk_norm_rms_norm_with_rope(self):
+    """Verifies RMSNorm QK norm works with RoPE (norm before RoPE)."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=True,
+        qk_norm_method="rms_norm",
+        use_rope=True,
+        rope_position_type=RoPEPositionType.SQUARE,
+    )
+    x = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
+    variables = module.init(self.rng, x, c=None)
+    output = module.apply(variables, x, c=None, is_training=False)
+    self.assertEqual(output.shape, x.shape)
+
+  def test_qk_norm_l2_with_rope(self):
+    """Verifies L2 QK norm works with RoPE (norm before RoPE)."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=True,
+        qk_norm_method="l2",
+        use_rope=True,
+        rope_position_type=RoPEPositionType.SQUARE,
+    )
+    x = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
+    variables = module.init(self.rng, x, c=None)
+    output = module.apply(variables, x, c=None, is_training=False)
+    self.assertEqual(output.shape, x.shape)
+
+  def test_qk_norm_disabled_has_no_norm_params(self):
+    """Verifies that normalize_qk=False creates no norm params."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=False,
+    )
+    variables = module.init(self.rng, self.x, c=None)
+    leaves = test_helpers.get_leaves_with_paths(variables)
+    norm_paths = [p for p in leaves if "norm_qk" in p or "RMSNorm" in p]
+    self.assertEmpty(norm_paths)
+
+  def test_qk_norm_invalid_method_raises_error(self):
+    """Verifies that an invalid qk_norm_method raises ValueError."""
+    module = attention.MultiHeadAttention(
+        num_heads=self.num_heads,
+        normalize_qk=True,
+        qk_norm_method="invalid_method",  # pytype: disable=wrong-arg-types
+    )
+    with self.assertRaisesRegex(
+        ValueError, "Unsupported QK normalization method"
+    ):
+      module.init(self.rng, self.x, c=None)
+
 
 if __name__ == "__main__":
   absltest.main()

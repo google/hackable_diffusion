@@ -14,7 +14,7 @@
 
 """Attention layers and utils."""
 
-from typing import Callable
+from typing import Callable, Literal
 import warnings
 
 import flax.linen as nn
@@ -36,6 +36,8 @@ DType = hd_typing.DType
 
 RoPEPositionType = arch_typing.RoPEPositionType
 INVALID_INT = arch_typing.INVALID_INT
+
+AttnQKNormMethod = Literal["l2", "rms_norm"]
 
 ################################################################################
 # MARK: Constants
@@ -211,6 +213,7 @@ class MultiHeadAttention(nn.Module):
   num_heads: int = INVALID_INT
   head_dim: int = INVALID_INT
   normalize_qk: bool = False
+  qk_norm_method: AttnQKNormMethod = "l2"
   use_rope: bool = False
   rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
   use_bias: bool = True
@@ -303,6 +306,32 @@ class MultiHeadAttention(nn.Module):
     v = v.reshape(b, seq_len_kv, num_heads, head_d).transpose(0, 2, 1, 3)
     # shape is [batch, num_heads, sequence_length, head_dim]
 
+    if self.normalize_qk:
+      if self.qk_norm_method == "rms_norm":
+        q = nn.RMSNorm(name="RMSNorm_Q")(q)
+        k = nn.RMSNorm(name="RMSNorm_K")(k)
+        scale = 1.0 / jnp.sqrt(jnp.float32(head_d))
+      # QK L2 normalization: https://arxiv.org/abs/2010.04245
+      elif self.qk_norm_method == "l2":
+        scale = self.param(
+            "norm_qk_scale",
+            nn.initializers.constant(
+                jnp.log2(seq_len_kv**2 - seq_len_kv + SAFETY_EPSILON)
+            ),
+            (1, 1, 1, 1),
+        )
+
+        norm_q = jnp.linalg.norm(q, ord=2, axis=-1, keepdims=True)
+        norm_k = jnp.linalg.norm(k, ord=2, axis=-1, keepdims=True)
+        q = q / (norm_q + SAFETY_EPSILON)
+        k = k / (norm_k + SAFETY_EPSILON)
+      else:
+        raise ValueError(
+            f"Unsupported QK normalization method: {self.qk_norm_method}."
+        )
+    else:
+      scale = 1.0 / jnp.sqrt(jnp.float32(head_d))
+
     # RoPE: https://arxiv.org/abs/2104.09864
     if self.use_rope:
       q = sequence_embedders.RoPESequenceEmbedding(
@@ -312,23 +341,6 @@ class MultiHeadAttention(nn.Module):
           rope_position_type=self.rope_position_type
       )(k)
       # shape is [batch, num_heads, sequence_length, head_dim]
-
-    # QK normalization: https://arxiv.org/abs/2010.04245.
-    if self.normalize_qk:
-      scale = self.param(
-          "norm_qk_scale",
-          nn.initializers.constant(
-              jnp.log2(seq_len_kv**2 - seq_len_kv + SAFETY_EPSILON)
-          ),
-          (1, 1, 1, 1),
-      )
-
-      norm_q = jnp.linalg.norm(q, ord=2, axis=-1, keepdims=True)
-      norm_k = jnp.linalg.norm(k, ord=2, axis=-1, keepdims=True)
-      q = q / (norm_q + SAFETY_EPSILON)
-      k = k / (norm_k + SAFETY_EPSILON)
-    else:
-      scale = 1.0 / jnp.sqrt(head_d)
 
     attn_output = _dot_product_attention(
         q=q,
