@@ -17,7 +17,6 @@
 # pylint: disable=g-importing-member
 from hackable_diffusion.lib.architecture.arch_typing import ConditionalBackbone
 from hackable_diffusion.lib.architecture.arch_typing import DownsampleType
-from hackable_diffusion.lib.architecture.arch_typing import EmbeddingMergeMethod
 from hackable_diffusion.lib.architecture.arch_typing import NormalizationType
 from hackable_diffusion.lib.architecture.arch_typing import RoPEPositionType
 from hackable_diffusion.lib.architecture.arch_typing import SkipConnectionMethod
@@ -26,13 +25,16 @@ from hackable_diffusion.lib.architecture.attention import MultiHeadAttention
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseConditioningEncoder
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseTimeEmbedder
+from hackable_diffusion.lib.architecture.conditioning_encoder import ConcatEmbeddings
 from hackable_diffusion.lib.architecture.conditioning_encoder import ConditioningEncoder
 from hackable_diffusion.lib.architecture.conditioning_encoder import FieldSelector
 from hackable_diffusion.lib.architecture.conditioning_encoder import IdentityTimeEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import LabelEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import LinearEmbedder
+from hackable_diffusion.lib.architecture.conditioning_encoder import MergeEmbeddingsFn
 from hackable_diffusion.lib.architecture.conditioning_encoder import MLPEmbedder
 from hackable_diffusion.lib.architecture.conditioning_encoder import SinusoidalTimeEmbedder
+from hackable_diffusion.lib.architecture.conditioning_encoder import SumEmbeddings
 from hackable_diffusion.lib.architecture.conditioning_encoder import ZeroTimeEmbedder
 from hackable_diffusion.lib.architecture.discrete import BaseProjector
 from hackable_diffusion.lib.architecture.discrete import BaseTokenEmbedder

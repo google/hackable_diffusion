@@ -14,7 +14,6 @@
 
 """Tests for the conditioning encoder."""
 
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import conditioning_encoder
 import jax
 import jax.numpy as jnp
@@ -25,7 +24,8 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-EmbeddingMergeMethod = arch_typing.EmbeddingMergeMethod
+SumEmbeddings = conditioning_encoder.SumEmbeddings
+ConcatEmbeddings = conditioning_encoder.ConcatEmbeddings
 
 
 ################################################################################
@@ -38,20 +38,20 @@ class EncodeConditioningTest(parameterized.TestCase):
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.SUM,
+          SumEmbeddings(),
           'adaptive_norm',
           True,
       ),
       (
           'test2',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           False,
       ),
   )
   def test_basic(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       is_training,
   ):
@@ -77,7 +77,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -97,32 +97,32 @@ class EncodeConditioningTest(parameterized.TestCase):
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
-    if embedding_merging_method == EmbeddingMergeMethod.SUM:
+    if isinstance(merge_embeddings_fn, SumEmbeddings):
       expected_shape = (batch_size, num_features)
-    elif embedding_merging_method == EmbeddingMergeMethod.CONCAT:
+    elif isinstance(merge_embeddings_fn, ConcatEmbeddings):
       expected_shape = (batch_size, 2 * num_features)
     else:
-      raise ValueError(f'Unknown method {embedding_merging_method}')
+      raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
     self.assertEqual(conditional_embedding.shape, expected_shape)
 
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.SUM,
+          SumEmbeddings(),
           'adaptive_norm',
           True,
       ),
       (
           'test2',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           False,
       ),
   )
   def test_mlp_embedder(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       is_training,
   ):
@@ -149,7 +149,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -169,32 +169,32 @@ class EncodeConditioningTest(parameterized.TestCase):
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
-    if embedding_merging_method == EmbeddingMergeMethod.SUM:
+    if isinstance(merge_embeddings_fn, SumEmbeddings):
       expected_shape = (batch_size, num_features)
-    elif embedding_merging_method == EmbeddingMergeMethod.CONCAT:
+    elif isinstance(merge_embeddings_fn, ConcatEmbeddings):
       expected_shape = (batch_size, 2 * num_features)
     else:
-      raise ValueError(f'Unknown method {embedding_merging_method}')
+      raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
     self.assertEqual(conditional_embedding.shape, expected_shape)
 
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.SUM,
+          SumEmbeddings(),
           'adaptive_norm',
           True,
       ),
       (
           'test2',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           False,
       ),
   )
   def test_mlp_embedder_process_multiple_keys(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       is_training,
   ):
@@ -221,7 +221,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -244,32 +244,32 @@ class EncodeConditioningTest(parameterized.TestCase):
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
-    if embedding_merging_method == EmbeddingMergeMethod.SUM:
+    if isinstance(merge_embeddings_fn, SumEmbeddings):
       expected_shape = (batch_size, num_features)
-    elif embedding_merging_method == EmbeddingMergeMethod.CONCAT:
+    elif isinstance(merge_embeddings_fn, ConcatEmbeddings):
       expected_shape = (batch_size, 2 * num_features)
     else:
-      raise ValueError(f'Unknown method {embedding_merging_method}')
+      raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
     self.assertEqual(conditional_embedding.shape, expected_shape)
 
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.SUM,
+          SumEmbeddings(),
           'adaptive_norm',
           True,
       ),
       (
           'test2',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           False,
       ),
   )
   def test_mlp_embedder_fails_on_missing_key(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       is_training,
   ):
@@ -296,7 +296,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -333,12 +333,12 @@ class EncodeConditioningTest(parameterized.TestCase):
         'time': 'adaptive_norm',
         'image': 'cross_attention',
     }
-    embedding_merging_method = EmbeddingMergeMethod.CONCAT
+    merge_embeddings_fn = ConcatEmbeddings()
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -387,12 +387,12 @@ class EncodeConditioningTest(parameterized.TestCase):
         'time': 'adaptive_norm',
         'image': 'cross_attention',
     }
-    embedding_merging_method = EmbeddingMergeMethod.CONCAT
+    merge_embeddings_fn = ConcatEmbeddings()
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=0.0,
     )
@@ -410,7 +410,7 @@ class EncodeConditioningTest(parameterized.TestCase):
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           8,
           16,
@@ -419,7 +419,7 @@ class EncodeConditioningTest(parameterized.TestCase):
   )
   def test_different_num_features(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       time_encode_num_features,
       label_encode_num_features,
@@ -445,7 +445,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -474,7 +474,7 @@ class EncodeConditioningTest(parameterized.TestCase):
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           8,
           9,
@@ -483,7 +483,7 @@ class EncodeConditioningTest(parameterized.TestCase):
       ),
       (
           'test2',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           8,
           9,
@@ -493,7 +493,7 @@ class EncodeConditioningTest(parameterized.TestCase):
   )
   def test_multilabel(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       time_encode_num_features,
       label1_encode_num_features,
@@ -532,7 +532,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -566,7 +566,7 @@ class EncodeConditioningTest(parameterized.TestCase):
   @parameterized.named_parameters(
       (
           'test1',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           8,
           9,
@@ -575,7 +575,7 @@ class EncodeConditioningTest(parameterized.TestCase):
       ),
       (
           'test2',
-          EmbeddingMergeMethod.CONCAT,
+          ConcatEmbeddings(),
           'cross_attention',
           8,
           9,
@@ -585,7 +585,7 @@ class EncodeConditioningTest(parameterized.TestCase):
   )
   def test_unconditional(
       self,
-      embedding_merging_method,
+      merge_embeddings_fn,
       conditioning_mechanism,
       time_encode_num_features,
       label1_encode_num_features,
@@ -620,7 +620,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=embedding_merging_method,
+        merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
     )
@@ -666,7 +666,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,
-        embedding_merging_method=EmbeddingMergeMethod.SUM,
+        merge_embeddings_fn=SumEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
             'label': 'adaptive_norm',

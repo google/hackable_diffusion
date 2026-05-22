@@ -21,7 +21,8 @@ These modules do not cover all possible usecases, but rather provide a reference
  implementation for new encoders.
 """
 
-from typing import Protocol, Sequence, cast
+import dataclasses
+from typing import Protocol, Sequence, Union
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.architecture import arch_typing
@@ -38,10 +39,6 @@ import kauldron.ktyping as kt
 DType = hd_typing.DType
 Float = hd_typing.Float
 Num = hd_typing.Num
-
-
-
-EmbeddingMergeMethod = arch_typing.EmbeddingMergeMethod
 
 ################################################################################
 # MARK: Base Classes
@@ -342,6 +339,25 @@ class FieldSelector(nn.Module, BaseEmbedder):
 ################################################################################
 
 
+@dataclasses.dataclass(frozen=True)
+class SumEmbeddings:
+  """Merges two embeddings by element-wise summation."""
+
+  def __call__(self, x: jax.Array, y: jax.Array) -> jax.Array:
+    return x + y
+
+
+@dataclasses.dataclass(frozen=True)
+class ConcatEmbeddings:
+  """Merges two embeddings by concatenation along the last axis."""
+
+  def __call__(self, x: jax.Array, y: jax.Array) -> jax.Array:
+    return jnp.concatenate([x, y], axis=-1)
+
+
+MergeEmbeddingsFn = Union[SumEmbeddings, ConcatEmbeddings]
+
+
 class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   """Encodes and combines time and conditioning signals for a diffusion model.
 
@@ -363,7 +379,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
             label_foo=LabelEmbedder(...),
             label_bar=LinearEmbedder(...),
         ),
-        embedding_merging_method=EmbeddingMergeMethod.SUM,
+        merge_embeddings_fn=SumEmbeddings(),
         conditioning_rules=dict(
             label_foo ='adaptive_norm',
             label_bar='cross_attention',
@@ -379,33 +395,24 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
     conditioning_embedders: A dictionary of named embedders. The names can be
       chosen arbitrarily, but are used to identify the signals in the
       `conditioning_rules`.
-    embedding_merging_method: The method used to combine embeddings, e.g. sum
-      them or concatenate them.
+    merge_embeddings_fn: A callable that merges two embeddings. Use
+      `SumEmbeddings()` for element-wise summation or `ConcatEmbeddings()` for
+      concatenation along the last axis.
     conditioning_rules: A dictionary specifying which conditioning mechanism
       (e.g., `adaptive_norm`) to use for which embedding. For a given
       conditioning mechanism, the embeddings are merged according to the
-      specified `embedding_merging_method`.
+      specified `merge_embeddings_fn`.
     conditioning_dropout_rate: The rate at which to drop the conditioning
       signals.
   """
 
   time_embedder: BaseTimeEmbedder
   conditioning_embedders: dict[str, BaseEmbedder]
-  embedding_merging_method: EmbeddingMergeMethod
+  merge_embeddings_fn: MergeEmbeddingsFn
   conditioning_rules: arch_typing.ConditioningEmbeddings
   conditioning_dropout_rate: float = 0.0
 
   def setup(self):
-
-    if self.embedding_merging_method == EmbeddingMergeMethod.SUM:
-      self.embedding_merging_fn = lambda x, y: x + y
-    elif self.embedding_merging_method == EmbeddingMergeMethod.CONCAT:
-      self.embedding_merging_fn = lambda x, y: jnp.concatenate([x, y], axis=-1)
-    else:
-      raise ValueError(
-          'Unsupported embedding merging method:'
-          f' {self.embedding_merging_method}'
-      )
 
     self.embedders_names = set(self.conditioning_embedders.keys())
     embedders_names_with_time = self.embedders_names | {'time'}
@@ -487,7 +494,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
     out = dict()
     for name, conditioning_mechanism in self.conditioning_rules.items():
       if conditioning_mechanism in out:
-        out[conditioning_mechanism] = self.embedding_merging_fn(
+        out[conditioning_mechanism] = self.merge_embeddings_fn(
             out[conditioning_mechanism], cond_embs[name]
         )
       else:

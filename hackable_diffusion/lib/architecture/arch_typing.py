@@ -43,13 +43,6 @@ INVALID_INT = -1
 ################################################################################
 
 
-class EmbeddingMergeMethod(enum.StrEnum):
-  """Methods for merging embeddings in the conditioning encoder."""
-
-  SUM = "sum"
-  CONCAT = "concat"
-
-
 class RoPEPositionType(enum.StrEnum):
   """Rotary Position Embedding (RoPE) types."""
 

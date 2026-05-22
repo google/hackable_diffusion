@@ -130,7 +130,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
     self.cond_encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=self.time_encoder,
         conditioning_embedders=CONDITIONING_ENCODER,
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
         conditioning_rules=CONDITIONING_RULES,
     )
     self.backbone = unet.Unet(**UNET_CONFIG)

@@ -127,7 +127,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
                 num_features=16,
             ),
         },
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
             'label_foo': 'adaptive_norm',
@@ -328,7 +328,7 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
                 num_features=16,
             ),
         },
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
             'label': 'adaptive_norm',
@@ -613,7 +613,7 @@ class MultiModalDiffusionNetworkTest(parameterized.TestCase):
                 num_features=16,
             ),
         },
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
             'label_foo': 'adaptive_norm',
@@ -696,7 +696,7 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
                 num_features=16,
             ),
         },
-        embedding_merging_method=arch_typing.EmbeddingMergeMethod.CONCAT,
+        merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
             'label_foo': 'adaptive_norm',

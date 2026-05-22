@@ -63,7 +63,7 @@ def get_config():
       conditioning_embedders={
           "label": label_encoder,
       },
-      embedding_merging_method=hd.architecture.EmbeddingMergeMethod.SUM,
+      merge_embeddings_fn=hd.architecture.SumEmbeddings(),
       conditioning_rules={
           "label": 'adaptive_norm',
           "time": 'adaptive_norm',

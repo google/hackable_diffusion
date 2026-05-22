@@ -43,14 +43,18 @@ This string specifies how a conditioning signal is injected into the backbone.
     module.
   * `sum`: The conditioning is added to the input of a layer or module.
 
-### `EmbeddingMergeMethod`
+### Embedding Merge Functions
 
-When multiple embeddings are directed to the same `ConditioningMechanism`, this
-enum defines how they are combined.
+When multiple embeddings are directed to the same `ConditioningMechanism`,
+a merge function defines how they are combined. Two frozen dataclasses are
+provided in `conditioning_encoder.py`:
 
-  * `SUM`: Embeddings are summed element-wise. This requires them to have the
-    same shape.
-  * `CONCAT`: Embeddings are concatenated along the feature axis.
+  * `SumEmbeddings()`: Embeddings are summed element-wise. This requires them
+    to have the same shape.
+  * `ConcatEmbeddings()`: Embeddings are concatenated along the feature axis.
+
+The type alias `MergeEmbeddingsFn = Union[SumEmbeddings, ConcatEmbeddings]` is
+available for type annotations.
 
 ### Resampling and Skip Connections
 
@@ -291,9 +295,8 @@ both adaptive normalization and cross-attention.
 import jax
 import jax.numpy as jnp
 from hackable_diffusion.lib.architecture.conditioning_encoder import (
-    ConditioningEncoder, SinusoidalTimeEmbedder, LabelEmbedder)
-from hackable_diffusion.lib.architecture.arch_typing import (
-    ConditioningMechanism, EmbeddingMergeMethod)
+    ConditioningEncoder, SinusoidalTimeEmbedder, LabelEmbedder,
+    SumEmbeddings)
 
 key = jax.random.PRNGKey(0)
 
@@ -315,7 +318,7 @@ conditioning_encoder = ConditioningEncoder(
         'label_adanorm': label_embedder_adanorm,
         'label_xattn': label_embedder_xattn,
     },
-    embedding_merging_method=EmbeddingMergeMethod.SUM,
+    merge_embeddings_fn=SumEmbeddings(),
     conditioning_rules={
         'time': 'adaptive_norm',
         'label_adanorm': 'adaptive_norm',
@@ -359,4 +362,4 @@ print(f"Cross Attention embedding shape: {xattn_emb.shape}")
     `conditioning_embedders` plus a key for `'time'`.
   * When multiple embeddings are routed to the same mechanism (like `time` and
     `label_adanorm` both to `ADAPTIVE_NORM`), they are combined using
-    `embedding_merging_method`. If summing, their feature dimensions must match.
+    `merge_embeddings_fn`. If summing, their feature dimensions must match.
