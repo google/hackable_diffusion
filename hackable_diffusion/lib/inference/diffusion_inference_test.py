@@ -20,6 +20,7 @@ from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.corruption import schedules
@@ -80,7 +81,7 @@ UNET_CONFIG = {
     'attention_head_dim': arch_typing.INVALID_INT,
     'attention_normalize_qk': True,
     'attention_use_rope': False,
-    'attention_rope_position_type': arch_typing.RoPEPositionType.SQUARE,
+    'attention_rope_positions_fn': sequence_embedders.SquareRoPEPositions(),
     'normalization_type': normalization.NormalizationType.GROUP_NORM,
     'normalization_num_groups': 4,
     'skip_connection_method': arch_typing.SkipConnectionMethod.UNNORMALIZED_ADD,

@@ -34,7 +34,8 @@ Float = hd_typing.Float
 Bool = hd_typing.Bool
 DType = hd_typing.DType
 
-RoPEPositionType = arch_typing.RoPEPositionType
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 INVALID_INT = arch_typing.INVALID_INT
 
 AttnQKNormMethod = Literal["l2", "rms_norm"]
@@ -201,8 +202,8 @@ class MultiHeadAttention(nn.Module):
       must be INVALID_INT.
     normalize_qk: Whether to normalize query and key before attention.
     use_rope: Whether to use rotary positional embeddings on query and key.
-    rope_position_type: The type of rotary positional embeddings to use if
-      use_rope is True.
+    rope_positions_fn: The position function of rotary positional embeddings
+      to use if use_rope is True.
     use_bias: Whether to use bias in the QKV and output projections.
     zero_init_output: If True, the kernel of the final output projection layer
       is initialized to zeros.
@@ -215,7 +216,7 @@ class MultiHeadAttention(nn.Module):
   normalize_qk: bool = False
   qk_norm_method: AttnQKNormMethod = "l2"
   use_rope: bool = False
-  rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
+  rope_positions_fn: RoPEPositionsFn = SquareRoPEPositions()
   use_bias: bool = True
   zero_init_output: bool = False
   dropout_rate: float = 0.0
@@ -306,6 +307,7 @@ class MultiHeadAttention(nn.Module):
     v = v.reshape(b, seq_len_kv, num_heads, head_d).transpose(0, 2, 1, 3)
     # shape is [batch, num_heads, sequence_length, head_dim]
 
+    # QK normalization: https://arxiv.org/abs/2010.04245.
     if self.normalize_qk:
       if self.qk_norm_method == "rms_norm":
         q = nn.RMSNorm(name="RMSNorm_Q")(q)
@@ -335,10 +337,10 @@ class MultiHeadAttention(nn.Module):
     # RoPE: https://arxiv.org/abs/2104.09864
     if self.use_rope:
       q = sequence_embedders.RoPESequenceEmbedding(
-          rope_position_type=self.rope_position_type
+          rope_positions_fn=self.rope_positions_fn
       )(q)
       k = sequence_embedders.RoPESequenceEmbedding(
-          rope_position_type=self.rope_position_type
+          rope_positions_fn=self.rope_positions_fn
       )(k)
       # shape is [batch, num_heads, sequence_length, head_dim]
 

@@ -17,6 +17,7 @@
 import dataclasses
 
 from hackable_diffusion.lib.architecture import arch_typing
+from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 import jax
 import jax.numpy as jnp
@@ -28,7 +29,8 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-RoPEPositionType = arch_typing.RoPEPositionType
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 NormalizationType = arch_typing.NormalizationType
 DownsampleType = arch_typing.DownsampleType
 UpsampleType = arch_typing.UpsampleType
@@ -63,7 +65,7 @@ class Config:
   attention_head_dim: int = 16
   attention_normalize_qk: bool = True
   attention_use_rope: bool = False
-  attention_rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
+  attention_rope_positions_fn: RoPEPositionsFn = SquareRoPEPositions()
 
   # normalization
   normalization_type: NormalizationType = NormalizationType.GROUP_NORM

@@ -14,11 +14,12 @@
 
 """Sequence embeddings."""
 
-from typing import Sequence
+import dataclasses
+from typing import Sequence, Union
 
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
+
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -33,7 +34,7 @@ Float = hd_typing.Float
 Int = hd_typing.Int
 Num = hd_typing.Num
 
-RoPEPositionType = arch_typing.RoPEPositionType
+
 
 ################################################################################
 # MARK: Sequence Embedding Modules
@@ -109,53 +110,79 @@ class RandomFourierSequenceEmbedding(nn.Module):
     return embedding
 
 
-class RoPESequenceEmbedding(nn.Module):
-  """Sequence (positional) embedding as in https://arxiv.org/abs/2104.09864."""
+################################################################################
+# MARK: RoPE Position Functions
+################################################################################
 
-  rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
-  max_rotary_wavelength: int = 10_000
+
+@dataclasses.dataclass(frozen=True)
+class LinearRoPEPositions:
+  """Computes 1D linear positions for Rotary Position Embeddings (RoPE)."""
 
   @kt.typechecked
-  def _get_positions(
+  def __call__(
+      self, x: Float["*batch sequence dim"]
+  ) -> Sequence[Int["*batch sequence"]]:
+    *b, t, _ = x.shape
+    n_batch_dims = len(b)
+    b = tuple(b)
+    position = jnp.arange(start=0, stop=t)
+    position = jnp.reshape(position, (1,) * n_batch_dims + (-1,))
+    position = jnp.broadcast_to(position, b + (t,))
+    return (position,)
+
+
+@dataclasses.dataclass(frozen=True)
+class SquareRoPEPositions:
+  """Computes 2D square grid positions for Rotary Position Embeddings (RoPE)."""
+
+  @kt.typechecked
+  def __call__(
       self, x: Float["*batch sequence dim"]
   ) -> Sequence[Int["*batch sequence"]]:
     *b, t, _ = x.shape
     n_batch_dims = len(b)
     b = tuple(b)
 
-    if self.rope_position_type == "linear":
-      position = jnp.arange(start=0, stop=t)
-      position = jnp.reshape(position, (1,) * n_batch_dims + (-1,))
-      position = jnp.broadcast_to(position, b + (t,))
-      return (position,)
-    elif self.rope_position_type == "square":
-      # get the square position grid
-      t_sqrt = int(np.sqrt(t))
-      if t != np.square(t_sqrt):
-        raise ValueError("Sequence length must be a perfect square.")
+    t_sqrt = int(np.sqrt(t))
+    if t != np.square(t_sqrt):
+      raise ValueError("Sequence length must be a perfect square.")
 
-      sq_arange = jnp.arange(start=0, stop=t_sqrt)
-      position_x, position_y = jnp.meshgrid(sq_arange, sq_arange, indexing="ij")
-      # [t_sqrt, t_sqrt]
+    sq_arange = jnp.arange(start=0, stop=t_sqrt)
+    position_x, position_y = jnp.meshgrid(sq_arange, sq_arange, indexing="ij")
+    # [t_sqrt, t_sqrt]
 
-      position_x = jnp.reshape(position_x, (1,) * n_batch_dims + (-1,))
-      position_y = jnp.reshape(position_y, (1,) * n_batch_dims + (-1,))
-      # [1, ..., t]
+    position_x = jnp.reshape(position_x, (1,) * n_batch_dims + (-1,))
+    position_y = jnp.reshape(position_y, (1,) * n_batch_dims + (-1,))
+    # [1, ..., t]
 
-      position_x = jnp.broadcast_to(position_x, b + (t,))
-      position_y = jnp.broadcast_to(position_y, b + (t,))
-      # [*b, t]
+    position_x = jnp.broadcast_to(position_x, b + (t,))
+    position_y = jnp.broadcast_to(position_y, b + (t,))
+    # [*b, t]
 
-      return (position_x, position_y)
-    else:
-      raise ValueError(f"Unknown RoPE position type: {self.rope_position_type}")
+    return (position_x, position_y)
+
+
+RoPEPositionsFn = Union[LinearRoPEPositions, SquareRoPEPositions]
+
+
+################################################################################
+# MARK: RoPE Sequence Embedding
+################################################################################
+
+
+class RoPESequenceEmbedding(nn.Module):
+  """Sequence (positional) embedding as in https://arxiv.org/abs/2104.09864."""
+
+  rope_positions_fn: RoPEPositionsFn = SquareRoPEPositions()
+  max_rotary_wavelength: int = 10_000
 
   @nn.compact
   @kt.typechecked
   def __call__(
       self, x: Float["*batch sequence dim"]
   ) -> Float["*batch sequence dim"]:
-    positions = self._get_positions(x)
+    positions = self.rope_positions_fn(x)
     # list of elements of shape [*b, t]
 
     # dimension compatible with the positions

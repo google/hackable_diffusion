@@ -14,6 +14,7 @@
 
 """Tests for sequence embedders."""
 
+
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
@@ -27,7 +28,9 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-RoPEPositionType = arch_typing.RoPEPositionType
+LinearRoPEPositions = sequence_embedders.LinearRoPEPositions
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 INVALID_INT = arch_typing.INVALID_INT
 
 ################################################################################
@@ -188,7 +191,7 @@ class SequenceEmbeddersTest(parameterized.TestCase):
     """Tests that square RoPE raises an error for non-square sequences."""
     x_rope = jnp.ones((self.batch_size, 17, self.dim))  # Not a perfect square
     module = sequence_embedders.RoPESequenceEmbedding(
-        rope_position_type=RoPEPositionType.SQUARE
+        rope_positions_fn=SquareRoPEPositions()
     )
     with self.assertRaisesRegex(
         ValueError, "Sequence length must be a perfect square."
@@ -196,11 +199,11 @@ class SequenceEmbeddersTest(parameterized.TestCase):
       module.init(self.rng, x_rope)
 
   @parameterized.named_parameters(
-      ("linear", "linear", 3),
-      ("square", "square", 5),
+      ("linear", LinearRoPEPositions(), 3),
+      ("square", SquareRoPEPositions(), 5),
   )
   def test_rope_embedding_dimension_not_divisible(
-      self, rope_position_type: RoPEPositionType, dimension: int
+      self, rope_positions_fn: RoPEPositionsFn, dimension: int
   ):
     """Tests that square RoPE raises an error if the embedding dim is not divisible by the denominator.
 
@@ -208,12 +211,12 @@ class SequenceEmbeddersTest(parameterized.TestCase):
     square RoPE.
 
     Args:
-      rope_position_type: The type of RoPE to use.
+      rope_positions_fn: The position function of RoPE.
       dimension: The dimension of the embedding.
     """
     x_rope = jnp.ones((self.batch_size, self.seq_len_kv, dimension))  # Not divisible by the denominator # pylint: disable=line-too-long
     module = sequence_embedders.RoPESequenceEmbedding(
-        rope_position_type=rope_position_type
+        rope_positions_fn=rope_positions_fn
     )
     with self.assertRaisesRegex(
         ValueError,
@@ -222,15 +225,15 @@ class SequenceEmbeddersTest(parameterized.TestCase):
       module.init(self.rng, x_rope)
 
   @parameterized.named_parameters(
-      ("linear", "linear"),
-      ("square", "square"),
+      ("linear", LinearRoPEPositions()),
+      ("square", SquareRoPEPositions()),
   )
   def test_rope_embedding_output_shape(
-      self, rope_position_type: RoPEPositionType
+      self, rope_positions_fn: RoPEPositionsFn
   ):
     """Tests the output shape of RoPESequenceEmbedding."""
     module = sequence_embedders.RoPESequenceEmbedding(
-        rope_position_type=rope_position_type
+        rope_positions_fn=rope_positions_fn
     )
     x_rope = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x_rope)

@@ -19,6 +19,7 @@ import itertools
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import discrete
 from hackable_diffusion.lib.architecture import mlp
+from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 import jax
 import jax.numpy as jnp
@@ -84,7 +85,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         attention_head_dim=8,
         attention_normalize_qk=False,
         attention_use_rope=False,
-        attention_rope_position_type=arch_typing.RoPEPositionType.SQUARE,
+        attention_rope_positions_fn=sequence_embedders.SquareRoPEPositions(),
         normalization_type=arch_typing.NormalizationType.RMS_NORM,
         normalization_num_groups=0,
         activation='relu',

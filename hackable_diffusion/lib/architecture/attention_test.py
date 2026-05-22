@@ -18,6 +18,7 @@ from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
+from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -32,7 +33,9 @@ from absl.testing import parameterized
 
 Float = hd_typing.Float
 
-RoPEPositionType = arch_typing.RoPEPositionType
+LinearRoPEPositions = sequence_embedders.LinearRoPEPositions
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 INVALID_INT = arch_typing.INVALID_INT
 
 ################################################################################
@@ -270,25 +273,25 @@ class AttentionTest(parameterized.TestCase):
     )
 
   @parameterized.named_parameters(
-      ("self_attention_linear", None, True, RoPEPositionType.LINEAR),
-      ("self_attention_square", None, True, RoPEPositionType.SQUARE),
-      ("cross_attention_linear", "c", True, RoPEPositionType.LINEAR),
-      ("cross_attention_square", "c", True, RoPEPositionType.SQUARE),
-      ("self_attention_no_rope", None, False, RoPEPositionType.LINEAR),
-      ("cross_attention_no_rope", "c", False, RoPEPositionType.LINEAR),
+      ("self_attention_linear", None, True, LinearRoPEPositions()),
+      ("self_attention_square", None, True, SquareRoPEPositions()),
+      ("cross_attention_linear", "c", True, LinearRoPEPositions()),
+      ("cross_attention_square", "c", True, SquareRoPEPositions()),
+      ("self_attention_no_rope", None, False, LinearRoPEPositions()),
+      ("cross_attention_no_rope", "c", False, LinearRoPEPositions()),
   )
   def test_multi_head_attention_output_shape(
       self,
       context: Float["batch sequence2 dim1"] | None,
       use_rope: bool,
-      rope_position_type: RoPEPositionType,
+      rope_positions_fn: RoPEPositionsFn,
   ):
     """Tests the output shape of MultiHeadAttention."""
     c = self.c if context == "c" else None
     module = attention.MultiHeadAttention(
         num_heads=self.num_heads,
         use_rope=use_rope,
-        rope_position_type=rope_position_type,
+        rope_positions_fn=rope_positions_fn,
     )
     x_curr = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x_curr, c)
@@ -334,7 +337,7 @@ class AttentionTest(parameterized.TestCase):
     module = attention.MultiHeadAttention(
         num_heads=self.num_heads,
         use_rope=True,
-        rope_position_type=RoPEPositionType.SQUARE,
+        rope_positions_fn=SquareRoPEPositions(),
         normalize_qk=normalize_qk,
     )
     variables = module.init(self.rng, self.x, self.c)
@@ -612,7 +615,7 @@ class AttentionTest(parameterized.TestCase):
         normalize_qk=True,
         qk_norm_method="rms_norm",
         use_rope=True,
-        rope_position_type=RoPEPositionType.SQUARE,
+        rope_positions_fn=SquareRoPEPositions(),
     )
     x = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x, c=None)
@@ -626,7 +629,7 @@ class AttentionTest(parameterized.TestCase):
         normalize_qk=True,
         qk_norm_method="l2",
         use_rope=True,
-        rope_position_type=RoPEPositionType.SQUARE,
+        rope_positions_fn=SquareRoPEPositions(),
     )
     x = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x, c=None)

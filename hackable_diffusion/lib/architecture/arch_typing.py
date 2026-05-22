@@ -43,13 +43,6 @@ INVALID_INT = -1
 ################################################################################
 
 
-class RoPEPositionType(enum.StrEnum):
-  """Rotary Position Embedding (RoPE) types."""
-
-  SQUARE = "square"
-  LINEAR = "linear"
-
-
 class NormalizationType(enum.StrEnum):
   RMS_NORM = "rms_norm"
   GROUP_NORM = "group_norm"

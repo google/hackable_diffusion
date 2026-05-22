@@ -22,6 +22,7 @@ from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import mlp_blocks
+from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import normalization
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -35,7 +36,8 @@ Float = hd_typing.Float
 Bool = hd_typing.Bool
 Num = hd_typing.Num
 
-RoPEPositionType = arch_typing.RoPEPositionType
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 INVALID_INT = arch_typing.INVALID_INT
 
 
@@ -138,7 +140,7 @@ class DiTBlock(nn.Module):
     mlp_ratio: The ratio of the MLP hidden dimension to the hidden size.
     use_rope: Whether to use RoPE.
     dropout_rate: The dropout rate.
-    rope_position_type: The position type of RoPE.
+    rope_positions_fn: The position function of RoPE.
     zero_init_output: Whether to zero-init output projections in attention and
       FFN. Required to be True for identity-at-init when `use_gates=False`.
     dtype: The dtype of the block.
@@ -157,7 +159,7 @@ class DiTBlock(nn.Module):
   mlp_ratio: float = 4.0
   use_rope: bool = False
   dropout_rate: float = 0.0
-  rope_position_type: RoPEPositionType = RoPEPositionType.SQUARE
+  rope_positions_fn: RoPEPositionsFn = SquareRoPEPositions()
   zero_init_output: bool = True
   dtype: DType = jnp.float32
 
@@ -190,7 +192,7 @@ class DiTBlock(nn.Module):
         num_heads=self.num_heads,
         head_dim=self.head_dim,
         use_rope=self.use_rope,
-        rope_position_type=self.rope_position_type,
+        rope_positions_fn=self.rope_positions_fn,
         zero_init_output=self.zero_init_output,
         dtype=self.dtype,
         normalize_qk=self.attn_normalize_qk,

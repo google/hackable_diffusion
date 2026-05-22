@@ -21,6 +21,7 @@ from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import arch_utils
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet_blocks
 import jax
 import jax.numpy as jnp
@@ -35,7 +36,7 @@ Float = hd_typing.Float
 
 DownsampleType = arch_typing.DownsampleType
 UpsampleType = arch_typing.UpsampleType
-RoPEPositionType = arch_typing.RoPEPositionType
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SkipConnectionMethod = arch_typing.SkipConnectionMethod
 ConditionalBackbone = arch_typing.ConditionalBackbone
 
@@ -74,8 +75,8 @@ class Unet(nn.Module, ConditionalBackbone):
       in https://arxiv.org/abs/2010.04245.
     attention_use_rope: Whether to use rotary positional embeddings in attention
       as in https://arxiv.org/abs/2104.09864.
-    attention_rope_position_type: The type of rotary positional embeddings to
-      use.
+    attention_rope_positions_fn: The position function of rotary positional
+      embeddings.
     normalization_type: Type of normalization to use ('group_norm' or
       'rms_norm').
     normalization_num_groups: Number of groups for GroupNorm, if used.
@@ -108,7 +109,7 @@ class Unet(nn.Module, ConditionalBackbone):
   attention_head_dim: int
   attention_normalize_qk: bool
   attention_use_rope: bool
-  attention_rope_position_type: RoPEPositionType
+  attention_rope_positions_fn: RoPEPositionsFn
 
   # normalization
   normalization_type: normalization.NormalizationType
@@ -213,7 +214,7 @@ class Unet(nn.Module, ConditionalBackbone):
               norm_factory=self.norm_factory,
               cross_attention_bool=self.cross_attention_bool[i],
               use_rope=self.attention_use_rope,
-              rope_position_type=self.attention_rope_position_type,
+              rope_positions_fn=self.attention_rope_positions_fn,
               skip_connection_fn=self.skip_connection_fn,
               num_heads=self.attention_num_heads,
               head_dim=self.attention_head_dim,
@@ -258,7 +259,7 @@ class Unet(nn.Module, ConditionalBackbone):
         norm_factory=self.norm_factory,
         cross_attention_bool=True,
         use_rope=self.attention_use_rope,
-        rope_position_type=self.attention_rope_position_type,
+        rope_positions_fn=self.attention_rope_positions_fn,
         skip_connection_fn=self.skip_connection_fn,
         num_heads=self.attention_num_heads,
         head_dim=self.attention_head_dim,
@@ -296,7 +297,7 @@ class Unet(nn.Module, ConditionalBackbone):
               norm_factory=self.norm_factory,
               cross_attention_bool=self.cross_attention_bool[i],
               use_rope=self.attention_use_rope,
-              rope_position_type=self.attention_rope_position_type,
+              rope_positions_fn=self.attention_rope_positions_fn,
               skip_connection_fn=self.skip_connection_fn,
               num_heads=self.attention_num_heads,
               head_dim=self.attention_head_dim,

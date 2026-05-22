@@ -84,7 +84,7 @@ def get_config():
       cross_attention_bool=(False, False, False, False),
       attention_normalize_qk=True,
       attention_use_rope=True,
-      attention_rope_position_type=hd.architecture.RoPEPositionType.SQUARE,
+      attention_rope_positions_fn=hd.architecture.SquareRoPEPositions(),
       attention_num_heads=-1,
       attention_head_dim=64,
       normalization_type=hd.architecture.NormalizationType.RMS_NORM,

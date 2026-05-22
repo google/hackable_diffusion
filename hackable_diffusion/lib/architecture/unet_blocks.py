@@ -21,6 +21,7 @@ from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import arch_utils
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import sequence_embedders
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 
@@ -35,7 +36,8 @@ ActivationFn = arch_typing.ActivationFn
 SkipConnectionFn = arch_typing.SkipConnectionFn
 UpsampleFn = arch_typing.UpsampleFn
 DownsampleFn = arch_typing.DownsampleFn
-RoPEPositionType = arch_typing.RoPEPositionType
+RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 NormalizationLayerFactory = normalization.NormalizationLayerFactory
 
 kernel_init = arch_utils.kernel_init
@@ -235,7 +237,7 @@ class AttentionResidualBlock(nn.Module):
       `cross_attention_emb` as key/value source if `cross_attention_emb` is not
       None. If False, uses self-attention.
     use_rope: Whether to use rotary positional embeddings in attention.
-    rope_position_type: The type of rotary positional embeddings to use.
+    rope_positions_fn: The position function of rotary positional embeddings.
     skip_connection_fn: The skip connection function.
     num_heads: The number of attention heads. If set to INVALID_INT, it is
       inferred from head_dim and input channels.
@@ -249,7 +251,7 @@ class AttentionResidualBlock(nn.Module):
   norm_factory: NormalizationLayerFactory
   cross_attention_bool: bool
   use_rope: bool
-  rope_position_type: RoPEPositionType
+  rope_positions_fn: RoPEPositionsFn
   skip_connection_fn: SkipConnectionFn
   num_heads: int
   head_dim: int
@@ -277,7 +279,7 @@ class AttentionResidualBlock(nn.Module):
         head_dim=self.head_dim,
         use_rope=self.use_rope,
         normalize_qk=self.normalize_qk,
-        rope_position_type=self.rope_position_type,
+        rope_positions_fn=self.rope_positions_fn,
         zero_init_output=True,
         dtype=self.dtype,
     )(x=x, c=cross_attention_emb if self.cross_attention_bool else None)

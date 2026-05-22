@@ -19,6 +19,7 @@ from typing import Literal, Tuple
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import arch_utils
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet_blocks
 import jax
 import jax.numpy as jnp
@@ -30,7 +31,7 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-RoPEPositionType = arch_typing.RoPEPositionType
+SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 NormalizationType = arch_typing.NormalizationType
 DownsampleType = arch_typing.DownsampleType
 UpsampleType = arch_typing.UpsampleType
@@ -203,7 +204,7 @@ class AttentionResidualBlockTest(parameterized.TestCase):
         num_heads=INVALID_INT,
         normalize_qk=True,
         use_rope=False,
-        rope_position_type=RoPEPositionType.SQUARE,
+        rope_positions_fn=SquareRoPEPositions(),
     )
 
   @parameterized.named_parameters(
