@@ -92,6 +92,7 @@ class DiT(nn.Module, ConditionalBackbone):
       self,
       x: DataArray,
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      *,
       is_training: bool,
   ) -> DataArray:
     adaptive_norm_emb = conditioning_embeddings.get(

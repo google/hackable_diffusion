@@ -26,6 +26,7 @@ from hackable_diffusion.lib.architecture import discrete
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
+from hackable_diffusion.lib.architecture import unet_blocks
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.inference import diffusion_inference
@@ -68,9 +69,9 @@ UNET_CONFIG = {
     'attention_rope_positions_fn': sequence_embedders.SquareRoPEPositions(),
     'normalization_type': normalization.NormalizationType.GROUP_NORM,
     'normalization_num_groups': 4,
-    'skip_connection_method': arch_typing.SkipConnectionMethod.UNNORMALIZED_ADD,
-    'downsample_method': arch_typing.DownsampleType.MAX_POOL,
-    'upsample_method': arch_typing.UpsampleType.NEAREST,
+    'skip_connection_fn': unet_blocks.UnnormalizedAddSkip(),
+    'downsample_fn': unet_blocks.MaxPoolDownsample(),
+    'upsample_fn': unet_blocks.ImageResizeUpsample(resize_method='nearest'),
     'activation': 'silu',
 }
 

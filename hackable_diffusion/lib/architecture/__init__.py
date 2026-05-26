@@ -16,10 +16,7 @@
 
 # pylint: disable=g-importing-member
 from hackable_diffusion.lib.architecture.arch_typing import ConditionalBackbone
-from hackable_diffusion.lib.architecture.arch_typing import DownsampleType
 from hackable_diffusion.lib.architecture.arch_typing import NormalizationType
-from hackable_diffusion.lib.architecture.arch_typing import SkipConnectionMethod
-from hackable_diffusion.lib.architecture.arch_typing import UpsampleType
 from hackable_diffusion.lib.architecture.attention import MultiHeadAttention
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseConditioningEncoder
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseEmbedder
@@ -63,8 +60,16 @@ from hackable_diffusion.lib.architecture.simplicial import ConditionalSimplicial
 from hackable_diffusion.lib.architecture.simplicial import DenseEmbedder
 from hackable_diffusion.lib.architecture.unet import Unet
 from hackable_diffusion.lib.architecture.unet_blocks import AttentionResidualBlock
+from hackable_diffusion.lib.architecture.unet_blocks import AvgPoolDownsample
 from hackable_diffusion.lib.architecture.unet_blocks import ConvResidualBlock
+from hackable_diffusion.lib.architecture.unet_blocks import DownsampleFn
+from hackable_diffusion.lib.architecture.unet_blocks import ImageResizeUpsample
 from hackable_diffusion.lib.architecture.unet_blocks import InputConvBlock
+from hackable_diffusion.lib.architecture.unet_blocks import MaxPoolDownsample
+from hackable_diffusion.lib.architecture.unet_blocks import NormalizedAddSkip
 from hackable_diffusion.lib.architecture.unet_blocks import OutputConvBlock
+from hackable_diffusion.lib.architecture.unet_blocks import SkipConnectionFn
+from hackable_diffusion.lib.architecture.unet_blocks import UnnormalizedAddSkip
+from hackable_diffusion.lib.architecture.unet_blocks import UpsampleFn
 
 # pylint: enable=g-importing-member

@@ -49,27 +49,6 @@ class NormalizationType(enum.StrEnum):
   LAYER_NORM = "layer_norm"
 
 
-class DownsampleType(enum.StrEnum):
-  """Image downsampling methods."""
-
-  MAX_POOL = "max_pool"
-  AVG_POOL = "avg_pool"
-
-
-class UpsampleType(enum.StrEnum):
-  """Image upsampling methods."""
-
-  NEAREST = "nearest"
-  BILINEAR = "bilinear"
-
-
-class SkipConnectionMethod(enum.StrEnum):
-  """Methods for adding skip connections."""
-
-  UNNORMALIZED_ADD = "unnormalized_add"
-  NORMALIZED_ADD = "normalized_add"
-
-
 ################################################################################
 # MARK: Conditioning Mechanism
 ################################################################################
@@ -83,7 +62,7 @@ class SkipConnectionMethod(enum.StrEnum):
 #    - concatenate
 #    - sum
 #    - self_conditioning
-#
+
 ConditioningEmbeddings = dict[str, Any]
 
 ################################################################################
@@ -100,37 +79,8 @@ class ConditionalBackbone(Protocol):
       self,
       x: DataTree,
       conditioning_embeddings: ConditioningEmbeddings,
+      *,
       is_training: bool,
   ) -> DataTree:
     ...
 
-
-class SkipConnectionFn(Protocol):
-  """Skip connection function."""
-
-  def __call__(
-      self,
-      x: Float["batch height width channels"],
-      skip: Float["batch height width channels"],
-  ) -> Float["batch height width channels"]:
-    ...
-
-
-class DownsampleFn(Protocol):
-  """Downsample function."""
-
-  def __call__(
-      self,
-      x: Float["batch height width channels"],
-  ) -> Float["batch height//2 width//2 channels"]:
-    ...
-
-
-class UpsampleFn(Protocol):
-  """Upsample function."""
-
-  def __call__(
-      self,
-      x: Float["batch height width channels"],
-  ) -> Float["batch 2*height 2*width channels"]:
-    ...

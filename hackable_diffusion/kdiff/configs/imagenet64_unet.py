@@ -76,8 +76,8 @@ def get_config():
       base_channels=192,
       channels_multiplier=(1, 2, 3, 4),
       num_residual_blocks=(3, 3, 3, 3),
-      downsample_method=hd.architecture.DownsampleType.AVG_POOL,
-      upsample_method=hd.architecture.UpsampleType.NEAREST,
+      downsample_fn=hd.architecture.AvgPoolDownsample(),
+      upsample_fn=hd.architecture.ImageResizeUpsample(resize_method="nearest"),
       dropout_rate=(0.0, 0.1, 0.1, 0.1),
       bottleneck_dropout_rate=0.1,
       self_attention_bool=(False, False, True, True),
@@ -90,7 +90,7 @@ def get_config():
       normalization_type=hd.architecture.NormalizationType.RMS_NORM,
       normalization_num_groups=None,
       activation="gelu",
-      skip_connection_method=hd.architecture.SkipConnectionMethod.UNNORMALIZED_ADD,
+      skip_connection_fn=hd.architecture.UnnormalizedAddSkip(),
   )
 
   # MARK: Model / Diffusion
