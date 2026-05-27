@@ -2,7 +2,7 @@
 name = "hackable_diffusion"
 description = "Hackable Diffusion is a library for custom diffusion models."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 license = {file = "LICENSE"}
 authors = [{name = "hackable_diffusion authors"}]
 classifiers = [
