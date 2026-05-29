@@ -15,6 +15,8 @@
 """Sampling."""
 
 # pylint: disable=g-importing-member
+from hackable_diffusion.lib.sampling.ar_diffusion_sampler import ARStateHandler
+from hackable_diffusion.lib.sampling.ar_diffusion_sampler import AutoregressiveDiffusionSampler
 from hackable_diffusion.lib.sampling.base import DiffusionStep
 from hackable_diffusion.lib.sampling.base import DiffusionStepTree
 from hackable_diffusion.lib.sampling.base import SamplerStep
@@ -32,8 +34,8 @@ from hackable_diffusion.lib.sampling.discrete_step_sampler import MaxCappedRemas
 from hackable_diffusion.lib.sampling.discrete_step_sampler import NoRemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RescaledRemaskingFn
-from hackable_diffusion.lib.sampling.discrete_step_sampler import RoutingStrategy
 from hackable_diffusion.lib.sampling.discrete_step_sampler import Routing
+from hackable_diffusion.lib.sampling.discrete_step_sampler import RoutingStrategy
 from hackable_diffusion.lib.sampling.discrete_step_sampler import UnMaskingStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import AdjustedDDIMStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import DDIMStep
