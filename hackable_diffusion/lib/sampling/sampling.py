@@ -25,6 +25,7 @@ from typing import Protocol
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.inference import base as inference_base
 from hackable_diffusion.lib.sampling import base
+from hackable_diffusion.lib.sampling import diffusion_early_stopping
 from hackable_diffusion.lib.sampling import time_scheduling
 import jax
 import jax.numpy as jnp
@@ -39,15 +40,18 @@ PyTree = hd_typing.PyTree
 
 Conditioning = hd_typing.Conditioning
 DataTree = hd_typing.DataTree
+DataArray = hd_typing.DataArray
 TimeTree = hd_typing.TimeTree
 
 DiffusionStepTree = base.DiffusionStepTree
+DiffusionStep = base.DiffusionStep
 SamplerStep = base.SamplerStep
 StepInfoTree = base.StepInfoTree
 
 InferenceFn = inference_base.InferenceFn
 TimeSchedule = time_scheduling.TimeSchedule
 UpdateConditioningFn = base.UpdateConditioningFn
+DiffusionEarlyStoppingFn = diffusion_early_stopping.DiffusionEarlyStoppingFn
 
 ################################################################################
 # MARK: Protocols
@@ -116,6 +120,43 @@ def _get_input_inference_fn(
       is_leaf=_is_diffusion_leaf,
   )
   return xt, time
+
+
+def _index_pytree(pytree: PyTree, idx: int) -> PyTree:
+  """Indexes into the leading axis of every leaf in a PyTree."""
+  return jax.tree.map(lambda x: x[idx], pytree)
+
+
+def _freeze_done_elements(
+    new_step: DiffusionStepTree,
+    old_step: DiffusionStepTree,
+    done: jax.Array,
+) -> DiffusionStepTree:
+  """Keeps old values for batch elements that are already done.
+
+  For each leaf array with a leading batch dimension, elements where
+  ``done[b]`` is True are replaced with the corresponding values from
+  ``old_step``.  Non-batched leaves (e.g. scalar step counters, RNG keys)
+  are passed through from ``new_step`` unchanged.
+
+  Args:
+    new_step: The freshly computed DiffusionStepTree.
+    old_step: The previous DiffusionStepTree (carry from last iteration).
+    done: Bool array of shape ``[batch_size]``.
+
+  Returns:
+    A DiffusionStepTree where done elements are frozen.
+  """
+  batch_size = done.shape[0]
+
+  def _select_and_replace(new_leaf, old_leaf):
+    # Only freeze leaves whose leading dim matches batch_size.
+    if new_leaf.ndim == 0 or new_leaf.shape[0] != batch_size:
+      return new_leaf
+    done_bcast = done.reshape((-1,) + (1,) * (new_leaf.ndim - 1))
+    return jnp.where(done_bcast, old_leaf, new_leaf)
+
+  return jax.tree.map(_select_and_replace, new_step, old_step)
 
 
 ################################################################################
@@ -238,3 +279,170 @@ class DiffusionSampler(SampleFn):
     else:
       all_steps = None
     return last_step, all_steps
+
+
+################################################################################
+# MARK: DiffusionSamplerWithEarlyStopping
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class DiffusionSamplerWithEarlyStopping(SampleFn):
+  """Samples via reverse diffusion using ``jax.lax.while_loop``.
+
+  This sampler replaces ``jax.lax.scan`` with ``jax.lax.while_loop`` which
+  supports early stopping. After the whole while loop, it does one last finalize
+  step. Operates on the arrays and does not support tree structures at the
+  moment.
+
+  Attributes:
+    time_schedule: Defines the sequence of time steps for the process.
+    stepper: The sampling algorithm (e.g., DDIM) that updates the state.
+    num_steps: The total number of denoising steps.
+    update_conditioning_fn: An optional function to update the conditioning at
+      each step.
+    early_stopping_fn: An optional function that determines when to stop
+      denoising early, per batch element.  Defaults to ``NoEarlyStop`` (run all
+      steps).
+  """
+
+  time_schedule: TimeSchedule
+  stepper: SamplerStep
+  num_steps: int
+  update_conditioning_fn: UpdateConditioningFn | None = None
+  early_stopping_fn: DiffusionEarlyStoppingFn = (
+      diffusion_early_stopping.DiffusionNoEarlyStopFn()
+  )
+
+  @kt.typechecked
+  def __call__(
+      self,
+      inference_fn: InferenceFn,
+      rng: PRNGKey,
+      initial_noise: DataArray,
+      conditioning: Conditioning | None = None,
+  ) -> tuple[DiffusionStep, DiffusionStep | None]:
+    """Performs a full reverse diffusion sampling loop for a single sample.
+
+    Uses ``jax.lax.while_loop`` instead of ``jax.lax.scan``.
+
+    The ``last_step.step_info.step`` field records the step index at which
+    the loop terminated (useful for logging how many denoising steps were
+    actually executed when early stopping is active).
+
+    Args:
+      inference_fn: The trained model used to make predictions at each step.
+      rng: A JAX random key for any stochastic operations.
+      initial_noise: The starting noise, typically containing Gaussian noise.
+      conditioning: The conditioning.
+
+    Returns:
+      A tuple containing:
+        - The last ``DiffusionStep`` of the sampling process.  Its
+          ``step_info.step`` field records the actual number of update steps
+          executed.
+        - ``None`` (trajectory storage is not supported).
+
+    Raises:
+      ValueError: If ``num_steps < 1``.
+    """
+    if self.num_steps < 1:
+      raise ValueError(
+          f'Number of steps must be at least 1, got {self.num_steps}.'
+      )
+
+    # Pre-compute all step infos: shape [num_steps, ...] for each leaf.
+    all_step_infos = self.time_schedule.all_step_infos(
+        rng, self.num_steps, initial_noise
+    )
+    # Initialize from the first step info.
+    first_step_info = _index_pytree(all_step_infos, 0)
+    first_step = self.stepper.initialize(initial_noise, first_step_info)
+
+    # The total number of intermediate update steps excluding finalize.
+    num_intermediate_steps = self.num_steps - 1
+
+    # done: per-element bool tracking which batch elements have converged.
+    batch_size = initial_noise.shape[0]
+    done = jnp.zeros(batch_size, dtype=jnp.bool_)
+
+    # Carry: (step_carry, step_counter, done)
+    init_carry = (first_step, jnp.int32(0), done)
+
+    def _cond_fn(carry):
+      _, step, done = carry
+      within_budget = step < num_intermediate_steps
+      any_active = ~jnp.all(done)
+      return jnp.logical_and(within_budget, any_active)
+
+    def _body_fn(carry):
+      step_carry, step, done = carry
+
+      # Index +1 because index 0 is the init step info.
+      next_step_info = _index_pytree(all_step_infos, step + 1)
+
+      xt, time = _get_input_inference_fn(step_carry)
+      updated_conditioning = conditioning
+      if self.update_conditioning_fn is not None:
+        updated_conditioning = self.update_conditioning_fn(
+            conditioning, step_carry
+        )
+      prediction = inference_fn(
+          xt=xt,
+          conditioning=updated_conditioning,
+          time=time,
+      )
+      next_step = self.stepper.update(
+          prediction,
+          step_carry,
+          next_step_info,
+      )
+
+      # Check early stopping (per batch element).
+      new_done = done | self.early_stopping_fn.should_stop(
+          step=step,
+          current_step=next_step,
+          previous_step=step_carry,
+      )
+
+      # Freeze carry for already-done elements.
+      next_step = _freeze_done_elements(next_step, step_carry, done)
+
+      return (next_step, step + 1, new_done)
+
+    before_last_step, steps_executed, _ = jax.lax.while_loop(
+        _cond_fn, _body_fn, init_carry
+    )
+
+    # Finalize: run the last step.
+    last_step_info = _index_pytree(all_step_infos, num_intermediate_steps)
+    xt, time = _get_input_inference_fn(before_last_step)
+    last_conditioning = conditioning
+    if self.update_conditioning_fn is not None:
+      last_conditioning = self.update_conditioning_fn(
+          conditioning, before_last_step
+      )
+    last_prediction = inference_fn(
+        xt=xt,
+        conditioning=last_conditioning,
+        time=time,
+    )
+
+    last_step = self.stepper.finalize(
+        last_prediction,
+        before_last_step,
+        last_step_info,
+    )
+
+    # Record the actual number of steps executed in step_info.step.
+    # steps_executed counts update steps; +1 accounts for finalize.
+    actual_total_steps = steps_executed + 1
+    last_step = jax.tree.map(
+        lambda node: node.replace(
+            step_info=node.step_info.replace(step=actual_total_steps)
+        ),
+        last_step,
+        is_leaf=_is_diffusion_leaf,
+    )
+
+    return last_step, None
