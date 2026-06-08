@@ -22,6 +22,44 @@ The `notebooks/` directory contains several tutorials to get you started:
 *   **`mnist_discrete.ipynb`**: An example of discrete diffusion.
 *   **`mnist_multimodal.ipynb`**: A showcase of the multimodal capabilities, generating images and labels jointly.
 
+## Training configs
+
+The `kdiff/configs/` directory contains example configurations for training:
+
+*   **`mnist_unet.py`**: Standard diffusion training configuration on MNIST.
+
+To run a config locally, create a small launcher script (e.g. `train.py`):
+
+```python
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+import multiprocessing
+from kauldron import konfig
+
+def main():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "config", "kdiff/configs/mnist_unet.py"
+    )
+    config_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config_module)
+
+    cfg = config_module.get_config()
+    cfg.workdir = "/tmp/mnist_workdir"
+    trainer = konfig.resolve(cfg)
+    trainer.train()
+
+if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn", force=True)
+    main()
+```
+
+> **Note:** `XLA_PYTHON_CLIENT_PREALLOCATE=false` must be set *before*
+> importing JAX to prevent GPU memory preallocation conflicts with data
+> loading workers. The `if __name__ == "__main__"` guard is required for
+> multiprocessing compatibility.
+
 ## Installation
 
 To install the necessary dependencies, you can use pip with the provided

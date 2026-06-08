@@ -62,7 +62,7 @@ class KDiffInferenceFn:
 ################################################################################
 
 
-class SamplingEvaluator(kd.contrib.evals.CheckpointedEvaluator):
+class SamplingEvaluator(kd.evals.Evaluator):
   """Evaluator that samples from the model.
 
   Attributes:
