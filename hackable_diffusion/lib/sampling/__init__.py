@@ -23,6 +23,8 @@ from hackable_diffusion.lib.sampling.base import SamplerStep
 from hackable_diffusion.lib.sampling.base import StepInfo
 from hackable_diffusion.lib.sampling.base import StepInfoTree
 from hackable_diffusion.lib.sampling.base import UpdateConditioningFn
+from hackable_diffusion.lib.sampling.diffusion_early_stopping import DiffusionEntropyEarlyStopFn
+from hackable_diffusion.lib.sampling.diffusion_early_stopping import DiffusionNoEarlyStopFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import AllCorruptedMaskFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import CorruptedMaskFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import DiscreteDDIMStep
@@ -44,6 +46,7 @@ from hackable_diffusion.lib.sampling.gaussian_step_sampler import SdeStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import VelocityStep
 from hackable_diffusion.lib.sampling.riemannian_sampling import RiemannianFlowSamplerStep
 from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
+from hackable_diffusion.lib.sampling.sampling import DiffusionSamplerWithEarlyStopping
 from hackable_diffusion.lib.sampling.sampling import SampleFn
 from hackable_diffusion.lib.sampling.simplicial_step_sampler import SimplicialDDIMStep
 from hackable_diffusion.lib.sampling.time_scheduling import EDMTimeSchedule

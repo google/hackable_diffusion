@@ -100,7 +100,7 @@ from typing import Any, Protocol
 from hackable_diffusion.lib import corruption
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import inference
-from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
+from hackable_diffusion.lib.sampling import sampling
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -114,6 +114,7 @@ SamplerState = dict[str, Any]
 DataArray = hd_typing.DataArray
 Conditioning = hd_typing.Conditioning
 InferenceFn = inference.InferenceFn
+DiffusionStepTree = sampling.DiffusionStepTree
 
 ################################################################################
 # MARK: ARStateHandler
@@ -148,7 +149,7 @@ class ARStateHandler(Protocol):
 
   def update_ar_state(
       self,
-      canvas: DataArray,
+      canvas_last_step: DiffusionStepTree,
       sampler_state: SamplerState,
   ) -> SamplerState:
     ...
@@ -227,7 +228,7 @@ class AutoregressiveDiffusionSampler:
       dimensions for images).
   """
 
-  canvas_sampler: DiffusionSampler
+  canvas_sampler: sampling.DiffusionSampler
   diffusion_process: corruption.CategoricalProcess
   canvas_length: int
   max_num_canvases: int
@@ -299,7 +300,7 @@ class AutoregressiveDiffusionSampler:
 
       # Sample canvas via diffusion.
       # TODO: Implement returning the whole sampling trajectory.
-      last_step, _ = self.canvas_sampler(
+      canvas_last_step, _ = self.canvas_sampler(
           inference_fn=diffusion_inference_fn,
           rng=canvas_sampler_rng,
           initial_noise=initial_canvas,
@@ -307,11 +308,10 @@ class AutoregressiveDiffusionSampler:
               sampler_state=sampler_state
           ),
       )
-      sampled_canvas = last_step.xt
-
       # Post-process canvas and update sampler state.
       sampler_state = self.state_handler.update_ar_state(
-          canvas=sampled_canvas, sampler_state=sampler_state
+          canvas_last_step=canvas_last_step,
+          sampler_state=sampler_state,
       )
 
       return (sampler_state, rng, step + 1)

@@ -75,9 +75,9 @@ class MockStateHandler:
         max_num_canvases=max_num_canvases,
     )
 
-  def update_ar_state(self, canvas, sampler_state):
+  def update_ar_state(self, canvas_last_step, sampler_state):
     # Squeeze trailing dimension (hackable_diffusion uses <B, L, 1>).
-    canvas = canvas[..., 0]
+    canvas = canvas_last_step.xt[..., 0]
 
     step = sampler_state['step']
     canvas_length = canvas.shape[1]
@@ -338,8 +338,8 @@ class PerElementDoneHandler:
     }
     return state
 
-  def update_ar_state(self, canvas, sampler_state):
-    canvas = canvas[..., 0]
+  def update_ar_state(self, canvas_last_step, sampler_state):
+    canvas = canvas_last_step.xt[..., 0]
     step = sampler_state['step']
     canvas_length = canvas.shape[1]
     indices = jnp.arange(canvas_length) + step
