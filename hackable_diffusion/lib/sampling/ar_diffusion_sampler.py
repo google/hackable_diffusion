@@ -226,6 +226,8 @@ class AutoregressiveDiffusionSampler:
     data_dtype: Data type of the generated output.
     data_shape: Additional dimensions of the generated output (e.g., spatial
       dimensions for images).
+    use_lax_while_loop: An optional flag to choose between lax while loop or
+      pythonic one.
   """
 
   canvas_sampler: sampling.DiffusionSampler
@@ -236,6 +238,7 @@ class AutoregressiveDiffusionSampler:
   data_dtype: jnp.dtype
   data_shape: tuple[int, ...]
   early_stopping_fn: EarlyStoppingFn = DoneEarlyStoppingFn()
+  use_lax_while_loop: bool = True
 
   @kt.typechecked
   def __call__(
@@ -316,7 +319,13 @@ class AutoregressiveDiffusionSampler:
 
       return (sampler_state, rng, step + 1)
 
-    sampler_state, _, _ = jax.lax.while_loop(_cond_fn, _body_fn, init_carry)
+    if self.use_lax_while_loop:
+      sampler_state, _, _ = jax.lax.while_loop(_cond_fn, _body_fn, init_carry)
+    else:
+      carry = init_carry
+      while _cond_fn(carry):
+        carry = _body_fn(carry)
+      sampler_state, _, _ = carry
 
     # Read-out the final output.
     output = self.state_handler.finalize_ar_state(sampler_state=sampler_state)

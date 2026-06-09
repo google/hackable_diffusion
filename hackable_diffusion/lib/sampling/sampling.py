@@ -304,6 +304,8 @@ class DiffusionSamplerWithEarlyStopping(SampleFn):
     early_stopping_fn: An optional function that determines when to stop
       denoising early, per batch element.  Defaults to ``NoEarlyStop`` (run all
       steps).
+    use_lax_while_loop: An optional flag to choose between lax while loop or
+      pythonic one.
   """
 
   time_schedule: TimeSchedule
@@ -313,6 +315,7 @@ class DiffusionSamplerWithEarlyStopping(SampleFn):
   early_stopping_fn: DiffusionEarlyStoppingFn = (
       diffusion_early_stopping.DiffusionNoEarlyStopFn()
   )
+  use_lax_while_loop: bool = True
 
   @kt.typechecked
   def __call__(
@@ -410,9 +413,15 @@ class DiffusionSamplerWithEarlyStopping(SampleFn):
 
       return (next_step, step + 1, new_done)
 
-    before_last_step, steps_executed, _ = jax.lax.while_loop(
-        _cond_fn, _body_fn, init_carry
-    )
+    if self.use_lax_while_loop:
+      before_last_step, steps_executed, _ = jax.lax.while_loop(
+          _cond_fn, _body_fn, init_carry
+      )
+    else:
+      carry = init_carry
+      while _cond_fn(carry):
+        carry = _body_fn(carry)
+      before_last_step, steps_executed, _ = carry
 
     # Finalize: run the last step.
     last_step_info = _index_pytree(all_step_infos, num_intermediate_steps)
