@@ -78,9 +78,6 @@ pip install -e .[dev]
 This will install libraries such as JAX, Flax, and other utilities required to
 run the code.
 
-## Projects
-
-For experimental projects, please refer to `third_party/py/hd_projects`.
 
 ## Disclaimer
 
