@@ -98,3 +98,22 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 licenses for the specific language governing permissions and limitations under
 those licenses.
 This is not an official Google product.
+
+
+## Citing Hackable Diffusion
+
+If Hackable Diffusion was helpful for a publication, please cite this repository:
+(authors are included in the alphabetical order by the last name)
+
+```
+@software{hackable_diffusion2026github,
+  author = {Crepy, Clement and De Bortoli, Valentin and Galashov, Alexandre and Greff, Klaus and Korshunova, Ira},
+  title = {{Hackable Diffusion}: A modular toolbox written in Jax to experiment and educate around Diffusion modeling.},
+  url = {https://github.com/google/hackable_diffusion},
+  version = {0.0.1},
+  year = {2026},
+  note = {Authors listed in alphabetical order by the last name},
+}
+```
+
+*This is not an officially supported Google product.*

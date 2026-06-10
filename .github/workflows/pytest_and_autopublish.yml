@@ -31,4 +31,25 @@ jobs:
     - name: Run core tests
       run: pytest -vv -n auto
 
-  # TODO(klausg): Add publish job to push to PyPI later
+  # Auto-publish when version is increased
+  publish-job:
+    # Only try to publish if:
+    # * Repo is self (prevents running from forks)
+    # * Branch is `main`
+    if: |
+      github.repository == 'google/hackable_diffusion'
+      && github.ref == 'refs/heads/main'
+    needs: pytest-job  # Only publish after tests are successful
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+
+    steps:
+    # Publish the package (if local `__version__` > pip version)
+    - uses: etils-actions/pypi-auto-publish@v1
+      with:
+        pypi-token: ${{ secrets.PYPI_API_TOKEN }}
+        gh-token: ${{ secrets.GITHUB_TOKEN }}
+        parse-changelog: true
+        
