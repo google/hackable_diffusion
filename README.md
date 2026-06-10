@@ -110,7 +110,7 @@ If Hackable Diffusion was helpful for a publication, please cite this repository
   author = {Crepy, Clement and De Bortoli, Valentin and Galashov, Alexandre and Greff, Klaus and Korshunova, Ira},
   title = {{Hackable Diffusion}: A modular toolbox written in Jax to experiment and educate around Diffusion modeling.},
   url = {https://github.com/google/hackable_diffusion},
-  version = {0.0.1},
+  version = {1.0.0},
   year = {2026},
   note = {Authors listed in alphabetical order by the last name},
 }
