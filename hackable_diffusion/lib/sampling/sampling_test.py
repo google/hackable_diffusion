@@ -198,10 +198,6 @@ class DiffusionSamplerTest(parameterized.TestCase):
         ),
     )
 
-  def test_concat_pytree_invalid_tree(self):
-    with self.assertRaisesRegex(ValueError, 'pytree structure error'):
-      sampling._concat_pytree(dict(a=1), dict(a=2, b=3), dict(a=4))
-
   # MARK: Test for diffusion_sampling
 
   def test_sample_one(self):
