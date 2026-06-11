@@ -3,6 +3,10 @@
 Hackable Diffusion is a modular toolbox written in Jax to experiment and educate
 around Diffusion modeling.
 
+## Supported Integrations
+
+*   **Gemma Fine-Tuning**: Support for text diffusion models (e.g., DiffusionGemma) via a hybrid AR-diffusion implementation. The adapter package and fine-tuning configurations are located in the Gemma repository (GitHub: https://github.com/google-deepmind/gemma/tree/main/gemma/diffusion/hackable_diffusion_adapter).
+
 ## Philosophy
 
 The core philosophy of this library is **hackability**. It is designed from the
