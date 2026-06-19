@@ -153,9 +153,11 @@ class DiTTest(parameterized.TestCase):
         'ffn': {
             'Dense_Up': {
                 'kernel': (self.embedding_dim, mlp_hidden),
+                'bias': (mlp_hidden,),
             },
             'Dense_Down': {
                 'kernel': (mlp_hidden, self.embedding_dim),
+                'bias': (self.embedding_dim,),
             },
         },
         'ConditionalNorm_MLP': {
