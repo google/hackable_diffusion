@@ -48,8 +48,8 @@ class RiemannianProcess(base.CorruptionProcess):
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,
-  ) -> DataArray:
+      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Sample from the base distribution (uniform) on the manifold."""
     return self.manifold.random_uniform(key, data_spec.shape)
 
@@ -57,9 +57,9 @@ class RiemannianProcess(base.CorruptionProcess):
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,
-      time: TimeArray,
-  ) -> tuple[DataArray, TargetInfo]:
+      x0: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
     x1 = self.sample_from_invariant(key, data_spec=x0)
 
     # Evaluate schedule: alpha(t) is the geodesic interpolation parameter.
@@ -84,8 +84,8 @@ class RiemannianProcess(base.CorruptionProcess):
   def convert_predictions(
       self,
       prediction: TargetInfo,
-      xt: DataArray,
-      time: TimeArray,
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
     """Convert predictions to velocity parameterization."""
     if 'velocity' in prediction:
@@ -95,5 +95,5 @@ class RiemannianProcess(base.CorruptionProcess):
     )
 
   @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, Any]:
+  def get_schedule_info(self, time: TimeArray) -> dict[str, Any]:  # pyrefly: ignore[not-a-type]
     return self.schedule.evaluate(time)

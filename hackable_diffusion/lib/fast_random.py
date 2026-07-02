@@ -175,7 +175,7 @@ def log_dirichlet_fast(
     The log of the Dirichlet sample.
   """
   alpha = jnp.array(alpha)
-  total_shape = shape + alpha.shape
+  total_shape = shape + alpha.shape  # pyrefly: ignore[unsupported-operation]
   log_gammas = log_gamma_fast(key, alpha, shape=total_shape)
   return jax.nn.log_softmax(log_gammas, axis=-1)
 

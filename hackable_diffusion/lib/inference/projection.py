@@ -45,11 +45,11 @@ class ProjectionFn(Protocol):
 
   def __call__(
       self,
-      xt: DataTree,
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,
-      outputs: TargetInfoTree,
-  ) -> TargetInfoTree:
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Projection function protocol."""
     ...
 
@@ -62,8 +62,8 @@ class ProjectionFn(Protocol):
 @kt.typechecked
 def _to_x0(
     preds: TargetInfo,
-    xt: DataArray,
-    time: TimeArray,
+    xt: DataArray,  # pyrefly: ignore[not-a-type]
+    time: TimeArray,  # pyrefly: ignore[not-a-type]
     process: corruption_base.CorruptionProcess,
 ) -> tuple[str, TargetInfo]:
   """Converts the preds to x0 prediction.
@@ -96,8 +96,8 @@ def _to_x0(
 @kt.typechecked
 def _from_x0(
     preds: TargetInfo,
-    xt: DataArray,
-    time: TimeArray,
+    xt: DataArray,  # pyrefly: ignore[not-a-type]
+    time: TimeArray,  # pyrefly: ignore[not-a-type]
     process: corruption_base.CorruptionProcess,
     prediction_type: str,
 ) -> TargetInfo:
@@ -138,9 +138,9 @@ class IdentityProjectionFn(ProjectionFn):
 
   def __call__(
       self,
-      xt: DataTree,
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,
   ) -> TargetInfo:
     """Identity projection function."""
@@ -172,9 +172,9 @@ class StaticThresholdProjectionFn(ProjectionFn):
   @kt.typechecked
   def __call__(
       self,
-      xt: DataArray,
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeArray,
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,
   ) -> TargetInfo:
     """Static threshold projection function."""
@@ -207,7 +207,7 @@ class DynamicThresholdProjectionFn(ProjectionFn):
           f"Percentile must be between 0.0 and 100.0, got {self.percentile}"
       )
 
-  def _dynamic_threshold(self, x0: DataArray) -> DataArray:
+  def _dynamic_threshold(self, x0: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Dynamic threshold projection function."""
     axes = tuple(range(1, x0.ndim))
     s = jnp.percentile(jnp.abs(x0), self.percentile, axis=axes, keepdims=True)
@@ -218,9 +218,9 @@ class DynamicThresholdProjectionFn(ProjectionFn):
   @kt.typechecked
   def __call__(
       self,
-      xt: DataArray,
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeArray,
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,
   ) -> TargetInfo:
     """Dynamic threshold projection function."""

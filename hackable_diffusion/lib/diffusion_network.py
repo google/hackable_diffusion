@@ -58,14 +58,14 @@ ShapeTree = hd_typing.ShapeTree
 class InputRescaler(Protocol):
   """Rescales the input in a schedule-dependent way."""
 
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:
+  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     ...
 
 
 class TimeRescaler(Protocol):
   """Rescales the time, optionally in a schedule-dependent way."""
 
-  def __call__(self, time: TimeArray) -> TimeArray:
+  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -79,11 +79,11 @@ class BaseDiffusionNetwork(Protocol):
 
   def __call__(
       self,
-      time: TimeTree,
-      xt: DataTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfoTree:
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -130,7 +130,7 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       conditioning_shape: ConditioningShape,
       key: PRNGKey,
       is_training: bool = False,
-  ) -> PyTree:
+  ) -> PyTree:  # pyrefly: ignore[not-a-type]
     """Initializes the variables of the model from shapes."""
     dummy_xt = jax_helpers.get_dummy_batch_fixed_dtype(
         input_shape, dtype=self.data_dtype
@@ -155,8 +155,8 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeArray,
-      xt: DataArray,
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
   ) -> TargetInfo:
@@ -256,7 +256,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       conditioning_shape: ConditioningShape,
       key: PRNGKey,
       is_training: bool = False,
-  ) -> PyTree:
+  ) -> PyTree:  # pyrefly: ignore[not-a-type]
     """Initializes the variables of the model from shapes."""
     dummy_xt = jax_helpers.get_dummy_batch_fixed_dtype(
         input_shape, dtype=self.data_dtype
@@ -285,8 +285,8 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeArray,
-      xt: DataArray,
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
   ) -> TargetInfo:
@@ -384,18 +384,18 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
 
   backbone_network: arch_typing.ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
-  prediction_type: PyTree[str]
-  data_dtype: PyTree[DType]
-  input_rescaler: PyTree[InputRescaler | None] | None = None
-  time_rescaler: PyTree[TimeRescaler | None] | None = None
+  prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
+  data_dtype: PyTree[DType]  # pyrefly: ignore[not-a-type]
+  input_rescaler: PyTree[InputRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
+  time_rescaler: PyTree[TimeRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
 
   def initialize_variables(
       self,
-      input_shape: ShapeTree,
+      input_shape: ShapeTree,  # pyrefly: ignore[not-a-type]
       conditioning_shape: ConditioningShape,
       key: PRNGKey,
       is_training: bool = False,
-  ) -> PyTree:
+  ) -> PyTree:  # pyrefly: ignore[not-a-type]
     dummy_xt = jax_helpers.get_dummy_batch(input_shape, dtype=self.data_dtype)
     dummy_conditioning = jax_helpers.get_dummy_batch_fixed_dtype(
         conditioning_shape, dtype=jnp.float32
@@ -417,11 +417,11 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,
-      xt: DataTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfoTree:
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     if self.time_rescaler is not None:
       time_rescaled = jax_helpers.lenient_map(
           lambda time, time_rescaler: time_rescaler(time)
@@ -477,10 +477,10 @@ class LogSnrTimeRescaler(TimeRescaler):
   """Time rescaler that uses the logsnr of the process."""
 
   schedule: GaussianSchedule
-  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None
+  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None  # pyrefly: ignore[not-a-type]
 
   @kt.typechecked
-  def __call__(self, time: TimeArray) -> TimeArray:
+  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     """Returns the time rescaled by the logsnr of the process."""
     if self.postprocess_fn is None:
       postprocess_fn = lambda x: x
@@ -501,7 +501,7 @@ class MagnitudeScheduleInputRescaler(InputRescaler):
   schedule: GaussianSchedule
 
   @kt.typechecked
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:
+  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Returns the inputs rescaled by the magnitude of the schedule."""
     alpha_t = self.schedule.alpha(time)
     sigma_t = self.schedule.sigma(time)

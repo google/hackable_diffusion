@@ -66,14 +66,14 @@ class WrappersTest(absltest.TestCase):
         mlp_linen, params['params'], inputs=x
     )
     _, nnx_params, _ = nnx.split(mlp_nnx_converted, nnx.Param, ...)
-    self.assertTrue(jnp.allclose(nnx_params['bias'], params['params']['bias']))
+    self.assertTrue(jnp.allclose(nnx_params['bias'], params['params']['bias']))  # pyrefly: ignore[bad-index]
     self.assertTrue(
-        jnp.allclose(nnx_params['kernel'], params['params']['kernel'])
+        jnp.allclose(nnx_params['kernel'], params['params']['kernel'])  # pyrefly: ignore[bad-index]
     )
-    self.assertIsInstance(mlp_nnx_converted.to_nnx__module, nn.Dense)
+    self.assertIsInstance(mlp_nnx_converted.to_nnx__module, nn.Dense)  # pyrefly: ignore[missing-attribute]
 
     outputs_nnx = mlp_nnx_converted(inputs=x)
-    self.assertTrue(jnp.allclose(outputs_nnx, outputs_linen))
+    self.assertTrue(jnp.allclose(outputs_nnx, outputs_linen))  # pyrefly: ignore[bad-argument-type]
 
 
 if __name__ == '__main__':

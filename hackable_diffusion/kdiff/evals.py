@@ -124,7 +124,7 @@ class SamplingEvaluator(kd.evals.Evaluator):
       model: nn.Module,
       context: kd.train.Context,
       key: hd.hd_typing.PRNGKey,
-  ) -> tuple[DataTree, Array["batch *cond_shape"]]:
+  ) -> tuple[DataTree, Array["batch *cond_shape"]]:  # pyrefly: ignore[not-a-type, unknown-name]
     _, kwargs = data_utils.get_model_inputs(model, context)
     x0 = kwargs["x0"]
     cond = kwargs.get("cond", None)  # cond is optional

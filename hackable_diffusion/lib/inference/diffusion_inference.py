@@ -48,10 +48,10 @@ class GuidedDiffusionInferenceFn(InferenceFn):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,
-      xt: DataTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
 
     cond_outputs = self.base_inference_fn(
@@ -67,7 +67,7 @@ class GuidedDiffusionInferenceFn(InferenceFn):
 
     guided_outputs = self.guidance_fn(
         xt=xt,
-        conditioning=conditioning,
+        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
         time=time,
         cond_outputs=cond_outputs,
         uncond_outputs=uncond_outputs,
@@ -75,7 +75,7 @@ class GuidedDiffusionInferenceFn(InferenceFn):
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,
+        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
         time=time,
         outputs=guided_outputs,
     )

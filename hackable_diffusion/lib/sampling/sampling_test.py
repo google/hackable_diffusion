@@ -209,7 +209,7 @@ class DiffusionSamplerTest(parameterized.TestCase):
         num_steps=5,
     )
     last_step, all_steps = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -287,7 +287,7 @@ class DiffusionSamplerTest(parameterized.TestCase):
         ValueError, 'Number of steps must be at least 2.*'
     ):
       sample_fn(
-          inference_fn=self.dummy_inference_fn,
+          inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
           initial_noise=self.initial_noise,
           conditioning=self.conditioning,
           rng=jax.random.PRNGKey(0),
@@ -305,7 +305,7 @@ class DiffusionSamplerTest(parameterized.TestCase):
         num_steps=2,
     )
     last_step, all_steps = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -376,7 +376,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=5,
     )
     last_step, trajectory = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -416,7 +416,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         ValueError, 'Number of steps must be at least 1.*'
     ):
       sample_fn(
-          inference_fn=self.dummy_inference_fn,
+          inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
           initial_noise=self.initial_noise,
           conditioning=self.conditioning,
           rng=jax.random.PRNGKey(0),
@@ -430,7 +430,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=1,
     )
     last_step, trajectory = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -461,7 +461,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=2,
     )
     last_step, trajectory = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -487,7 +487,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=3,
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -510,7 +510,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=5,
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -527,7 +527,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=5,
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -544,7 +544,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=1,
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -563,7 +563,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         early_stopping_fn=StopAfterNSteps(num_steps=1),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -593,7 +593,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         early_stopping_fn=AlwaysStop(),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -622,7 +622,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         early_stopping_fn=diffusion_early_stopping.DiffusionNoEarlyStopFn(),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -658,7 +658,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         early_stopping_fn=PerElementStop(stop_at_step=(0, 2)),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -686,7 +686,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         early_stopping_fn=StopAfterNSteps(num_steps=2),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -732,13 +732,13 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     )
 
     scan_result, _ = scan_sampler(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=rng,
     )
     whileloop_result, _ = whileloop_sampler(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=rng,
@@ -790,7 +790,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
         ),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -827,7 +827,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
         ),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -863,7 +863,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
         ),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
@@ -928,7 +928,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
         ),
     )
     last_step, _ = sample_fn(
-        inference_fn=self.dummy_inference_fn,
+        inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
         initial_noise=self.initial_noise,
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),

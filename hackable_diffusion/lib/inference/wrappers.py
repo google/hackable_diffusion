@@ -49,15 +49,15 @@ class FlaxLinenInferenceFn(InferenceFn):
   """Inference function protocol with a diffusion network given by nn.Module."""
 
   network: nn.Module
-  params: PyTree
+  params: PyTree  # pyrefly: ignore[not-a-type]
 
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,
-      xt: DataTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
     return self.network.apply(
         {"params": self.params},
@@ -78,12 +78,12 @@ class ConvertedNNXDiffusionNetwork(Protocol):
 
   def __call__(
       self,
-      time: TimeTree,
-      xt: DataTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
       rngs: nnx.Rngs,
-  ) -> TargetInfoTree:
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
     ...
 
@@ -109,10 +109,10 @@ class FlaxNNXInferenceFn(InferenceFn):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,
-      xt: DataTree,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
     return self.nnx_network(
         time=time,
@@ -130,7 +130,7 @@ class FlaxNNXInferenceFn(InferenceFn):
 
 def convert_flax_linen_module_with_params_to_nnx(
     linen_module: nn.Module,
-    restored_linen_params: PyTree,
+    restored_linen_params: PyTree,  # pyrefly: ignore[not-a-type]
     *init_args,
     **init_kwargs,
 ) -> nnx.Module:

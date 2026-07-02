@@ -34,8 +34,8 @@ Array = hd_typing.Array
 PRNGKey = hd_typing.PRNGKey
 PyTree = hd_typing.PyTree
 
-PointwiseFn = Callable[[Array["..."]], Array["..."]]
-PointwiseMethod = Callable[[Any, Array["..."]], Array["..."]]
+PointwiseFn = Callable[[Array["..."]], Array["..."]]  # pyrefly: ignore[bad-index, not-a-type]
+PointwiseMethod = Callable[[Any, Array["..."]], Array["..."]]  # pyrefly: ignore[bad-index, not-a-type]
 
 DataTree = hd_typing.DataTree
 ShapeTree = hd_typing.ShapeTree
@@ -238,7 +238,7 @@ def egrad(g):
 
 
 @kt.typechecked
-def flatten_non_batch_dims(x: Array["batch ..."]):
+def flatten_non_batch_dims(x: Array["batch ..."]):  # pyrefly: ignore[not-a-type]
   """Reshapes the array with `B` as the first dimension to (B, ...).
 
   If the array has only one batched dimension, the result has shape (B, 1). If
@@ -254,7 +254,7 @@ def flatten_non_batch_dims(x: Array["batch ..."]):
 
 
 @kt.typechecked
-def bcast_right(value: Array["*shape"], ndim: int) -> Array["*out_shape"]:
+def bcast_right(value: Array["*shape"], ndim: int) -> Array["*out_shape"]:  # pyrefly: ignore[not-a-type]
   """Broadcast by adding singleton axes to the right, instead of to the left."""
   if value.ndim > ndim:
     raise ValueError(
@@ -277,7 +277,7 @@ _to_fp32_from_bf16 = (  # pylint: disable=invalid-name
 )
 
 
-def to_bf16_from_fp32(x: PyTree) -> PyTree:
+def to_bf16_from_fp32(x: PyTree) -> PyTree:  # pyrefly: ignore[not-a-type]
   """Converts a PyTree of arrays to bfloat16.
 
   Leaves of the PyTree are converted to bfloat16 if they are float32.
@@ -292,7 +292,7 @@ def to_bf16_from_fp32(x: PyTree) -> PyTree:
   return jax.tree.map(_to_bf16_from_fp32, x)
 
 
-def optional_bf16_to_fp32(x: PyTree) -> PyTree:
+def optional_bf16_to_fp32(x: PyTree) -> PyTree:  # pyrefly: ignore[not-a-type]
   """Converts a PyTree of arrays from bfloat16.
 
   Leaves of the PyTree are converted to float32 if they are bfloat16.
@@ -372,7 +372,7 @@ class CustomGradient:
       return self.primal_fn(arg), arg
 
     def f_bwd(arg, g):
-      grad_val = g * self.derivative_fn(arg)
+      grad_val = g * self.derivative_fn(arg)  # pyrefly: ignore[not-callable]
       return (grad_val,)
 
     primal_wrapper.defvjp(f_fwd, f_bwd)
@@ -388,7 +388,7 @@ class CustomGradient:
       return self.primal_fn(self_, arg), arg
 
     def f_bwd(self_, arg, g):
-      grad_val = g * self.derivative_fn(self_, arg)
+      grad_val = g * self.derivative_fn(self_, arg)  # pyrefly: ignore[not-callable]
       return (grad_val,)
 
     primal_wrapper.defvjp(f_fwd, f_bwd)
@@ -421,10 +421,10 @@ def is_tuple_of_ints(obj):
 
 
 def get_dummy_batch_fixed_dtype(
-    shape: ShapeTree,
+    shape: ShapeTree,  # pyrefly: ignore[not-a-type]
     dtype: DType,
     only_first_axis: bool = False,
-) -> DataTree:
+) -> DataTree:  # pyrefly: ignore[not-a-type]
   """Get a dummy batch of data with a fixed dtype.
 
   `shape` is a PyTree of shapes. For each leaf of `shape`, we use the fixed
@@ -454,10 +454,10 @@ def get_dummy_batch_fixed_dtype(
 
 
 def get_dummy_batch(
-    shape: ShapeTree,
-    dtype: DTypeTree,
+    shape: ShapeTree,  # pyrefly: ignore[not-a-type]
+    dtype: DTypeTree,  # pyrefly: ignore[not-a-type]
     only_first_axis: bool = False,
-) -> DataTree:
+) -> DataTree:  # pyrefly: ignore[not-a-type]
   """Get a dummy batch of data.
 
   `shape` and `dtype` are PyTrees with the same structure. For each leaf of

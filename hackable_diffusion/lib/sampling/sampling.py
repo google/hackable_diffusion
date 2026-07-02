@@ -65,9 +65,9 @@ class SampleFn(Protocol):
       self,
       inference_fn: InferenceFn,
       rng: PRNGKey,
-      initial_noise: DataTree,
+      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:
+  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -76,7 +76,7 @@ class SampleFn(Protocol):
 ################################################################################
 
 
-def _split_pytree(full_pytree: PyTree) -> tuple[PyTree, PyTree, PyTree]:
+def _split_pytree(full_pytree: PyTree) -> tuple[PyTree, PyTree, PyTree]:  # pyrefly: ignore[not-a-type]
   """Splits a PyTree into first, middle, and last slices of each leaf."""
   return (
       jax.tree_util.tree_map(lambda x: x[0], full_pytree),
@@ -86,8 +86,8 @@ def _split_pytree(full_pytree: PyTree) -> tuple[PyTree, PyTree, PyTree]:
 
 
 def _concat_pytree(
-    first: PyTree, intermediates: PyTree, last: PyTree
-) -> PyTree:
+    first: PyTree, intermediates: PyTree, last: PyTree  # pyrefly: ignore[not-a-type]
+) -> PyTree:  # pyrefly: ignore[not-a-type]
   """Concatenates first, middle, and last slices of each leaf into a single PyTree."""
 
   def concat_leaf(first_, intermediates_, last_):
@@ -100,14 +100,14 @@ def _concat_pytree(
   return jax.tree.map(concat_leaf, first, intermediates, last)
 
 
-def _is_diffusion_leaf(x: PyTree) -> bool:
+def _is_diffusion_leaf(x: PyTree) -> bool:  # pyrefly: ignore[not-a-type]
   """Returns True if the leaf is a DiffusionStep."""
   return isinstance(x, base.DiffusionStep)
 
 
 def _get_input_inference_fn(
-    step_carry: DiffusionStepTree,
-) -> tuple[DataTree, TimeTree]:
+    step_carry: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+) -> tuple[DataTree, TimeTree]:  # pyrefly: ignore[not-a-type]
   """Returns the input to the inference function for a given step."""
   xt = jax.tree.map(
       lambda x: x.xt,
@@ -122,16 +122,16 @@ def _get_input_inference_fn(
   return xt, time
 
 
-def _index_pytree(pytree: PyTree, idx: int) -> PyTree:
+def _index_pytree(pytree: PyTree, idx: int) -> PyTree:  # pyrefly: ignore[not-a-type]
   """Indexes into the leading axis of every leaf in a PyTree."""
   return jax.tree.map(lambda x: x[idx], pytree)
 
 
 def _freeze_done_elements(
-    new_step: DiffusionStepTree,
-    old_step: DiffusionStepTree,
+    new_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+    old_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
     done: jax.Array,
-) -> DiffusionStepTree:
+) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
   """Keeps old values for batch elements that are already done.
 
   For each leaf array with a leading batch dimension, elements where
@@ -191,9 +191,9 @@ class DiffusionSampler(SampleFn):
       self,
       inference_fn: InferenceFn,
       rng: PRNGKey,
-      initial_noise: DataTree,
+      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None = None,
-  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:
+  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:  # pyrefly: ignore[not-a-type]
     """Performs a full reverse diffusion sampling loop for a single sample.
 
     This function orchestrates the denoising process, starting from an initial
@@ -229,12 +229,12 @@ class DiffusionSampler(SampleFn):
         first_step_info,
     )
 
-    def _step(step_carry: DiffusionStepTree, next_step_info: StepInfoTree):
+    def _step(step_carry: DiffusionStepTree, next_step_info: StepInfoTree):  # pyrefly: ignore[not-a-type]
       xt, time = _get_input_inference_fn(step_carry)
       updated_conditioning = conditioning
       if self.update_conditioning_fn is not None:
         updated_conditioning = self.update_conditioning_fn(
-            conditioning, step_carry
+            conditioning, step_carry  # pyrefly: ignore[bad-argument-type]
         )
       prediction = inference_fn(
           xt=xt,
@@ -260,7 +260,7 @@ class DiffusionSampler(SampleFn):
     last_conditioning = conditioning
     if self.update_conditioning_fn is not None:
       last_conditioning = self.update_conditioning_fn(
-          conditioning, before_last_step
+          conditioning, before_last_step  # pyrefly: ignore[bad-argument-type]
       )
     last_prediction = inference_fn(
         xt=xt,
@@ -322,7 +322,7 @@ class DiffusionSamplerWithEarlyStopping(SampleFn):
       self,
       inference_fn: InferenceFn,
       rng: PRNGKey,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None = None,
   ) -> tuple[DiffusionStep, DiffusionStep | None]:
     """Performs a full reverse diffusion sampling loop for a single sample.
@@ -388,7 +388,7 @@ class DiffusionSamplerWithEarlyStopping(SampleFn):
       updated_conditioning = conditioning
       if self.update_conditioning_fn is not None:
         updated_conditioning = self.update_conditioning_fn(
-            conditioning, step_carry
+            conditioning, step_carry  # pyrefly: ignore[bad-argument-type]
         )
       prediction = inference_fn(
           xt=xt,
@@ -429,7 +429,7 @@ class DiffusionSamplerWithEarlyStopping(SampleFn):
     last_conditioning = conditioning
     if self.update_conditioning_fn is not None:
       last_conditioning = self.update_conditioning_fn(
-          conditioning, before_last_step
+          conditioning, before_last_step  # pyrefly: ignore[bad-argument-type]
       )
     last_prediction = inference_fn(
         xt=xt,

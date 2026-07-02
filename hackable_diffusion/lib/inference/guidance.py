@@ -45,12 +45,12 @@ class GuidanceFn(Protocol):
 
   def __call__(
       self,
-      xt: DataTree,
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,
-      cond_outputs: TargetInfoTree,
-      uncond_outputs: TargetInfoTree,
-  ) -> TargetInfoTree:
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Combine conditional and unconditional outputs."""
     ...
 
@@ -69,12 +69,12 @@ class ScalarGuidanceFn(GuidanceFn):
   @kt.typechecked
   def __call__(
       self,
-      xt: DataTree,
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-      time: TimeTree,
-      cond_outputs: TargetInfoTree,
-      uncond_outputs: TargetInfoTree,
-  ) -> TargetInfoTree:
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Simple scalar guidance function."""
     del conditioning, time, xt  # unused
     return jax.tree.map(
@@ -104,12 +104,12 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
   @kt.typechecked
   def __call__(
       self,
-      xt: DataTree,
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,
-      cond_outputs: TargetInfoTree,
-      uncond_outputs: TargetInfoTree,
-  ) -> TargetInfoTree:
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Limited interval guidance function."""
     del conditioning  # unused
     time = jax_helpers.bcast_right(time, xt.ndim)

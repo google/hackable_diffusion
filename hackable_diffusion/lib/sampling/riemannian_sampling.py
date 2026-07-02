@@ -41,9 +41,9 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataTree,
-      initial_step_info: base.StepInfoTree,
-  ) -> base.DiffusionStepTree:
+      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
+      initial_step_info: base.StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     return base.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
@@ -53,10 +53,10 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
   @kt.typechecked
   def update(
       self,
-      prediction: TargetInfoTree,
+      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       current_step: base.DiffusionStep,
-      next_step_info: base.StepInfoTree,
-  ) -> base.DiffusionStepTree:
+      next_step_info: base.StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     xt = current_step.xt
     t = current_step.step_info.time
     next_t = next_step_info.time
@@ -77,8 +77,8 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
   @kt.typechecked
   def finalize(
       self,
-      prediction: TargetInfoTree,
+      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       current_step: base.DiffusionStep,
-      last_step_info: base.StepInfoTree,
-  ) -> base.DiffusionStepTree:
+      last_step_info: base.StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     return current_step

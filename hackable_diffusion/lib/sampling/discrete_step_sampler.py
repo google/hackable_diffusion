@@ -155,7 +155,7 @@ class RemaskingFn(Protocol):
   in fact dependent of `s` (the next time) and `t` (the current time).
   """
 
-  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:
+  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     """Returns the probability of unmasking."""
     ...
 
@@ -165,7 +165,7 @@ class NoRemaskingFn(RemaskingFn):
   """No remasking strategy."""
 
   @kt.typechecked
-  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:
+  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     return jnp.zeros_like(s)
 
 
@@ -201,7 +201,7 @@ class MaxCappedRemaskingFn(RemaskingFn):
       raise ValueError(f'max_cap must be non-negative, got {self.max_cap}')
 
   @kt.typechecked
-  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:
+  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     alpha_s = self.schedule.alpha(s)
     alpha_t = self.schedule.alpha(t)
     return jnp.minimum((1.0 - alpha_s) / alpha_t, self.max_cap)
@@ -245,7 +245,7 @@ class RescaledRemaskingFn(RemaskingFn):
   switch_max: float = 1.0
 
   @kt.typechecked
-  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:
+  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     alpha_s = self.schedule.alpha(s)
     alpha_t = self.schedule.alpha(t)
     return self.rescale_factor * jnp.minimum((1.0 - alpha_s) / alpha_t, 1.0)
@@ -257,7 +257,7 @@ class RescaledRemaskingFn(RemaskingFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class CorruptedMaskFn(Protocol):
+class CorruptedMaskFn(Protocol):  # pyrefly: ignore[bad-class-definition]
   """Corrupted mask function protocol.
 
   This function takes the current xt, i.e., the "noisy" data and returns a mask
@@ -267,7 +267,7 @@ class CorruptedMaskFn(Protocol):
   can be defined as in https://arxiv.org/abs/2410.06264.
   """
 
-  def __call__(self, xt: DataArray) -> DataArray:
+  def __call__(self, xt: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Returns the corrupted mask."""
     ...
 
@@ -277,7 +277,7 @@ class AllCorruptedMaskFn(CorruptedMaskFn):
   """Assume all tokens are corrupted."""
 
   @kt.typechecked
-  def __call__(self, xt: DataArray) -> DataArray:
+  def __call__(self, xt: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     return jnp.ones_like(xt, dtype=jnp.bool_)
 
 
@@ -298,7 +298,7 @@ class MaskValueCorruptedMaskFn(CorruptedMaskFn):
       )
 
   @kt.typechecked
-  def __call__(self, xt: DataArray) -> DataArray:
+  def __call__(self, xt: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     mask_value = self.process.process_num_categories - 1
     return xt == mask_value
 
@@ -322,11 +322,11 @@ class MaskValueCorruptedMaskFn(CorruptedMaskFn):
 class Routing:
   """Container for 3-way routing components."""
 
-  stay: Float['...']
-  noise: Float['...']
-  clean: Float['...']
+  stay: Float['...']  # pyrefly: ignore[bad-index, not-a-type]
+  noise: Float['...']  # pyrefly: ignore[bad-index, not-a-type]
+  clean: Float['...']  # pyrefly: ignore[bad-index, not-a-type]
 
-  def to_stacked(self, axis=-1) -> Float['... 3']:
+  def to_stacked(self, axis=-1) -> Float['... 3']:  # pyrefly: ignore[not-a-type]
     """Stacks fields into a single array for vectorized operations."""
     return jnp.stack([self.stay, self.noise, self.clean], axis=axis)
 
@@ -335,7 +335,7 @@ def _sample_routing(
     key: PRNGKey,
     weights: Routing,
     candidates: Routing
-    ) -> DataArray:
+    ) -> DataArray:  # pyrefly: ignore[not-a-type]
   """Apply 3-way routing to construct the next state.
 
   3-way routing determines the next state by sampling from a mixture of three
@@ -370,11 +370,11 @@ def _sample_routing(
 def _generate_candidates(
     corruption_process: CategoricalProcess,
     prediction: TargetInfo,
-    xt: DataArray,
-    time_bcast: TimeArray,
+    xt: DataArray,  # pyrefly: ignore[not-a-type]
+    time_bcast: TimeArray,  # pyrefly: ignore[not-a-type]
     key: PRNGKey,
     temperature: float,
-) -> tuple[DataArray, DataArray, Float['... M']]:
+) -> tuple[DataArray, DataArray, Float['... M']]:  # pyrefly: ignore[not-a-type]
   """Generate candidate x0, x_noise samples and logits."""
   logits = corruption_process.convert_predictions(prediction, xt, time_bcast)[
       'logits'
@@ -409,11 +409,11 @@ class RoutingStrategy(Protocol):
   def __call__(
       self,
       routing_weights: Routing,
-      logits: Float['... M'],
-      x0: DataArray,
-      xt: DataArray,
-      time: TimeArray,
-      next_time: TimeArray,
+      logits: Float['... M'],  # pyrefly: ignore[not-a-type]
+      x0: DataArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      next_time: TimeArray,  # pyrefly: ignore[not-a-type]
       key: PRNGKey,
   ) -> Routing:
     """Transforms routing weights.
@@ -463,11 +463,11 @@ class GreedyPlanner(RoutingStrategy):
   def __call__(
       self,
       routing_weights: Routing,
-      logits: Float['... M'],
-      x0: DataArray,
-      xt: DataArray,
-      time: TimeArray,
-      next_time: TimeArray,
+      logits: Float['... M'],  # pyrefly: ignore[not-a-type]
+      x0: DataArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      next_time: TimeArray,  # pyrefly: ignore[not-a-type]
       key: PRNGKey,
   ) -> Routing:
     # Routing weights have shape (batch, *spatial, 1). We flatten all spatial
@@ -587,7 +587,7 @@ class UnMaskingStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     discrete.assert_discrete_shape_is_valid(
@@ -821,7 +821,7 @@ class DiscreteDDIMStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     discrete.assert_discrete_shape_is_valid(
@@ -978,7 +978,7 @@ class DiscreteFlowMatchingStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     discrete.assert_discrete_shape_is_valid(
@@ -1168,7 +1168,7 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     discrete.assert_discrete_shape_is_valid(

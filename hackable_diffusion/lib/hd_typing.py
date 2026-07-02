@@ -76,7 +76,7 @@ TimeTree = PyTree[Array['_batch *_data_shape'], '$T']
 
 # Corresponding schedule.
 ScheduleKey = str  # e.g. 'time', 'alpha', 'sigma', 'logsnr', etc.
-ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']
+ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']  # pyrefly: ignore[not-a-type, unknown-name]
 
 # A dictionary containing the different training targets. Same structure as
 # DataArray for every different target (e.g. x0, epsilon, score, velocity,
@@ -85,7 +85,7 @@ ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']
 # are usually labels (x0 : Int["batch 1"]) while the predictions are
 # logits (x0 : Float["batch K"]).
 TargetKey = str  # e.g. 'x0', 'epsilon', 'score', 'velocity', 'v', 'mask', ...
-TargetInfo = dict[TargetKey, Array['batch *_data_shape']]
+TargetInfo = dict[TargetKey, Array['batch *_data_shape']]  # pyrefly: ignore[not-a-type, unknown-name]
 TargetInfoTree = PyTree[Array['batch *_data_shape']]
 
 # Conditioning structures.

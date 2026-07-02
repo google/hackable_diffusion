@@ -59,7 +59,7 @@ class GaussianNoiseScheduleTest(absltest.TestCase):
         self.sigma_arg_history.append(t)
         return t
 
-    self.fake_process = DummyNoiseSchedule()
+    self.fake_process = DummyNoiseSchedule()  # pyrefly: ignore[bad-instantiation]
 
   def test_logsnr(self):
     _ = self.fake_process.logsnr(jnp.array([1.0]))

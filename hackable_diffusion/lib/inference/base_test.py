@@ -44,7 +44,7 @@ InferenceFn = base.InferenceFn
 def get_dummy_inference_fn(process: GaussianProcess) -> InferenceFn:
 
   def dummy_inference_fn(
-      xt: DataTree, conditioning: Conditioning, time: TimeTree
+      xt: DataTree, conditioning: Conditioning, time: TimeTree  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
     """Dummy inference function."""
     del conditioning  # unused
@@ -54,7 +54,7 @@ def get_dummy_inference_fn(process: GaussianProcess) -> InferenceFn:
         time=time,
     )
 
-  return dummy_inference_fn
+  return dummy_inference_fn  # pyrefly: ignore[bad-return]
 
 
 ################################################################################

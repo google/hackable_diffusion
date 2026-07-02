@@ -43,6 +43,6 @@ class InferenceFn(Protocol):
   """
 
   def __call__(
-      self, time: TimeTree, xt: DataTree, conditioning: Conditioning | None
-  ) -> TargetInfoTree:
+      self, time: TimeTree, xt: DataTree, conditioning: Conditioning | None  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     ...

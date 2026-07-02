@@ -111,9 +111,9 @@ class Diffusion(nn.Module, kw_only=True):
   @typechecked
   def __call__(
       self,
-      x0: DataTree,
+      x0: DataTree,  # pyrefly: ignore[not-a-type]
       cond: Conditioning | None = None,
-  ) -> dict[str, PyTree]:
+  ) -> dict[str, PyTree]:  # pyrefly: ignore[not-a-type]
     """Run the diffusion training step.
 
     Samples timesteps, corrupts the input data according to the corruption
@@ -184,8 +184,8 @@ class KauldronLossWrapper(kd.losses.Loss):
       self,
       preds: TargetInfo,
       targets: TargetInfo,
-      time: TimeArray,
-  ) -> LossOutput:
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
     return self.loss(
         preds=preds,
         targets=targets,

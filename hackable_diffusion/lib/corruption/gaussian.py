@@ -190,8 +190,8 @@ class GaussianProcess(CorruptionProcess):
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,
-  ) -> DataArray:
+      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Sample from the invariant distribution."""
     return jax.random.normal(key, shape=data_spec.shape)
 
@@ -199,9 +199,9 @@ class GaussianProcess(CorruptionProcess):
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,
-      time: TimeArray,
-  ) -> tuple[DataArray, TargetInfo]:
+      x0: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
     epsilon = self.sample_from_invariant(key, data_spec=x0)
 
     time = jax_helpers.bcast_right(time, x0.ndim)
@@ -223,8 +223,8 @@ class GaussianProcess(CorruptionProcess):
   def convert_predictions(
       self,
       prediction: TargetInfo,
-      xt: DataArray,
-      time: TimeArray,
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
     if len(prediction) != 1:
       raise KeyError(
@@ -249,14 +249,14 @@ class GaussianProcess(CorruptionProcess):
     }
 
   @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:
+  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
     """Get the schedule info for the given time."""
     return self.schedule.evaluate(time)
 
   @kt.typechecked
   def _get_alpha_sigma_and_der(
-      self, time: TimeArray
-  ) -> tuple[TimeArray, TimeArray, TimeArray, TimeArray]:
+      self, time: TimeArray  # pyrefly: ignore[not-a-type]
+  ) -> tuple[TimeArray, TimeArray, TimeArray, TimeArray]:  # pyrefly: ignore[not-a-type]
     """Get the alpha, sigma and their derivatives for the given time."""
     alpha = self.schedule.alpha(time)
     sigma = self.schedule.sigma(time)

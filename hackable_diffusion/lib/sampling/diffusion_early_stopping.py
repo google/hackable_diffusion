@@ -48,7 +48,7 @@ class DiffusionEarlyStoppingFn(Protocol):
       step: jax.Array,
       current_step: DiffusionStep,
       previous_step: DiffusionStep,
-  ) -> Bool['B']:
+  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
     """Returns a bool array of shape ``[batch_size]``.
 
     Args:
@@ -77,7 +77,7 @@ class DiffusionNoEarlyStopFn(DiffusionEarlyStoppingFn):
       step: jax.Array,
       current_step: DiffusionStep,
       previous_step: DiffusionStep,
-  ) -> Bool['']:
+  ) -> Bool['']:  # pyrefly: ignore[not-a-type]
     del step, previous_step
     batch_size = current_step.xt.shape[0]
     return jnp.zeros(batch_size, dtype=jnp.bool_)
@@ -120,7 +120,7 @@ class DiffusionEntropyEarlyStopFn(DiffusionEarlyStoppingFn):
       step: jax.Array,
       current_step: DiffusionStep,
       previous_step: DiffusionStep,
-  ) -> Bool['']:
+  ) -> Bool['']:  # pyrefly: ignore[not-a-type]
     del step, previous_step
     aux = current_step.aux
     logits = aux[self.logits_key]

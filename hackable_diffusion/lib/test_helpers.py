@@ -90,8 +90,8 @@ class IdentityBackbone(nn.Module, arch_typing.ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: arch_typing.DataTree,
+      x: arch_typing.DataTree,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> arch_typing.DataTree:
+  ) -> arch_typing.DataTree:  # pyrefly: ignore[not-a-type]
     return x

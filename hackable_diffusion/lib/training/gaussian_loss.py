@@ -50,14 +50,14 @@ GaussianSchedule = schedules.GaussianSchedule
 def compute_continuous_diffusion_loss(
     preds: TargetInfo,
     targets: TargetInfo,
-    time: TimeArray,
+    time: TimeArray,  # pyrefly: ignore[not-a-type]
     *,
     schedule: GaussianSchedule | None = None,
     loss_type: GaussianPredictionType | None = None,
     prediction_type: GaussianPredictionType | None = None,
     convert_to_logsnr_schedule: bool = True,
     weight_fn: base.WeightFn | None = None,
-) -> LossOutput:
+) -> LossOutput:  # pyrefly: ignore[not-a-type]
   """Compute the continuous diffusion loss.
 
   Compute the loss used in the continuous diffusion framework. More precisely,
@@ -125,11 +125,11 @@ def compute_continuous_diffusion_loss(
           "Can only auto-detect prediction type if it is the only prediction"
           f" type. But got {preds.keys()=}"
       )
-    prediction_type = next(iter(preds.keys()))
+    prediction_type = next(iter(preds.keys()))  # pyrefly: ignore[bad-assignment]
 
   # Compute MSE part of the loss
-  pred = preds[prediction_type]
-  target = targets[prediction_type]
+  pred = preds[prediction_type]  # pyrefly: ignore[bad-index]
+  target = targets[prediction_type]  # pyrefly: ignore[bad-index]
   l2 = jnp.square(pred - target)
 
   # Broadcast time to the same shape as pred
@@ -147,7 +147,7 @@ def compute_continuous_diffusion_loss(
           " loss_type."
       )
 
-    conversion_term = CONVERTERS[prediction_type][loss_type](schedule, time)
+    conversion_term = CONVERTERS[prediction_type][loss_type](schedule, time)  # pyrefly: ignore[bad-index]
     weight = weight * conversion_term
 
   # Maybe multiply by -dlogsnr/dt
@@ -185,8 +185,8 @@ class NoWeightGaussianLoss(base.DiffusionLoss):
       self,
       preds: TargetInfo,
       targets: TargetInfo,
-      time: TimeArray,
-  ) -> LossOutput:
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
     return compute_continuous_diffusion_loss(
         # arrays
         preds=preds,
@@ -214,14 +214,14 @@ class SiD2Loss(base.DiffusionLoss):
       self,
       preds: TargetInfo,
       targets: TargetInfo,
-      time: TimeArray,
-  ) -> LossOutput:
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
     def _weight_fn(
         schedule: GaussianSchedule,
         preds: TargetInfo,
         targets: TargetInfo,
-        time: TimeArray,
-    ) -> TimeArray:
+        time: TimeArray,  # pyrefly: ignore[not-a-type]
+    ) -> TimeArray:  # pyrefly: ignore[not-a-type]
       """Weight function for the sigmoid loss.
 
       The weight function is defined for the `x0` prediction type, see
@@ -252,7 +252,7 @@ class SiD2Loss(base.DiffusionLoss):
         # fixed arguments
         loss_type="x0",
         convert_to_logsnr_schedule=True,
-        weight_fn=_weight_fn,
+        weight_fn=_weight_fn,  # pyrefly: ignore[bad-argument-type]
         # forward arguments
         schedule=self.schedule,
         prediction_type=self.prediction_type,
@@ -269,19 +269,19 @@ class SiD2Loss(base.DiffusionLoss):
 ################################################################################
 
 
-def x0_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:
+def x0_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   sigma = schedule.sigma(time)
   alpha = schedule.alpha(time)
   return jnp.square(alpha / sigma)
 
 
-def x0_to_score_scaling(schedule, time: TimeArray) -> TimeArray:
+def x0_to_score_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   return jnp.square(alpha / jnp.square(sigma))
 
 
-def x0_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
+def x0_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   alpha_der = jax_helpers.egrad(schedule.alpha)(time)
@@ -289,7 +289,7 @@ def x0_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
   return jnp.square(alpha_der - alpha * sigma_der / sigma)
 
 
-def x0_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
+def x0_to_v_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   return jnp.square(jnp.square(alpha) / sigma + sigma)
@@ -300,16 +300,16 @@ def x0_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
 ################################################################################
 
 
-def epsilon_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:
+def epsilon_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / x0_to_epsilon_scaling(schedule, time)
 
 
-def epsilon_to_score_scaling(schedule, time: TimeArray) -> TimeArray:
+def epsilon_to_score_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   sigma = schedule.sigma(time)
   return 1.0 / jnp.square(sigma)
 
 
-def epsilon_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
+def epsilon_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   alpha_der = jax_helpers.egrad(schedule.alpha)(time)
@@ -317,7 +317,7 @@ def epsilon_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
   return jnp.square(sigma * alpha_der / alpha - sigma_der)
 
 
-def epsilon_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
+def epsilon_to_v_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   return jnp.square(alpha + jnp.square(sigma) / alpha)
@@ -328,15 +328,15 @@ def epsilon_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
 ################################################################################
 
 
-def score_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:
+def score_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / x0_to_score_scaling(schedule, time)
 
 
-def score_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:
+def score_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / epsilon_to_score_scaling(schedule, time)
 
 
-def score_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
+def score_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   alpha_der = jax_helpers.egrad(schedule.alpha)(time)
@@ -344,7 +344,7 @@ def score_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
   return jnp.square(jnp.square(sigma) * alpha_der / alpha - sigma * sigma_der)
 
 
-def score_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
+def score_to_v_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   return jnp.square(sigma * alpha + jnp.power(sigma, 3) / alpha)
@@ -355,19 +355,19 @@ def score_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
 ################################################################################
 
 
-def velocity_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:
+def velocity_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / x0_to_velocity_scaling(schedule, time)
 
 
-def velocity_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:
+def velocity_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / epsilon_to_velocity_scaling(schedule, time)
 
 
-def velocity_to_score_scaling(schedule, time: TimeArray) -> TimeArray:
+def velocity_to_score_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / score_to_velocity_scaling(schedule, time)
 
 
-def velocity_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
+def velocity_to_v_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   alpha = schedule.alpha(time)
   sigma = schedule.sigma(time)
   alpha_der = jax_helpers.egrad(schedule.alpha)(time)
@@ -383,23 +383,23 @@ def velocity_to_v_scaling(schedule, time: TimeArray) -> TimeArray:
 ################################################################################
 
 
-def v_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:
+def v_to_x0_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / x0_to_v_scaling(schedule, time=time)
 
 
-def v_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:
+def v_to_epsilon_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / epsilon_to_v_scaling(schedule, time=time)
 
 
-def v_to_score_scaling(schedule, time: TimeArray) -> TimeArray:
+def v_to_score_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / score_to_v_scaling(schedule, time=time)
 
 
-def v_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:
+def v_to_velocity_scaling(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   return 1.0 / velocity_to_v_scaling(schedule, time=time)
 
 
-def _identity(schedule, time: TimeArray) -> TimeArray:
+def _identity(schedule, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
   del schedule  # Unused
   return jnp.ones_like(time)
 

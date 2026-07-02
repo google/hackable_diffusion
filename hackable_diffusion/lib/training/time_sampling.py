@@ -64,7 +64,7 @@ TimeTree = hd_typing.TimeTree
 class TimeSampler(Protocol):
   """Time sampler protocol operating on arrays or on pytrees."""
 
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
+  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
     """Returns a time array or a pytree of time arrays.
 
     The assumption is that data_spec is either an array or a pytree. We
@@ -119,7 +119,7 @@ class UniformTimeSampler(TimeSampler):
       )
 
   @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     shape = jax_helpers.get_broadcastable_shape(data_spec.shape, self.axes)
     minval, maxval = self.span
     return jax.random.uniform(key, shape=shape, minval=minval, maxval=maxval)
@@ -163,7 +163,7 @@ class LogitNormalTimeSampler(TimeSampler):
       )
 
   @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     shape = jax_helpers.get_broadcastable_shape(data_spec.shape, self.axes)
     minval, maxval = self.span
     out = self.mean + self.scale * jax.random.normal(key, shape=shape)
@@ -199,7 +199,7 @@ class UniformStratifiedTimeSampler(TimeSampler):
       )
 
   @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     shape = jax_helpers.get_broadcastable_shape(data_spec.shape, self.axes)
     tensor_dim = math.prod(shape)
 
@@ -235,7 +235,7 @@ class UnbalancedTimestepSampler(TimeSampler):
   p_equal: float = 0.5
 
   @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
+  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
     # Check that the keys match the data.
     if set(data_spec.keys()) != {self.key1, self.key2}:
       raise KeyError(

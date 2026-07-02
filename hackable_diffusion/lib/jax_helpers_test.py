@@ -261,8 +261,8 @@ class UtilsTest(parameterized.TestCase):
       raise ValueError(f'Unsupported input type: {input_type}')
 
     class Foo(nn.Module):
-      a: PyTree[float]
-      b: PyTree[float]
+      a: PyTree[float]  # pyrefly: ignore[not-a-type]
+      b: PyTree[float]  # pyrefly: ignore[not-a-type]
 
       @nn.compact
       def __call__(self, x):
@@ -294,7 +294,7 @@ class UtilsTest(parameterized.TestCase):
         return nn.Dense(features=self.num_features)(x)
 
     class NestedEmbedder(nn.Module, BaseEmbedder):
-      embedders: PyTree[BaseEmbedder]
+      embedders: PyTree[BaseEmbedder]  # pyrefly: ignore[not-a-type]
 
       @nn.compact
       def __call__(self, x):
@@ -347,8 +347,8 @@ class UtilsTest(parameterized.TestCase):
 
     @dataclasses.dataclass(kw_only=True, frozen=True)
     class NestedFn(BaseFn):
-      a: PyTree[float]
-      b: PyTree[float]
+      a: PyTree[float]  # pyrefly: ignore[not-a-type]
+      b: PyTree[float]  # pyrefly: ignore[not-a-type]
 
       def __call__(self, x):
         return jax.tree.map(
@@ -472,7 +472,7 @@ class SafeSpanTest(parameterized.TestCase):
   def test_frozen(self):
     span = jax_helpers.SafeSpan(safety_epsilon=0.1)
     with self.assertRaises(dataclasses.FrozenInstanceError):
-      span.minval = 0.5
+      span.minval = 0.5  # pyrefly: ignore[read-only]
 
   def test_invalid_epsilon_negative(self):
     with self.assertRaisesRegex(

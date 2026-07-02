@@ -272,10 +272,10 @@ class SelfConditioningBackbone(nn.Module, arch_typing.ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: arch_typing.DataTree,
+      x: arch_typing.DataTree,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> arch_typing.DataTree:
+  ) -> arch_typing.DataTree:  # pyrefly: ignore[not-a-type]
     return nn.Dense(features=self.num_classes)(x)
 
 
@@ -398,7 +398,7 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
     )
 
     self.assertFalse(
-        jnp.allclose(output_no_sc['logits'], output_always['logits']),
+        jnp.allclose(output_no_sc['logits'], output_always['logits']),  # pyrefly: ignore[bad-index]
         msg='Outputs should differ since self-conditioning changes the input.',
     )
 
@@ -490,9 +490,9 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
         rngs={'self_conditioning': self.key},
     )
 
-    logits_zero = output_zero['logits']
-    logits_one = output_one['logits']
-    logits_half = output_half['logits']
+    logits_zero = output_zero['logits']  # pyrefly: ignore[bad-index]
+    logits_one = output_one['logits']  # pyrefly: ignore[bad-index]
+    logits_half = output_half['logits']  # pyrefly: ignore[bad-index]
 
     matches_zero = jnp.all(
         jnp.isclose(logits_half, logits_zero), axis=(1, 2, 3)

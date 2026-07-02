@@ -131,7 +131,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
     )
     self.cond_encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=self.time_encoder,
-        conditioning_embedders=CONDITIONING_ENCODER,
+        conditioning_embedders=CONDITIONING_ENCODER,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
         conditioning_rules=CONDITIONING_RULES,
     )

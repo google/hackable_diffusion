@@ -80,7 +80,7 @@ class PostCorruptionFn(Protocol):
   in DiGress https://arxiv.org/abs/2209.14734u
   """
 
-  def __call__(self, x: DataArray) -> DataArray:
+  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Project the labels."""
     ...
 
@@ -88,7 +88,7 @@ class PostCorruptionFn(Protocol):
 class IdentityPostCorruptionFn(PostCorruptionFn):
   """Identity post corruption function."""
 
-  def __call__(self, x: DataArray) -> DataArray:
+  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Project the labels."""
     return x
 
@@ -101,7 +101,7 @@ class SymmetricPostCorruptionFn(PostCorruptionFn):
   removing any self-loop.
   """
 
-  def __call__(self, x: DataArray) -> DataArray:
+  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Project the labels."""
     if x.ndim != 4:
       raise ValueError(f'Expected 4D input, got {x.ndim=}.')
@@ -183,7 +183,7 @@ class CategoricalProcess(CorruptionProcess):
   ##############################################################################
 
   @property
-  def invariant_probs_vec(self) -> Float['M']:
+  def invariant_probs_vec(self) -> Float['M']:  # pyrefly: ignore[not-a-type, unknown-name]
     """Returns the invariant probability distribution as a vector."""
     return jnp.array(self.invariant_probs)
 
@@ -204,7 +204,7 @@ class CategoricalProcess(CorruptionProcess):
     else:
       invariant_probs_masking = (0.0,) * self.num_categories + (1.0,)
       invariant_probs_masking_vec = np.array(invariant_probs_masking)
-      return np.all(
+      return np.all(  # pyrefly: ignore[bad-return]
           np.array(self.invariant_probs) == invariant_probs_masking_vec
       )
 
@@ -216,8 +216,8 @@ class CategoricalProcess(CorruptionProcess):
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,
-  ) -> DataArray:
+      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Sample from the invariant distribution."""
     return jax.random.choice(
         key,
@@ -231,9 +231,9 @@ class CategoricalProcess(CorruptionProcess):
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,
-      time: TimeArray,
-  ) -> tuple[DataArray, TargetInfo]:
+      x0: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
     """Corrupt the data according to the schedule and invariant probs.
 
     The target information contains:
@@ -314,8 +314,8 @@ class CategoricalProcess(CorruptionProcess):
   def convert_predictions(
       self,
       prediction: TargetInfo,
-      xt: DataArray,
-      time: TimeArray,
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
     del time  # Unused
     if len(prediction) != 1 or 'logits' not in prediction:
@@ -331,7 +331,7 @@ class CategoricalProcess(CorruptionProcess):
     }
 
   @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:
+  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
     """Get the schedule info for the given time."""
     return self.schedule.evaluate(time)
 
@@ -393,7 +393,7 @@ class CategoricalProcess(CorruptionProcess):
 ################################################################################
 
 
-def assert_discrete_shape_is_valid(x: DataArray, x_name: str = 'x0'):
+def assert_discrete_shape_is_valid(x: DataArray, x_name: str = 'x0'):  # pyrefly: ignore[not-a-type]
   """Asserts that the discrete shape is valid."""
   if x.shape[-1] != 1:
     raise ValueError(

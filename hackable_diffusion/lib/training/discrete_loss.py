@@ -42,14 +42,14 @@ DiscreteSchedule = schedules.DiscreteSchedule
 def compute_discrete_diffusion_loss(
     preds: TargetInfo,
     targets: TargetInfo,
-    time: TimeArray,
+    time: TimeArray,  # pyrefly: ignore[not-a-type]
     *,
     schedule: DiscreteSchedule | None = None,
     use_mask: bool = False,
     mask_key: str = 'is_corrupted',
     weight_fn: base.WeightFn | None = None,
     normalize_by_mask: bool = True,
-) -> LossOutput:
+) -> LossOutput:  # pyrefly: ignore[not-a-type]
   """Compute the discrete diffusion loss."""
 
   # The last dimension of preds and targets is a vocabulary dimension.
@@ -102,7 +102,7 @@ def compute_discrete_diffusion_loss(
 
   if weight_fn is not None:
     weight = weight_fn(
-        schedule=schedule,
+        schedule=schedule,  # pyrefly: ignore[bad-argument-type]
         preds=preds,
         targets=targets,
         time=time,
@@ -140,8 +140,8 @@ class NoWeightDiscreteLoss(base.DiffusionLoss):
       self,
       preds: TargetInfo,
       targets: TargetInfo,
-      time: TimeArray,
-  ) -> LossOutput:
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
 
     return compute_discrete_diffusion_loss(
         preds=preds,
@@ -169,14 +169,14 @@ class MD4Loss(base.DiffusionLoss):
       self,
       preds: TargetInfo,
       targets: TargetInfo,
-      time: TimeArray,
-  ) -> LossOutput:
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
     def _weight_fn(
         schedule: DiscreteSchedule,
         preds: TargetInfo,
         targets: TargetInfo,
-        time: TimeArray,
-    ) -> TimeArray:
+        time: TimeArray,  # pyrefly: ignore[not-a-type]
+    ) -> TimeArray:  # pyrefly: ignore[not-a-type]
       """Weight function for the MD4 loss."""
       del preds  # Unused.
       time = jax_helpers.bcast_right(time, targets['x0'].ndim)
@@ -194,6 +194,6 @@ class MD4Loss(base.DiffusionLoss):
         schedule=self.schedule,
         use_mask=self.use_mask,
         mask_key=self.mask_key,
-        weight_fn=_weight_fn,
+        weight_fn=_weight_fn,  # pyrefly: ignore[bad-argument-type]
         normalize_by_mask=self.normalize_by_mask,
     )

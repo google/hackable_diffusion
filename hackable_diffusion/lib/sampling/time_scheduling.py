@@ -57,8 +57,8 @@ class TimeSchedule(Protocol):
       self,
       rng: PRNGKey,
       num_steps: int,
-      data_spec: DataTree,
-  ) -> StepInfoTree:
+      data_spec: DataTree,  # pyrefly: ignore[not-a-type]
+  ) -> StepInfoTree:  # pyrefly: ignore[not-a-type]
     """Returns all the step infos for a given number of steps.
 
     We refer to sampling.py for the more details on the use of all the step
@@ -95,7 +95,7 @@ class UniformTimeSchedule(TimeSchedule):
 
   @kt.typechecked
   def all_step_infos(
-      self, rng: PRNGKey, num_steps: int, data_spec: DataArray
+      self, rng: PRNGKey, num_steps: int, data_spec: DataArray  # pyrefly: ignore[not-a-type]
   ) -> StepInfo:
     bsz, *data_shape = data_spec.shape
     stop, start = self.span
@@ -154,7 +154,7 @@ class EDMTimeSchedule(TimeSchedule):
 
   @kt.typechecked
   def all_step_infos(
-      self, rng: PRNGKey, num_steps: int, data_spec: DataArray
+      self, rng: PRNGKey, num_steps: int, data_spec: DataArray  # pyrefly: ignore[not-a-type]
   ) -> StepInfo:
     bsz, *data_shape = data_spec.shape
     stop, start = self.span

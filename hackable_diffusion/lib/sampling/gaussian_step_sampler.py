@@ -80,7 +80,7 @@ class SdeStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     return DiffusionStep(
@@ -188,7 +188,7 @@ class AdjustedDDIMStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     return DiffusionStep(
@@ -281,7 +281,7 @@ class DDIMStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     return DiffusionStep(
@@ -385,7 +385,7 @@ class VelocityStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     return DiffusionStep(
@@ -502,13 +502,13 @@ class HeunStep(SamplerStep):
   def num_internal_steps(self):
     return 2
 
-  def _get_all_step_infos(self, rng: PRNGKey, data_spec: DataArray) -> StepInfo:
+  def _get_all_step_infos(self, rng: PRNGKey, data_spec: DataArray) -> StepInfo:  # pyrefly: ignore[not-a-type]
     return self.time_schedule.all_step_infos(
         rng=rng, num_steps=self.num_steps, data_spec=data_spec
     )
 
   def _get_specific_step_info(
-      self, rng: PRNGKey, data_spec: DataArray, step: int
+      self, rng: PRNGKey, data_spec: DataArray, step: int  # pyrefly: ignore[not-a-type]
   ):
     all_step_infos = self._get_all_step_infos(rng=rng, data_spec=data_spec)
     return jax.tree.map(lambda x: x[step], all_step_infos)
@@ -516,7 +516,7 @@ class HeunStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     """Initializes the Heun sampler.

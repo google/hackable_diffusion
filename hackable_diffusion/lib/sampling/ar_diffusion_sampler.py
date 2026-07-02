@@ -149,7 +149,7 @@ class ARStateHandler(Protocol):
 
   def update_ar_state(
       self,
-      canvas_last_step: DiffusionStepTree,
+      canvas_last_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
       sampler_state: SamplerState,
   ) -> SamplerState:
     ...
@@ -157,7 +157,7 @@ class ARStateHandler(Protocol):
   def finalize_ar_state(
       self,
       sampler_state: SamplerState,
-  ) -> DataArray:
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     ...
 
   def create_conditioning_from_state(
@@ -181,14 +181,14 @@ class EarlyStoppingFn(Protocol):
   per-batch-element boolean array.
   """
 
-  def __call__(self, sampler_state: SamplerState) -> Bool['']:
+  def __call__(self, sampler_state: SamplerState) -> Bool['']:  # pyrefly: ignore[not-a-type]
     """Returns true when the AR loop should terminate."""
 
 
 class DoneEarlyStoppingFn(EarlyStoppingFn):
   """Stops when every batch element is done."""
 
-  def __call__(self, sampler_state: SamplerState) -> Bool['']:
+  def __call__(self, sampler_state: SamplerState) -> Bool['']:  # pyrefly: ignore[not-a-type]
     if 'done' not in sampler_state:
       raise ValueError(
           'DoneEarlyStoppingFn requires sampler_state["done"] to be set.'
@@ -247,7 +247,7 @@ class AutoregressiveDiffusionSampler:
       batch_size: int,
       rng: PRNGKey,
       conditioning: Conditioning,
-  ) -> tuple[DataArray, SamplerState]:
+  ) -> tuple[DataArray, SamplerState]:  # pyrefly: ignore[not-a-type]
     """Generates data autoregressively via discrete diffusion.
 
     Uses ``jax.lax.while_loop`` for JIT compatibility with true early

@@ -86,7 +86,7 @@ class SimplicialPostCorruptionFn(Protocol):
   arrays of shape (*batch, num_categories), not integer token arrays.
   """
 
-  def __call__(self, log_x: DataArray) -> DataArray:
+  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Project the log-probability array."""
     ...
 
@@ -94,7 +94,7 @@ class SimplicialPostCorruptionFn(Protocol):
 class IdentitySimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
   """Identity post-corruption function (no projection)."""
 
-  def __call__(self, log_x: DataArray) -> DataArray:
+  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     return log_x
 
 
@@ -110,7 +110,7 @@ class SymmetricSimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
   nodes.
   """
 
-  def __call__(self, log_x: DataArray) -> DataArray:
+  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Project the log-probability array to be symmetric."""
 
     if log_x.ndim != 4:
@@ -224,7 +224,7 @@ class SimplicialProcess(CorruptionProcess):
   ##############################################################################
 
   @property
-  def invariant_probs_vec(self) -> Float['M']:
+  def invariant_probs_vec(self) -> Float['M']:  # pyrefly: ignore[not-a-type, unknown-name]
     """Returns the invariant probability distribution as a vector."""
     return jnp.array(self.invariant_probs)
 
@@ -254,7 +254,7 @@ class SimplicialProcess(CorruptionProcess):
   ##############################################################################
 
   @kt.typechecked
-  def h(self, time: TimeArray) -> TimeArray:
+  def h(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     """Returns the h-function of the process."""
     denominator = 1.0 - self.schedule.alpha(time) + self.safety_epsilon
     return self.schedule.alpha(time) / denominator
@@ -267,8 +267,8 @@ class SimplicialProcess(CorruptionProcess):
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,
-  ) -> DataArray:
+      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Sample from the invariant distribution."""
     invariant_dirichlet_params = self.temperature * self.invariant_probs_vec
     # data_spec is [B, T, 1]
@@ -282,9 +282,9 @@ class SimplicialProcess(CorruptionProcess):
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,
-      time: TimeArray,
-  ) -> tuple[DataArray, TargetInfo]:
+      x0: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
     """Corrupt the data according to the schedule and invariant probs.
 
     The target information contains:
@@ -334,8 +334,8 @@ class SimplicialProcess(CorruptionProcess):
   def convert_predictions(
       self,
       prediction: TargetInfo,
-      xt: DataArray,
-      time: TimeArray,
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
     del time  # Unused
     if len(prediction) != 1 or 'logits' not in prediction:
@@ -351,7 +351,7 @@ class SimplicialProcess(CorruptionProcess):
     }
 
   @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:
+  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
     """Get the schedule info for the given time."""
     return self.schedule.evaluate(time)
 

@@ -42,25 +42,25 @@ class CorruptionProcess(Protocol):
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataTree,
-      time: TimeTree,
-  ) -> tuple[DataTree, TargetInfoTree]:
+      x0: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DataTree, TargetInfoTree]:  # pyrefly: ignore[not-a-type]
     """Corrupt x0 according to time, and return xt and targets info."""
 
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataTree,
-  ) -> DataTree:
+      data_spec: DataTree,  # pyrefly: ignore[not-a-type]
+  ) -> DataTree:  # pyrefly: ignore[not-a-type]
     """Sample from the invariant distribution."""
 
   def convert_predictions(
       self,
-      prediction: TargetInfoTree,
-      xt: DataTree,
-      time: TimeTree,
-  ) -> TargetInfoTree:
+      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
     """Convert the prediction to the target type."""
 
-  def get_schedule_info(self, time: TimeTree) -> ScheduleInfoTree:
+  def get_schedule_info(self, time: TimeTree) -> ScheduleInfoTree:  # pyrefly: ignore[not-a-type]
     """Get the schedule info for the given time."""

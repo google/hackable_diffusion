@@ -130,7 +130,7 @@ class SimplicialDDIMStep(SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataArray,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
     return DiffusionStep(

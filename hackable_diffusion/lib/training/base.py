@@ -40,10 +40,10 @@ class WeightFn(Protocol):
   def __call__(
       self,
       schedule: Schedule,
-      preds: TargetInfoTree,
-      targets: TargetInfoTree,
-      time: TimeArray,
-  ) -> TimeArray:
+      preds: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      targets: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+  ) -> TimeArray:  # pyrefly: ignore[not-a-type]
     pass
 
 
@@ -51,10 +51,10 @@ class DiffusionLoss(Protocol):
 
   def __call__(
       self,
-      preds: TargetInfoTree,
-      targets: TargetInfoTree,
-      time: TimeTree,
-  ) -> LossOutputTree:
+      preds: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      targets: TargetInfoTree,  # pyrefly: ignore[not-a-type]
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+  ) -> LossOutputTree:  # pyrefly: ignore[not-a-type]
     """Compute the diffusion loss (no averaging).
 
     Args:

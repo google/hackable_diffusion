@@ -97,8 +97,8 @@ class StepInfo:
     loop.
   """
 
-  step: Int
-  time: TimeArray
+  step: Int  # pyrefly: ignore[not-a-type]
+  time: TimeArray  # pyrefly: ignore[not-a-type]
   rng: PRNGKey
 
 
@@ -117,9 +117,9 @@ class DiffusionStep:
     aux: Additional data computed by the sampler.
   """
 
-  xt: DataArray
+  xt: DataArray  # pyrefly: ignore[not-a-type]
   step_info: StepInfo
-  aux: PyTree
+  aux: PyTree  # pyrefly: ignore[not-a-type]
 
 
 DiffusionStepTree = PyTree[DiffusionStep]
@@ -135,27 +135,27 @@ class SamplerStep(Protocol):
 
   def initialize(
       self,
-      initial_noise: DataTree,
-      initial_step_info: StepInfoTree,
-  ) -> DiffusionStepTree:
+      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
+      initial_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     """Initializes the `DiffusionStep` (e.g. from pure noise)."""
     ...
 
   def update(
       self,
-      prediction: TargetInfoTree,
+      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       current_step: DiffusionStep,
-      next_step_info: StepInfoTree,
-  ) -> DiffusionStepTree:
+      next_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     """Performs one step of the sampling process to compute the next state."""
     ...
 
   def finalize(
       self,
-      prediction: TargetInfoTree,
+      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       current_step: DiffusionStep,
-      last_step_info: StepInfoTree,
-  ) -> DiffusionStepTree:
+      last_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     """Performs the final step to produce the clean output sample."""
     ...
 
@@ -171,7 +171,7 @@ class UpdateConditioningFn(Protocol):
   def __call__(
       self,
       conditioning: Conditioning,
-      step_carry: DiffusionStepTree,
+      step_carry: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
   ) -> Conditioning:
     """Update conditioning based on the current diffusion step.
 
