@@ -45,8 +45,8 @@ class BaseTokenEmbedder(Protocol):
   embedding_dim: int
 
   def __call__(
-      self, x: Int['batch *other_input 1'], is_training: bool
-  ) -> Float['batch *other_embedding F']:
+      self, x: Int['batch *other_input 1'], is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -76,8 +76,8 @@ class TokenEmbedder(nn.Module, BaseTokenEmbedder):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Int['batch *other_input 1'], is_training: bool
-  ) -> Float['batch *other_embedding F']:
+      self, x: Int['batch *other_input 1'], is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
     """Embeds the tokens into a hidden dimension.
 
     It assumes that `x` has a shape <B,...,1>, it then embeds it into
@@ -125,8 +125,8 @@ class BaseProjector(Protocol):
   embedding_dim: int
 
   def __call__(
-      self, x: Float['batch *other_embedding F'], is_training: bool
-  ) -> Float['batch *other_input V']:
+      self, x: Float['batch *other_embedding F'], is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_input V']:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -154,8 +154,8 @@ class DenseProjector(nn.Module, BaseProjector):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float['batch *other_embedding F'], is_training: bool
-  ) -> Float['batch *other_input V']:
+      self, x: Float['batch *other_embedding F'], is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_input V']:  # pyrefly: ignore[not-a-type]
     """Projects the token embeddings to the output vocabulary size."""
     del is_training  # Unused.
 
@@ -212,10 +212,10 @@ class ConditionalDiscreteBackbone(nn.Module, ConditionalBackbone):
   @kt.typechecked
   def __call__(
       self,
-      x: Int['batch *other 1'],
+      x: Int['batch *other 1'],  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> Float['batch *other V']:
+  ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
 
     # Embed the tokens.
     token_embeddings = self.token_embedder(x, is_training=is_training)

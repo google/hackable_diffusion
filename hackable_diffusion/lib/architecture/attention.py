@@ -54,7 +54,7 @@ MASK_LOGITS_VALUE = -1e9
 
 def attention_dims_factory(
     head_dim: int, num_heads: int
-) -> Callable[[Float["batch sequence dim"]], tuple[int, int]]:
+) -> Callable[[Float["batch sequence dim"]], tuple[int, int]]:  # pyrefly: ignore[not-a-type]
   """Returns a function that returns the head dimension and number of heads."""
 
   if head_dim != INVALID_INT and head_dim <= 0:
@@ -67,7 +67,7 @@ def attention_dims_factory(
   elif head_dim != INVALID_INT and num_heads == INVALID_INT:
 
     def get_attention_dims(
-        x: Float["batch sequence dim"],
+        x: Float["batch sequence dim"],  # pyrefly: ignore[not-a-type]
     ) -> tuple[int, int]:
       *_, d = x.shape  # batch size, sequence length, embedding dim
 
@@ -84,7 +84,7 @@ def attention_dims_factory(
   elif head_dim == INVALID_INT and num_heads != INVALID_INT:
 
     def get_attention_dims(
-        x: Float["batch sequence dim"],
+        x: Float["batch sequence dim"],  # pyrefly: ignore[not-a-type]
     ) -> tuple[int, int]:
       *_, d = x.shape  # batch size, sequence length
       if d % num_heads != 0:
@@ -102,8 +102,8 @@ def attention_dims_factory(
 
 @kt.typechecked
 def _stable_softmax(
-    logits: Float["*sequence dim"],
-) -> Float["*sequence dim"]:
+    logits: Float["*sequence dim"],  # pyrefly: ignore[not-a-type]
+) -> Float["*sequence dim"]:  # pyrefly: ignore[not-a-type]
   """Numerically stable softmax for (potential) bfloat 16."""
   if logits.dtype == jnp.float32:
     output = jax.nn.softmax(logits)
@@ -124,15 +124,15 @@ def _stable_softmax(
 
 @kt.typechecked
 def _dot_product_attention(
-    q: Float["batch head sequence_query dim"],
-    k: Float["batch head sequence_key dim"],
-    v: Float["batch head sequence_key dim"],
-    rescale: Float["..."],
+    q: Float["batch head sequence_query dim"],  # pyrefly: ignore[not-a-type]
+    k: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
+    v: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
+    rescale: Float["..."],  # pyrefly: ignore[bad-index, not-a-type]
     *,
     mask: Bool["batch sequence_key"] | None = None,
     dropout_rate: float = 0.0,
     is_training: bool = True,
-) -> Float["batch sequence_query head*dim"]:
+) -> Float["batch sequence_query head*dim"]:  # pyrefly: ignore[not-a-type]
   """Performs dot product attention.
 
   Args:
@@ -239,12 +239,12 @@ class MultiHeadAttention(nn.Module):
   @kt.typechecked
   def __call__(
       self,
-      x: Float["batch sequence1 dim1"],
+      x: Float["batch sequence1 dim1"],  # pyrefly: ignore[not-a-type]
       c: Float["batch sequence2 dim2"] | None,
       *,
       mask: Bool["batch sequence1|sequence2"] | None = None,
       is_training: bool = True,
-  ) -> Float["batch sequence1 dim1"]:
+  ) -> Float["batch sequence1 dim1"]:  # pyrefly: ignore[not-a-type]
     """Computes multi-head attention.
 
     Args:

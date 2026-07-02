@@ -90,7 +90,7 @@ class SequenceEmbeddersTest(parameterized.TestCase):
     inputs = jnp.arange(self.batch_size)
     variables = module.init({"params": self.rng}, inputs)
     output = module.apply(variables, inputs)
-    self.assertEqual(output.shape, (self.batch_size, self.dim))
+    self.assertEqual(output.shape, (self.batch_size, self.dim))  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(_get_invalid_num_features_params())
   def test_sequence_embedding_raises_error_on_invalid_num_features(
@@ -152,7 +152,7 @@ class SequenceEmbeddersTest(parameterized.TestCase):
     inputs = jnp.arange(self.batch_size)
     variables = module.init({"params": self.rng}, inputs)
     output = module.apply(variables, inputs)
-    self.assertEqual(output.shape, (self.batch_size, self.dim))
+    self.assertEqual(output.shape, (self.batch_size, self.dim))  # pyrefly: ignore[missing-attribute]
 
   def test_sinusoidal_embedding_has_no_params(self):
     """Tests that sinusoidal embeddings has no parameters."""
@@ -174,7 +174,7 @@ class SequenceEmbeddersTest(parameterized.TestCase):
 
     def loss_fn(params):
       output = module.apply({"params": params}, inputs)
-      return jnp.sum(output)
+      return jnp.sum(output)  # pyrefly: ignore[bad-argument-type]
 
     grads = jax.grad(loss_fn)(initial_params)
 
@@ -238,7 +238,7 @@ class SequenceEmbeddersTest(parameterized.TestCase):
     x_rope = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x_rope)
     output = module.apply(variables, x_rope)
-    self.assertEqual(output.shape, x_rope.shape)
+    self.assertEqual(output.shape, x_rope.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_rope_embedding_has_no_params(self):
     """Tests that RoPESequenceEmbedding has no parameters."""

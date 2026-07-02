@@ -91,7 +91,7 @@ class DiTTest(parameterized.TestCase):
         conditioning_embeddings=conditioning_embeddings,
         is_training=self.is_training,
     )
-    self.assertEqual(output.shape, input_shape)
+    self.assertEqual(output.shape, input_shape)  # pyrefly: ignore[missing-attribute]
 
   def test_variable_shapes_with_patchify(self):
     data_shape = (self.h, self.w, self.c)
@@ -133,7 +133,7 @@ class DiTTest(parameterized.TestCase):
         conditioning_embeddings=conditioning_embeddings,
         is_training=self.is_training,
     )
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
 
     block_params = {
         'Dense_Gate_MSA': {
@@ -256,7 +256,7 @@ class DiTTest(parameterized.TestCase):
         conditioning_embeddings=conditioning_embeddings,
         is_training=self.is_training,
     )
-    self.assertEqual(output.shape, input_shape)
+    self.assertEqual(output.shape, input_shape)  # pyrefly: ignore[missing-attribute]
 
   def test_missing_adaptive_norm_raises(self):
     x = jnp.ones((self.batch_size, self.sequence_length, self.embedding_dim))

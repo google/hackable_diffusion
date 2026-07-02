@@ -67,9 +67,9 @@ class UnnormalizedAddSkip:
 
   def __call__(
       self,
-      x: Float["batch height width channels"],
-      skip: Float["batch height width channels"],
-  ) -> Float["batch height width channels"]:
+      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+      skip: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
     return x + skip
 
 
@@ -78,9 +78,9 @@ class NormalizedAddSkip:
 
   def __call__(
       self,
-      x: Float["batch height width channels"],
-      skip: Float["batch height width channels"],
-  ) -> Float["batch height width channels"]:
+      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+      skip: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
     return (x + skip) / jnp.sqrt(2)
 
 
@@ -96,8 +96,8 @@ class MaxPoolDownsample:
     self.strides = strides
 
   def __call__(
-      self, x: Float["batch height width channels"]
-  ) -> Float["batch height/2 width/2 channels"]:
+      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
     return nn.max_pool(x, window_shape=self.window_shape, strides=self.strides)
 
 
@@ -113,8 +113,8 @@ class AvgPoolDownsample:
     self.strides = strides
 
   def __call__(
-      self, x: Float["batch height width channels"]
-  ) -> Float["batch height/2 width/2 channels"]:
+      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
     return nn.avg_pool(x, window_shape=self.window_shape, strides=self.strides)
 
 
@@ -125,8 +125,8 @@ class ImageResizeUpsample:
     self.resize_method = resize_method
 
   def __call__(
-      self, x: Float["batch height width channels"]
-  ) -> Float["batch height*2 width*2 channels"]:
+      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height*2 width*2 channels"]:  # pyrefly: ignore[not-a-type]
     return jax.image.resize(
         x,
         (x.shape[0], 2 * x.shape[1], 2 * x.shape[2], x.shape[3]),
@@ -158,7 +158,7 @@ class InputConvBlock(nn.Module):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, x: BaseInput) -> BaseOutput:
+  def __call__(self, x: BaseInput) -> BaseOutput:  # pyrefly: ignore[not-a-type]
     x = Conv3x3(
         padding="SAME",
         features=self.num_output_channels,
@@ -197,7 +197,7 @@ class OutputConvBlock(nn.Module):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, x: BaseInput) -> BaseOutput:
+  def __call__(self, x: BaseInput) -> BaseOutput:  # pyrefly: ignore[not-a-type]
     """Projects the output tensor."""
 
     x = self.unconditional_norm(x)
@@ -249,8 +249,8 @@ class ConvResidualBlock(nn.Module):
   @kt.typechecked
   def __call__(
       self,
-      x: BaseInput,
-      adaptive_norm_emb: Float["batch emb_dim"],
+      x: BaseInput,  # pyrefly: ignore[not-a-type]
+      adaptive_norm_emb: Float["batch emb_dim"],  # pyrefly: ignore[not-a-type]
       is_training: bool,
   ) -> BaseOutput | UpsampleOutput | DownsampleOutput:
     input_channels = x.shape[-1]
@@ -331,11 +331,11 @@ class AttentionResidualBlock(nn.Module):
   @kt.typechecked
   def __call__(
       self,
-      x: Float["batch height width channels"],
+      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
       cross_attention_emb: Float["batch seq cond_dim2"] | None,
       *,
       is_training: bool,
-  ) -> Float["batch height width channels"]:
+  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
     skip = x
     b, h, w, channels = x.shape
     x = self.unconditional_norm(x)

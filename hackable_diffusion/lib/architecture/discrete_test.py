@@ -120,9 +120,9 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
     )
     data_shape = self.shape[:-1]
     self.assertEqual(
-        (self.batch_size, *data_shape, embedding_dim), output.shape
+        (self.batch_size, *data_shape, embedding_dim), output.shape  # pyrefly: ignore[missing-attribute]
     )
-    self.assertEqual(output.dtype, jnp.float32)
+    self.assertEqual(output.dtype, jnp.float32)  # pyrefly: ignore[missing-attribute]
     expected_shape = (process_num_categories, embedding_dim)
     self.assertEqual(
         expected_shape,
@@ -177,9 +177,9 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
     )
     data_shape = self.shape[:-1]
     self.assertEqual(
-        (self.batch_size, *data_shape, num_categories), output.shape
+        (self.batch_size, *data_shape, num_categories), output.shape  # pyrefly: ignore[missing-attribute]
     )
-    self.assertEqual(output.dtype, jnp.float32)
+    self.assertEqual(output.dtype, jnp.float32)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.parameters(
       itertools.product(
@@ -233,9 +233,9 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
     )
     data_shape = self.shape[:-1]
     self.assertEqual(
-        (self.batch_size, *data_shape, num_categories), output.shape
+        (self.batch_size, *data_shape, num_categories), output.shape  # pyrefly: ignore[missing-attribute]
     )
-    self.assertEqual(output.dtype, jnp.float32)
+    self.assertEqual(output.dtype, jnp.float32)  # pyrefly: ignore[missing-attribute]
 
   def test_failure_if_mismatch_embedding_dims(self):
     """Tests the output shape of the MLP."""

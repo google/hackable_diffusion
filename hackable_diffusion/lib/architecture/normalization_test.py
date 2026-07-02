@@ -49,7 +49,7 @@ def _pad_to_shape(
   )
 
 
-def _perturb_params(params: PyTree, key: jax.Array) -> PyTree:
+def _perturb_params(params: PyTree, key: jax.Array) -> PyTree:  # pyrefly: ignore[not-a-type]
   leaves, treedef = jax.tree_util.tree_flatten(params)
   keys_list = jax.random.split(key, len(leaves))
   key_tree = jax.tree_util.tree_unflatten(treedef, keys_list)
@@ -114,8 +114,8 @@ class NormalizationTest(parameterized.TestCase):
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
     output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
 
-    self.assertEqual(output_new.shape, self.x_shape)
-    np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)
+    self.assertEqual(output_new.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
+    np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_rmsnorm_at_init(self):
     """Tests conditional normalization at init when scale=0 and shift=0."""
@@ -125,12 +125,12 @@ class NormalizationTest(parameterized.TestCase):
     )
     params = norm_layer.init(self.rng, self.x, self.c)
     output = norm_layer.apply(params, self.x, self.c)
-    self.assertEqual(output.shape, self.x_shape)
+    self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
 
     # At init, scale=0 and shift=0, so output is same as in unconditional.
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
     output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
-    np.testing.assert_allclose(
+    np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
         output,
         output_ref,
         rtol=1e-5,
@@ -155,9 +155,9 @@ class NormalizationTest(parameterized.TestCase):
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
     output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
 
-    self.assertEqual(output_perturbed.shape, self.x_shape)
+    self.assertEqual(output_perturbed.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     self.assertFalse(
-        np.allclose(output_perturbed, output_ref, rtol=1e-5, atol=1e-5),
+        np.allclose(output_perturbed, output_ref, rtol=1e-5, atol=1e-5),  # pyrefly: ignore[bad-argument-type]
         msg=(
             "Conditional output should be different from unconditional output"
             " after perturbing params."
@@ -178,8 +178,8 @@ class NormalizationTest(parameterized.TestCase):
     params_ref = norm_ref.init(self.rng, self.x)
     output_ref = norm_ref.apply(params_ref, self.x)
 
-    self.assertEqual(output_new.shape, self.x_shape)
-    np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)
+    self.assertEqual(output_new.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
+    np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_groupnorm_at_init(self):
     """Tests conditional GroupNorm at init when scale=0 and shift=0."""
@@ -196,8 +196,8 @@ class NormalizationTest(parameterized.TestCase):
     params_ref = norm_ref.init(self.rng, self.x)
     output_ref = norm_ref.apply(params_ref, self.x)
 
-    self.assertEqual(output_new.shape, self.x_shape)
-    np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)
+    self.assertEqual(output_new.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
+    np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_groupnorm_perturbed(self):
     """Tests conditional GroupNorm when scale!=0 and shift!=0."""
@@ -215,9 +215,9 @@ class NormalizationTest(parameterized.TestCase):
     params_ref = norm_ref.init(self.rng, self.x)
     output_ref = norm_ref.apply(params_ref, self.x)
 
-    self.assertEqual(output.shape, self.x_shape)
+    self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     self.assertFalse(
-        np.allclose(output, output_ref, rtol=1e-5, atol=1e-5, equal_nan=True),
+        np.allclose(output, output_ref, rtol=1e-5, atol=1e-5, equal_nan=True),  # pyrefly: ignore[bad-argument-type]
         "Conditional output should be different from unconditional output after"
         " perturbing params.",
     )
@@ -244,8 +244,8 @@ class NormalizationTest(parameterized.TestCase):
     out_small = norm_layer.apply(params_perturbed, self.x_small)
     out_large = norm_layer.apply(params_perturbed, self.x_large)
     np.testing.assert_allclose(
-        out_small[:, :, : self.unpadded_seq_len, :],
-        out_large[:, :, : self.unpadded_seq_len, :],
+        out_small[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
+        out_large[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         atol=1e-5,
     )
 
@@ -262,8 +262,8 @@ class NormalizationTest(parameterized.TestCase):
     params_ref = norm_ref.init(self.rng, self.x)
     output_ref = norm_ref.apply(params_ref, self.x)
 
-    self.assertEqual(output_new.shape, self.x_shape)
-    np.testing.assert_allclose(output_new, output_ref, rtol=1e-4, atol=1e-4)
+    self.assertEqual(output_new.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
+    np.testing.assert_allclose(output_new, output_ref, rtol=1e-4, atol=1e-4)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_layernorm_at_init(self):
     """Tests conditional LayerNorm at init when scale=0 and shift=0."""
@@ -278,8 +278,8 @@ class NormalizationTest(parameterized.TestCase):
     params_ref = norm_ref.init(self.rng, self.x)
     output_ref = norm_ref.apply(params_ref, self.x)
 
-    self.assertEqual(output_new.shape, self.x_shape)
-    np.testing.assert_allclose(output_new, output_ref, rtol=1e-4, atol=1e-4)
+    self.assertEqual(output_new.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
+    np.testing.assert_allclose(output_new, output_ref, rtol=1e-4, atol=1e-4)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_layernorm_perturbed(self):
     """Tests conditional LayerNorm when scale!=0 and shift!=0."""
@@ -295,9 +295,9 @@ class NormalizationTest(parameterized.TestCase):
     params_ref = norm_ref.init(self.rng, self.x)
     output_ref = norm_ref.apply(params_ref, self.x)
 
-    self.assertEqual(output.shape, self.x_shape)
+    self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     self.assertFalse(
-        np.allclose(output, output_ref, rtol=1e-5, atol=1e-5, equal_nan=True),
+        np.allclose(output, output_ref, rtol=1e-5, atol=1e-5, equal_nan=True),  # pyrefly: ignore[bad-argument-type]
         "Conditional output should be different from unconditional output after"
         " perturbing params.",
     )
@@ -319,8 +319,8 @@ class NormalizationTest(parameterized.TestCase):
     out_small = norm_layer.apply(params_perturbed, self.x_small)
     out_large = norm_layer.apply(params_perturbed, self.x_large)
     np.testing.assert_allclose(
-        out_small[:, :, : self.unpadded_seq_len, :],
-        out_large[:, :, : self.unpadded_seq_len, :],
+        out_small[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
+        out_large[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         atol=1e-5,
     )
 
@@ -339,8 +339,8 @@ class NormalizationTest(parameterized.TestCase):
     out_large = norm_layer.apply(params_perturbed, self.x_large)
     self.assertFalse(
         np.allclose(
-            out_small[:, :, : self.unpadded_seq_len, :],
-            out_large[:, :, : self.unpadded_seq_len, :],
+            out_small[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
+            out_large[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
             atol=1e-5,
         )
     )
@@ -406,8 +406,8 @@ class NormalizationTest(parameterized.TestCase):
         params_perturbed, self.x_large, mask=mask_large
     )
     np.testing.assert_allclose(
-        out_small[:, :, : self.unpadded_seq_len, :],
-        out_large[:, :, : self.unpadded_seq_len, :],
+        out_small[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
+        out_large[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         atol=1e-5,
     )
 
@@ -460,8 +460,8 @@ class NormalizationTest(parameterized.TestCase):
 
     # Check that for the valid tokens, the results are identical.
     np.testing.assert_allclose(
-        out_no_mask[:, : self.unpadded_seq_len, :],
-        out_masked[:, : self.unpadded_seq_len, :],
+        out_no_mask[:, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
+        out_masked[:, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         atol=1e-6,
         err_msg=(
             "RMSNorm output for valid tokens should be invariant to the mask."
@@ -477,12 +477,12 @@ class NormalizationTest(parameterized.TestCase):
     )
     params = norm_layer.init(self.rng, self.x, self.c)
     output = norm_layer.apply(params, self.x, self.c)
-    self.assertEqual(output.shape, self.x_shape)
+    self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
 
     # At init, scale=0, so output should match plain RMSNorm.
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
     output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
-    np.testing.assert_allclose(output, output_ref, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(output, output_ref, rtol=1e-5, atol=1e-5)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_rmsnorm_scale_only_perturbed(self):
     """Tests conditional RMSNorm scale-only with perturbed params."""
@@ -499,9 +499,9 @@ class NormalizationTest(parameterized.TestCase):
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
     output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
 
-    self.assertEqual(output_perturbed.shape, self.x_shape)
+    self.assertEqual(output_perturbed.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     self.assertFalse(
-        np.allclose(output_perturbed, output_ref, rtol=1e-5, atol=1e-5),
+        np.allclose(output_perturbed, output_ref, rtol=1e-5, atol=1e-5),  # pyrefly: ignore[bad-argument-type]
         msg=(
             "Scale-only conditional output should differ from unconditional"
             " output after perturbing params."
@@ -547,8 +547,8 @@ class NormalizationTest(parameterized.TestCase):
     out_small = norm_layer.apply(params_perturbed, self.x_small, c_small)
     out_large = norm_layer.apply(params_perturbed, self.x_large, c_small)
     np.testing.assert_allclose(
-        out_small[:, :, : self.unpadded_seq_len, :],
-        out_large[:, :, : self.unpadded_seq_len, :],
+        out_small[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
+        out_large[:, :, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         atol=1e-5,
     )
 
@@ -585,8 +585,8 @@ class NormalizationTest(parameterized.TestCase):
       params = norm_layer.init(self.rng, x)
       output = norm_layer.apply(params, x)
 
-    self.assertEqual(output.dtype, dtype)
-    self.assertEqual(output.shape, self.x_shape)
+    self.assertEqual(output.dtype, dtype)  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
 
 
 if __name__ == "__main__":

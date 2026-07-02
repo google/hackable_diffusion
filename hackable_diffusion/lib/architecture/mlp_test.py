@@ -81,7 +81,7 @@ class MLPTest(parameterized.TestCase):
         self.concatenate_emb,
         is_training=self.is_training,
     )
-    self.assertEqual(output.shape, self.x.shape)
+    self.assertEqual(output.shape, self.x.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_conditional_mlp_zero_init_output(self):
     """Tests that zero_init_output produces a zero output."""

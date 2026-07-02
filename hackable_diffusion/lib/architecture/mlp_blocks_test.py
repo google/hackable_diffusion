@@ -61,7 +61,7 @@ class MLPBlocksTest(parameterized.TestCase):
         self.flatten_x,
         is_training=self.is_training,
     )
-    self.assertEqual(output.shape, (self.batch_size, output_size))
+    self.assertEqual(output.shape, (self.batch_size, output_size))  # pyrefly: ignore[missing-attribute]
 
   def test_mlp_sequence_output_shape(self):
     """Tests the output shape of the MLP for sequential input."""
@@ -83,7 +83,7 @@ class MLPBlocksTest(parameterized.TestCase):
         self.flatten_sequence_x,
         is_training=self.is_training,
     )
-    self.assertEqual(output.shape, (self.batch_size, self.seq_len, output_size))
+    self.assertEqual(output.shape, (self.batch_size, self.seq_len, output_size))  # pyrefly: ignore[missing-attribute]
 
   def test_mlp_zero_init_output(self):
     """Tests that zero_init_output produces a zero output."""
@@ -215,13 +215,13 @@ class GatingSwiGLUTest(parameterized.TestCase):
     module = mlp_blocks.GatingSwiGLU(features=self.features)
     variables = module.init(self.key, self.x)
     output = module.apply(variables, self.x)
-    self.assertEqual(output.shape, (self.batch_size, self.features))
+    self.assertEqual(output.shape, (self.batch_size, self.features))  # pyrefly: ignore[missing-attribute]
 
   def test_linear_swiglu_variables_shape(self):
     """Tests GatingSwiGLU parameter tree tracking configurations."""
     module = mlp_blocks.GatingSwiGLU(features=self.features, use_bias=False)
     variables = module.init(self.key, self.x)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
     expected_variables_shapes = {
         'params': {
             'Dense_Gate_Val': {
@@ -265,12 +265,12 @@ class FeedForwardTest(parameterized.TestCase):
     # Flat Input
     variables = module.init(self.key, self.x, is_training=True)
     output = module.apply(variables, self.x, is_training=True)
-    self.assertEqual(output.shape, (self.batch_size, self.output_size))
+    self.assertEqual(output.shape, (self.batch_size, self.output_size))  # pyrefly: ignore[missing-attribute]
 
     # Sequential Input
     output_seq = module.apply(variables, self.sequence_x, is_training=True)
     self.assertEqual(
-        output_seq.shape, (self.batch_size, self.seq_len, self.output_size)
+        output_seq.shape, (self.batch_size, self.seq_len, self.output_size)  # pyrefly: ignore[missing-attribute]
     )
 
   @parameterized.named_parameters(
@@ -303,7 +303,7 @@ class FeedForwardTest(parameterized.TestCase):
     for path in leaves_with_paths:
       self.assertNotIn('bias', path)
 
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
 
     # Updated to match the flattened inline footprint precisely
     expected_shapes = {
@@ -326,7 +326,7 @@ class FeedForwardTest(parameterized.TestCase):
         ffn_type='dense',
     )
     variables = module.init(self.key, self.x, is_training=True)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
     expected_shapes = {
         'params': {
             'Dense_Up': {
@@ -373,15 +373,15 @@ class FeedForwardTest(parameterized.TestCase):
     # Eval mode should be identical
     out_eval_1 = module.apply(variables, x_rand, is_training=False)
     out_eval_2 = module.apply(variables, x_rand, is_training=False)
-    np.testing.assert_allclose(out_eval_1, out_eval_2, atol=1e-6)
+    np.testing.assert_allclose(out_eval_1, out_eval_2, atol=1e-6)  # pyrefly: ignore[no-matching-overload]
 
     # Train mode activation scaling (with .item() wrapping)
     out_train = module.apply(
         variables, x_rand, is_training=True, rngs={'dropout': rng_drop}
     )
 
-    max_train_val = jnp.max(jnp.abs(out_train))
-    max_eval_val = jnp.max(jnp.abs(out_eval_1))
+    max_train_val = jnp.max(jnp.abs(out_train))  # pyrefly: ignore[bad-argument-type]
+    max_eval_val = jnp.max(jnp.abs(out_eval_1))  # pyrefly: ignore[bad-argument-type]
 
     self.assertGreater(
         float(max_train_val.item()),
@@ -419,7 +419,7 @@ class FeedForwardTest(parameterized.TestCase):
     x = jnp.ones((self.batch_size, self.output_size), dtype=dtype)
     variables = module.init(self.key, x, is_training=False)
     output = module.apply(variables, x, is_training=False)
-    self.assertEqual(output.dtype, dtype)
+    self.assertEqual(output.dtype, dtype)  # pyrefly: ignore[missing-attribute]
 
 
 if __name__ == '__main__':

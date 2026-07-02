@@ -90,11 +90,11 @@ class DiT(nn.Module, ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: DataArray,
+      x: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> DataArray:
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     adaptive_norm_emb = conditioning_embeddings.get(
         'adaptive_norm'
     )

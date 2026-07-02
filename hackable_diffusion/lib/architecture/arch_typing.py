@@ -77,10 +77,10 @@ class ConditionalBackbone(Protocol):
 
   def __call__(
       self,
-      x: DataTree,
+      x: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> DataTree:
+  ) -> DataTree:  # pyrefly: ignore[not-a-type]
     ...
 

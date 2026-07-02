@@ -55,8 +55,8 @@ class SinusoidalSequenceEmbedding(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, inputs: Num["batch *#data_shape"]
-  ) -> Float["batch num_features"]:
+      self, inputs: Num["batch *#data_shape"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch num_features"]:  # pyrefly: ignore[not-a-type]
     if inputs.size != inputs.shape[0]:
       raise ValueError("Inputs must be a (maybe broadcasted) 1D array.")
     inputs = inputs.reshape((inputs.shape[0],))
@@ -95,8 +95,8 @@ class RandomFourierSequenceEmbedding(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, inputs: Num["batch *#data_shape"]
-  ) -> Float["batch num_features"]:
+      self, inputs: Num["batch *#data_shape"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch num_features"]:  # pyrefly: ignore[not-a-type]
     if inputs.size != inputs.shape[0]:
       raise ValueError("Inputs must be a (maybe broadcasted) 1D array.")
     inputs = inputs.reshape((inputs.shape[0],))
@@ -121,8 +121,8 @@ class LinearRoPEPositions:
 
   @kt.typechecked
   def __call__(
-      self, x: Float["*batch sequence dim"]
-  ) -> Sequence[Int["*batch sequence"]]:
+      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
+  ) -> Sequence[Int["*batch sequence"]]:  # pyrefly: ignore[not-a-type]
     *b, t, _ = x.shape
     n_batch_dims = len(b)
     b = tuple(b)
@@ -138,8 +138,8 @@ class SquareRoPEPositions:
 
   @kt.typechecked
   def __call__(
-      self, x: Float["*batch sequence dim"]
-  ) -> Sequence[Int["*batch sequence"]]:
+      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
+  ) -> Sequence[Int["*batch sequence"]]:  # pyrefly: ignore[not-a-type]
     *b, t, _ = x.shape
     n_batch_dims = len(b)
     b = tuple(b)
@@ -180,8 +180,8 @@ class RoPESequenceEmbedding(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float["*batch sequence dim"]
-  ) -> Float["*batch sequence dim"]:
+      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["*batch sequence dim"]:  # pyrefly: ignore[not-a-type]
     positions = self.rope_positions_fn(x)
     # list of elements of shape [*b, t]
 

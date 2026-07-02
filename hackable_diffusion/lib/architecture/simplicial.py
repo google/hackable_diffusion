@@ -71,8 +71,8 @@ class BaseLogitEmbedder(Protocol):
   embedding_dim: int
 
   def __call__(
-      self, x: Float['batch *other_input V'], is_training: bool
-  ) -> Float['batch *other_embedding F']:
+      self, x: Float['batch *other_input V'], is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -100,8 +100,8 @@ class DenseEmbedder(nn.Module, BaseLogitEmbedder):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float['batch *other_input V'], is_training: bool
-  ) -> Float['batch *other_embedding F']:
+      self, x: Float['batch *other_input V'], is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
     del is_training  # Unused.
 
     x = jax.nn.softmax(x, axis=-1)
@@ -161,10 +161,10 @@ class ConditionalSimplicialBackbone(nn.Module, ConditionalBackbone):
   @kt.typechecked
   def __call__(
       self,
-      x: Float['batch *other V'],
+      x: Float['batch *other V'],  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> Float['batch *other V']:
+  ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
 
     # Embed the probability distributions.
     logit_embeddings = self.logit_embedder(x, is_training=is_training)

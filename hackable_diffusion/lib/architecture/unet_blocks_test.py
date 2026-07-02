@@ -56,7 +56,7 @@ class InputBlockTest(parameterized.TestCase):
     x = jnp.ones((2, 16, 16, 3))
     variables = block.init(self.key, x)
     output = block.apply(variables, x)
-    self.assertEqual(output.shape, (2, 16, 16, num_output_channels))
+    self.assertEqual(output.shape, (2, 16, 16, num_output_channels))  # pyrefly: ignore[missing-attribute]
 
 
 class OutputBlockTest(parameterized.TestCase):
@@ -92,7 +92,7 @@ class OutputBlockTest(parameterized.TestCase):
     x = jnp.ones((2, 16, 16, 16))
     variables = block.init(self.key, x)
     output = block.apply(variables, x)
-    self.assertEqual(output.shape, (2, 16, 16, num_output_channels))
+    self.assertEqual(output.shape, (2, 16, 16, num_output_channels))  # pyrefly: ignore[missing-attribute]
 
 
 class ConvResidualBlockTest(parameterized.TestCase):
@@ -165,7 +165,7 @@ class ConvResidualBlockTest(parameterized.TestCase):
         is_training=self.is_training,
         rngs={'dropout': self.key},
     )
-    self.assertEqual(output.shape, expected_shape)
+    self.assertEqual(output.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
 
 class AttentionResidualBlockTest(parameterized.TestCase):
@@ -231,7 +231,7 @@ class AttentionResidualBlockTest(parameterized.TestCase):
         is_training=self.is_training,
         rngs={'dropout': self.key},
     )
-    self.assertEqual(output.shape, x_shape)
+    self.assertEqual(output.shape, x_shape)  # pyrefly: ignore[missing-attribute]
 
 
 if __name__ == '__main__':

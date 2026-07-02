@@ -150,11 +150,11 @@ class Unet(nn.Module, ConditionalBackbone):
   @kt.typechecked
   def __call__(
       self,
-      x: Float["batch height width channels"],
+      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> Float["batch height width output_channels"]:
+  ) -> Float["batch height width output_channels"]:  # pyrefly: ignore[not-a-type]
 
     # Extract conditioning embeddings to use with adaptive normalization.
     adaptive_norm_emb = conditioning_embeddings.get(

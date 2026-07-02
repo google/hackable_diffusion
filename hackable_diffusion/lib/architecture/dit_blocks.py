@@ -53,7 +53,7 @@ class PositionalEmbedding(nn.Module):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, x: Num["batch *data_shape"]) -> Float["batch *data_shape"]:
+  def __call__(self, x: Num["batch *data_shape"]) -> Float["batch *data_shape"]:  # pyrefly: ignore[not-a-type, unknown-name]
     pos_embed = self.param(
         "PositionalEmbeddingTensor",
         nn.initializers.normal(stddev=self.init_stddev),
@@ -227,12 +227,12 @@ class DiTBlock(nn.Module):
   @nn.compact
   def __call__(
       self,
-      x: Float['*batch seq_dim emb_dim'],
-      cond: Float['*#batch cond_dim'],
+      x: Float['*batch seq_dim emb_dim'],  # pyrefly: ignore[not-a-type]
+      cond: Float['*#batch cond_dim'],  # pyrefly: ignore[not-a-type]
       *,
       is_training: bool,
       mask: Bool['batch seq_dim'] | None = None,
-  ) -> Float['*batch seq_dim emb_dim']:
+  ) -> Float['*batch seq_dim emb_dim']:  # pyrefly: ignore[not-a-type]
     """Calls the DiT block.
 
     Args:
@@ -365,8 +365,8 @@ class Patchify(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float["*batch height width channels"]
-  ) -> Float["*batch seq_dim emb_dim"]:
+      self, x: Float["*batch height width channels"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["*batch seq_dim emb_dim"]:  # pyrefly: ignore[not-a-type]
     hp, wp = self.patch_size
     _, h, w, _ = x.shape
     if h % hp != 0 or w % wp != 0:
@@ -415,9 +415,9 @@ class DePatchify(nn.Module):
   @kt.typechecked
   def __call__(
       self,
-      x: Float['*batch seq_dim emb_dim'],
+      x: Float['*batch seq_dim emb_dim'],  # pyrefly: ignore[not-a-type]
       cond: Float['*#batch cond_dim'] | None = None,
-  ) -> Float['*batch height width channels']:
+  ) -> Float['*batch height width channels']:  # pyrefly: ignore[not-a-type]
     del cond  # Unused.
     h, w, c = self.output_shape
     hp, wp = self.patch_size

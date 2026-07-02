@@ -108,7 +108,7 @@ class UnetTest(parameterized.TestCase):
         'cross_attention': jnp.ones((2, 16, 32)),
     }
     x = jnp.ones(x_shape)
-    model = unet.Unet(**dataclasses.asdict(config), dtype=jnp.float32)
+    model = unet.Unet(**dataclasses.asdict(config), dtype=jnp.float32)  # pyrefly: ignore[bad-argument-type]
     variables = model.init(
         {'params': self.key, 'dropout': self.key},
         x=x,
@@ -122,7 +122,7 @@ class UnetTest(parameterized.TestCase):
         is_training=self.is_training,
         rngs={'dropout': self.key},
     )
-    self.assertEqual(output.shape, x_shape)
+    self.assertEqual(output.shape, x_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       ('output_channels', OUTPUT_CHANNELS_CONFIG),
@@ -137,7 +137,7 @@ class UnetTest(parameterized.TestCase):
     }
     x = jnp.ones(x_shape)
     model = unet.Unet(
-        **dataclasses.asdict(config),
+        **dataclasses.asdict(config),  # pyrefly: ignore[bad-argument-type]
         dtype=jnp.float32,
     )
     variables = model.init(
@@ -154,7 +154,7 @@ class UnetTest(parameterized.TestCase):
         is_training=self.is_training,
         rngs={'dropout': self.key},
     )
-    self.assertEqual(output.shape, x_shape[:-1] + (config.output_channels,))
+    self.assertEqual(output.shape, x_shape[:-1] + (config.output_channels,))  # pyrefly: ignore[missing-attribute]
 
 
 if __name__ == '__main__':

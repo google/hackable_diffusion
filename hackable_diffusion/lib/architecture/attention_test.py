@@ -186,7 +186,7 @@ class AttentionTest(parameterized.TestCase):
     valid_output_original = output_original[mask]
     valid_output_corrupted = output_corrupted[mask]
 
-    np.testing.assert_allclose(
+    np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
         valid_output_original,
         valid_output_corrupted,
         atol=1e-5,
@@ -206,8 +206,8 @@ class AttentionTest(parameterized.TestCase):
 
     self.assertFalse(
         jnp.allclose(
-            valid_output_original_no_mask,
-            valid_output_corrupted_no_mask,
+            valid_output_original_no_mask,  # pyrefly: ignore[bad-argument-type]
+            valid_output_corrupted_no_mask,  # pyrefly: ignore[bad-argument-type]
             atol=1e-5,
         ),
         msg="Outputs should differ when the mask is removed.",
@@ -240,7 +240,7 @@ class AttentionTest(parameterized.TestCase):
 
     # Check Output Shape
     output_original = module.apply(variables, x, c_original, mask=mask)
-    self.assertEqual(output_original.shape, x.shape)
+    self.assertEqual(output_original.shape, x.shape)  # pyrefly: ignore[missing-attribute]
 
     # Check Mask Invariance on Keys
     noise = jax.random.normal(rng1, c_original.shape)
@@ -250,7 +250,7 @@ class AttentionTest(parameterized.TestCase):
 
     output_corrupted = module.apply(variables, x, c_corrupted, mask=mask)
 
-    np.testing.assert_allclose(
+    np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
         output_original,
         output_corrupted,
         atol=1e-5,
@@ -264,7 +264,7 @@ class AttentionTest(parameterized.TestCase):
 
     self.assertFalse(
         jnp.allclose(
-            output_original_no_mask, output_corrupted_no_mask, atol=1e-5
+            output_original_no_mask, output_corrupted_no_mask, atol=1e-5  # pyrefly: ignore[bad-argument-type]
         ),
         msg=(
             "Outputs should differ when the mask is removed and keys are"
@@ -296,7 +296,7 @@ class AttentionTest(parameterized.TestCase):
     x_curr = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x_curr, c)
     output = module.apply(variables, x_curr, c)
-    self.assertEqual(output.shape, x_curr.shape)
+    self.assertEqual(output.shape, x_curr.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_multi_head_attention_zero_init_output(self):
     """Tests that zero_init_output=True initializes output to zeros."""
@@ -326,7 +326,7 @@ class AttentionTest(parameterized.TestCase):
     # 2. Check that the output is zeros.
     output = module.apply(variables, self.x, self.c)
     zeros_output = jnp.zeros_like(self.x)
-    self.assertTrue(jnp.allclose(output, zeros_output))
+    self.assertTrue(jnp.allclose(output, zeros_output))  # pyrefly: ignore[bad-argument-type]
 
   @parameterized.named_parameters(
       ("qk_norm", True),
@@ -434,7 +434,7 @@ class AttentionTest(parameterized.TestCase):
     output_eval_1 = module.apply(variables, x_rand, c=None, is_training=False)
     output_eval_2 = module.apply(variables, x_rand, c=None, is_training=False)
 
-    np.testing.assert_allclose(
+    np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
         output_eval_1,
         output_eval_2,
         atol=1e-6,
@@ -473,7 +473,7 @@ class AttentionTest(parameterized.TestCase):
 
     # Since two distinct keys were injected into the dropout stream,
     # different masks were dropped, meaning outputs must differ.
-    self.assertFalse(jnp.allclose(output_train_1, output_train_2, atol=1e-5))
+    self.assertFalse(jnp.allclose(output_train_1, output_train_2, atol=1e-5))  # pyrefly: ignore[bad-argument-type]
 
   def test_multi_head_attention_dropout_scales_retained_activations(self):
     """Verifies dropout scales active entries by 1 / (1 - rate) during training."""
@@ -502,8 +502,8 @@ class AttentionTest(parameterized.TestCase):
 
     # Standard inverted dropout behavior means active values must be larger
     # than non-dropped values to preserve target expectation bounds.
-    max_train_val = float(jnp.max(jnp.abs(output_train)))
-    max_eval_val = float(jnp.max(jnp.abs(output_eval)))
+    max_train_val = float(jnp.max(jnp.abs(output_train)))  # pyrefly: ignore[bad-argument-type]
+    max_eval_val = float(jnp.max(jnp.abs(output_eval)))  # pyrefly: ignore[bad-argument-type]
 
     self.assertGreater(max_train_val, max_eval_val)
 
@@ -537,7 +537,7 @@ class AttentionTest(parameterized.TestCase):
     )
     variables = module.init(self.rng, self.x, c=None)
     output = module.apply(variables, self.x, c=None, is_training=False)
-    self.assertEqual(output.shape, self.x.shape)
+    self.assertEqual(output.shape, self.x.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_multi_head_attention_no_bias_param_shapes(self):
     """Verifies parameter shapes when use_bias=False."""
@@ -546,7 +546,7 @@ class AttentionTest(parameterized.TestCase):
         use_bias=False,
     )
     variables = module.init(self.rng, self.x, c=None)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
 
     expected = {
         "params": {
@@ -573,7 +573,7 @@ class AttentionTest(parameterized.TestCase):
     )
     variables = module.init(self.rng, self.x, c=None)
     output = module.apply(variables, self.x, c=None, is_training=False)
-    self.assertEqual(output.shape, self.x.shape)
+    self.assertEqual(output.shape, self.x.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_qk_norm_l2_param_shapes(self):
     """Verifies L2 QK normalization creates a norm_qk_scale parameter."""
@@ -620,7 +620,7 @@ class AttentionTest(parameterized.TestCase):
     x = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x, c=None)
     output = module.apply(variables, x, c=None, is_training=False)
-    self.assertEqual(output.shape, x.shape)
+    self.assertEqual(output.shape, x.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_qk_norm_l2_with_rope(self):
     """Verifies L2 QK norm works with RoPE (norm before RoPE)."""
@@ -634,7 +634,7 @@ class AttentionTest(parameterized.TestCase):
     x = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
     variables = module.init(self.rng, x, c=None)
     output = module.apply(variables, x, c=None, is_training=False)
-    self.assertEqual(output.shape, x.shape)
+    self.assertEqual(output.shape, x.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_qk_norm_disabled_has_no_norm_params(self):
     """Verifies that normalize_qk=False creates no norm params."""

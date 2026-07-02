@@ -76,11 +76,11 @@ class ConditionalMLP(nn.Module, ConditionalBackbone):
   @kt.typechecked
   def __call__(
       self,
-      x: DataArray,
+      x: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: arch_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> DataArray:
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     x_emb = jnp.reshape(x, shape=(x.shape[0], -1))
     # Input preprocessing.
     if self.hidden_sizes_preprocess:

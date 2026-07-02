@@ -103,12 +103,12 @@ class NormalizationLayer(nn.Module):
   @kt.typechecked
   def __call__(
       self,
-      x: Float["batch *other channels"],
+      x: Float["batch *other channels"],  # pyrefly: ignore[not-a-type]
       c: Float["batch cond_dim"] | None = None,
       mask: (
           Bool["batch *#other #channels"] | Bool["batch *#other"] | None
       ) = None,
-  ) -> Float["batch *other channels"]:
+  ) -> Float["batch *other channels"]:  # pyrefly: ignore[not-a-type]
     """Run the normalization layer.
 
     If `mask` is provided, it is expected to be broadcastable to the shape of

@@ -47,8 +47,8 @@ class MLP(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float['batch *other_dims num_inputs'], *, is_training: bool
-  ) -> Float['batch *other_dims num_features']:
+      self, x: Float['batch *other_dims num_inputs'], *, is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float['batch *other_dims num_features']:  # pyrefly: ignore[not-a-type]
     """Applies MLP blocks to the input tensor.
 
     Args:
@@ -110,7 +110,7 @@ class GatingSwiGLU(nn.Module):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, x: Float["*batch d_in"]) -> Float["*batch features"]:
+  def __call__(self, x: Float["*batch d_in"]) -> Float["*batch features"]:  # pyrefly: ignore[not-a-type]
     # Project to double feature width
     gate_and_val = nn.Dense(
         features=self.features * 2,
@@ -180,8 +180,8 @@ class FeedForward(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float["batch *other_dims output_size"], *, is_training: bool
-  ) -> Float["batch *other_dims output_size"]:
+      self, x: Float["batch *other_dims output_size"], *, is_training: bool  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch *other_dims output_size"]:  # pyrefly: ignore[not-a-type]
     # Up-projection step
     if self.ffn_type == "swiglu":
       # Project to double feature width

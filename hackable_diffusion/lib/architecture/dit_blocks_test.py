@@ -90,7 +90,7 @@ class DiTBlockTest(parameterized.TestCase):
     )
     variables = module.init(self.key, x, cond, is_training=False)
     output = module.apply(variables, x, cond, is_training=False)
-    self.assertEqual(output.shape, input_shape)
+    self.assertEqual(output.shape, input_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       dict(
@@ -125,7 +125,7 @@ class DiTBlockTest(parameterized.TestCase):
     )
     variables = module.init(self.key, x, cond, is_training=False)
     output = module.apply(variables, x, cond, is_training=False)
-    self.assertTrue(jnp.allclose(output, x, atol=1e-5))
+    self.assertTrue(jnp.allclose(output, x, atol=1e-5))  # pyrefly: ignore[bad-argument-type]
 
   def test_variable_shapes_ada_rms_norm(self):
     """Tests variable shapes with ada_rms_norm (SwiGLU)."""
@@ -145,7 +145,7 @@ class DiTBlockTest(parameterized.TestCase):
         ffn_type='swiglu',
     )
     variables = module.init(self.key, x, cond, is_training=False)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
 
     expected_variables_shapes = {
         'params': {
@@ -205,7 +205,7 @@ class DiTBlockTest(parameterized.TestCase):
         ffn_type='dense',
     )
     variables = module.init(self.key, x, cond, is_training=False)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
 
     expected_variables_shapes = {
         'params': {
@@ -390,14 +390,14 @@ class PositionalEmbeddingTest(parameterized.TestCase):
     module = dit_blocks.PositionalEmbedding()
     variables = module.init(self.key, x)
     output = module.apply(variables, x)
-    self.assertEqual(output.shape, input_shape)
+    self.assertEqual(output.shape, input_shape)  # pyrefly: ignore[missing-attribute]
 
   def test_variable_shapes(self):
     input_shape = (self.batch, self.n, self.d)
     x = jnp.ones(input_shape)
     module = dit_blocks.PositionalEmbedding()
     variables = module.init(self.key, x)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
     expected_variables_shapes = {
         'params': {
             'PositionalEmbeddingTensor': (1, self.n, self.d),
@@ -423,7 +423,7 @@ class PatchifyTest(parameterized.TestCase):
     variables = module.init(self.key, x)
     output = module.apply(variables, x)
     expected_n = (self.h // self.patch_size[0]) * (self.w // self.patch_size[1])
-    self.assertEqual(output.shape, (self.batch, expected_n, self.embedding_dim))
+    self.assertEqual(output.shape, (self.batch, expected_n, self.embedding_dim))  # pyrefly: ignore[missing-attribute]
 
   def test_raises_error_on_non_divisible_shape(self):
     x = jnp.ones((self.batch, self.h + 1, self.w, self.c))
@@ -446,7 +446,7 @@ class PatchifyTest(parameterized.TestCase):
         patch_size=self.patch_size, embedding_dim=self.embedding_dim
     )
     variables = module.init(self.key, x)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
     expected_variables_shapes = {
         'params': {
             'Dense_Project': {
@@ -478,7 +478,7 @@ class DePatchifyTest(parameterized.TestCase):
     )
     variables = module.init(self.key, x)
     output = module.apply(variables, x)
-    self.assertEqual(output.shape, (self.batch, self.h, self.w, self.c))
+    self.assertEqual(output.shape, (self.batch, self.h, self.w, self.c))  # pyrefly: ignore[missing-attribute]
 
   def test_variable_shapes(self):
     n = (self.h // self.patch_size[0]) * (self.w // self.patch_size[1])
@@ -488,7 +488,7 @@ class DePatchifyTest(parameterized.TestCase):
         output_shape=(self.h, self.w, self.c),
     )
     variables = module.init(self.key, x)
-    variables_shapes = test_helpers.get_pytree_shapes(variables)
+    variables_shapes = test_helpers.get_pytree_shapes(variables)  # pyrefly: ignore[bad-argument-type]
     expected_variables_shapes = {
         'params': {
             'Dense_Out': {

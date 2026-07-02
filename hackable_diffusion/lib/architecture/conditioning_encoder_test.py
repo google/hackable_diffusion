@@ -76,7 +76,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -148,7 +148,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -220,7 +220,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -295,7 +295,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -337,7 +337,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -391,7 +391,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=0.0,
@@ -444,7 +444,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -531,7 +531,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -619,7 +619,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=conditioning_dropout_rate,
@@ -665,7 +665,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.ConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=SumEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',

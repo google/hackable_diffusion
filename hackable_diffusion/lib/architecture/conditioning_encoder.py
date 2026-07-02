@@ -48,7 +48,7 @@ Num = hd_typing.Num
 class BaseTimeEmbedder(Protocol):
   """Protocol for a time embedder."""
 
-  def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:
+  def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -61,7 +61,7 @@ class BaseEmbedder(Protocol):
 
   def __call__(
       self, conditioning: hd_typing.Conditioning
-  ) -> Float['batch ...']:
+  ) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -70,7 +70,7 @@ class BaseConditioningEncoder(Protocol):
 
   def __call__(
       self,
-      time: hd_typing.TimeArray,
+      time: hd_typing.TimeArray,  # pyrefly: ignore[not-a-type]
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
   ) -> arch_typing.ConditioningEmbeddings:
@@ -113,7 +113,7 @@ class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, time: hd_typing.TimeArray) -> Float['batch num_features']:
+  def __call__(self, time: hd_typing.TimeArray) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
     t_emb = sequence_embedders.SinusoidalSequenceEmbedding(self.embedding_dim)(
         time
     )
@@ -146,7 +146,7 @@ class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
   num_features: int
 
   @kt.typechecked
-  def __call__(self, time: hd_typing.TimeArray) -> Float['batch num_features']:
+  def __call__(self, time: hd_typing.TimeArray) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
     return jnp.zeros((time.shape[0], self.num_features))
 
 
@@ -154,7 +154,7 @@ class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
   """Time embedder that returns time without any transformation."""
 
   @kt.typechecked
-  def __call__(self, time: hd_typing.TimeArray) -> hd_typing.TimeArray:
+  def __call__(self, time: hd_typing.TimeArray) -> hd_typing.TimeArray:  # pyrefly: ignore[not-a-type]
     return time
 
 
@@ -189,7 +189,7 @@ class LabelEmbedder(nn.Module, BaseEmbedder):
   def __call__(
       self,
       conditioning: hd_typing.Conditioning,
-  ) -> Float['batch num_features']:
+  ) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
     if self.conditioning_key not in conditioning:
       raise ValueError(
           f'Conditioning key {self.conditioning_key} not found in conditioning.'
@@ -231,7 +231,7 @@ class LinearEmbedder(nn.Module, BaseEmbedder):
   def __call__(
       self,
       conditioning: hd_typing.Conditioning,
-  ) -> Float['batch num_features']:
+  ) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
     if self.conditioning_key not in conditioning:
       raise ValueError(
           f'Conditioning key {self.conditioning_key} not found in conditioning.'
@@ -279,7 +279,7 @@ class MLPEmbedder(nn.Module, BaseEmbedder):
   def __call__(
       self,
       conditioning: hd_typing.Conditioning,
-  ) -> Float['batch num_features']:
+  ) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
     for key in self.conditioning_keys:
       if key not in conditioning:
         raise ValueError(
@@ -325,7 +325,7 @@ class FieldSelector(nn.Module, BaseEmbedder):
   def __call__(
       self,
       conditioning: hd_typing.Conditioning,
-  ) -> Num['batch ...']:
+  ) -> Num['batch ...']:  # pyrefly: ignore[not-a-type]
     if self.field_name not in conditioning:
       raise ValueError(
           f'Conditioning key {self.field_name} not found in conditioning.'
@@ -431,7 +431,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   @kt.typechecked
   def __call__(
       self,
-      time: hd_typing.TimeTree,
+      time: hd_typing.TimeTree,  # pyrefly: ignore[not-a-type]
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
   ) -> arch_typing.ConditioningEmbeddings:

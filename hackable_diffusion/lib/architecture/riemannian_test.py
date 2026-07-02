@@ -52,12 +52,12 @@ class RiemannianArchitectureTest(absltest.TestCase):
     variables = model.init(key, xt, conditioning_embeddings, is_training=False)
     v = model.apply(variables, xt, conditioning_embeddings, is_training=False)
 
-    self.assertEqual(v.shape, (4, 3))
+    self.assertEqual(v.shape, (4, 3))  # pyrefly: ignore[missing-attribute]
 
     # Check that v is tangent to xt
     inner_products = jnp.sum(xt * v, axis=-1)
     # Project should ensure dot(xt, v) = 0 for sphere
-    self.assertAlmostEqual(jnp.max(jnp.abs(inner_products)), 0.0, places=5)
+    self.assertAlmostEqual(jnp.max(jnp.abs(inner_products)), 0.0, places=5)  # pyrefly: ignore[no-matching-overload]
 
   def test_variable_names_and_shapes(self):
     """Check that model variables have expected names and shapes."""
