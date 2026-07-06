@@ -104,12 +104,17 @@ class StepInfo:
 
 StepInfoTree = PyTree[StepInfo]
 
+################################################################################
 # MARK: DiffusionStep Data Structure
+################################################################################
 
 
 @flax.struct.dataclass(frozen=True, kw_only=True)
 class DiffusionStep:
   """The complete state of the diffusion process at a single step.
+
+  Note that in the case where our data structure is a PyTree, the diffusion step
+  is defined for each leaf. The associated PyTree is `DiffusionStepTree`.
 
   Attributes:
     xt: The noisy data at the current step.
