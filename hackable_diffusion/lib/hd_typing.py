@@ -17,6 +17,7 @@
 from typing import Any
 from collections.abc import Mapping  # pylint: disable=g-multiple-import,g-importing-member
 import kauldron.ktyping as kt
+
 # pylint: disable=g-multiple-import,g-importing-member, unused-import
 from kauldron.ktyping import (
     Array,
@@ -43,6 +44,7 @@ from kauldron.ktyping import (
     UInt32,
     UInt64,
 )
+
 # pylint: enable=g-multiple-import,g-importing-member, unused-import
 
 typechecked = kt.typechecked
@@ -64,6 +66,8 @@ DataArray = Array['batch *#data_shape']
 
 DataTree = PyTree[Array['batch *_data_shape'], '$T']
 
+Scalar = Array['batch']
+ScalarTree = PyTree[Array['batch'], '$T']
 
 # Array of the shape and structure of the time parameter.
 # '*#data_shape' means broadcastable to the shape of the data.
