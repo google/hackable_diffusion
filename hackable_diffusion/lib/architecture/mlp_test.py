@@ -15,7 +15,6 @@
 """Tests for the MLP module."""
 
 from hackable_diffusion.lib import test_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import mlp
 import jax
 import jax.numpy as jnp

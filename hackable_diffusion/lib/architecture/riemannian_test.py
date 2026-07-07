@@ -17,7 +17,6 @@
 from absl.testing import absltest
 import flax
 from hackable_diffusion.lib import manifolds
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import mlp
 from hackable_diffusion.lib.architecture import riemannian
 import jax

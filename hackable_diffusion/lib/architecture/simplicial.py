@@ -36,12 +36,12 @@ simplex vertices. So, in practice, we have:
   * Simplicial: `V = process.process_num_categories`
 """
 
-from typing import Protocol
+from typing import Union
 import einops
 from flax import linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import discrete
 import jax
 import jax.numpy as jnp
@@ -55,7 +55,7 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 BaseProjector = discrete.BaseProjector
@@ -65,18 +65,7 @@ BaseProjector = discrete.BaseProjector
 ################################################################################
 
 
-class BaseLogitEmbedder(Protocol):
-  """Protocol for probability embedders."""
-
-  embedding_dim: int
-
-  def __call__(
-      self, x: Float['batch *other_input V'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class DenseEmbedder(nn.Module, BaseLogitEmbedder):
+class DenseEmbedder(nn.Module):
   """Probability embedder that uses a dense layer.
 
   Attributes:
@@ -128,6 +117,9 @@ class DenseEmbedder(nn.Module, BaseLogitEmbedder):
     return logit_embeddings
 
 
+BaseLogitEmbedder = Union[DenseEmbedder]
+
+
 ################################################################################
 # MARK: ConditionalSimplicialBackbone
 ################################################################################
@@ -162,7 +154,7 @@ class ConditionalSimplicialBackbone(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: Float['batch *other V'],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
   ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
 

@@ -62,29 +62,10 @@ TimeTree = hd_typing.TimeTree
 
 
 class TimeSampler(Protocol):
-  """Time sampler protocol operating on arrays or on pytrees."""
+  """Time sampler protocol."""
 
   def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
-    """Returns a time array or a pytree of time arrays.
-
-    The assumption is that data_spec is either an array or a pytree. We
-    also assume that the first dimension of each array in data_spec is a batched
-    dimension. The function is expected to return a time array having the same
-    structure as `data_spec`, meaning that the first batch dimension is the
-    same, while the other dimensions are going to be broadcastable to
-    `data_spec`. This is the case e.g. for image diffusion where `data_spec` has
-    shape `(B, h, w, c)`, and each image has a single time value, so the time
-    array will have shape `(B, 1, 1, 1)`. IMPORTANT: We do not enforce on the
-    interface level that output of `__call__(key, pytree)` is a pytree and not
-    an array -- this is the user responsibility.
-
-    Args:
-      key: The PRNG key to use for sampling.
-      data_spec: The data specification to use for sampling.
-
-    Returns:
-      A time array or a pytree of time arrays.
-    """
+    ...
 
 
 ################################################################################
@@ -93,7 +74,7 @@ class TimeSampler(Protocol):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class UniformTimeSampler(TimeSampler):
+class UniformTimeSampler:
   """Uniform time sampler for a single data array.
 
   Sample time uniformly from the span (default [0.0, 1.0]).
@@ -131,7 +112,7 @@ class UniformTimeSampler(TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class LogitNormalTimeSampler(TimeSampler):
+class LogitNormalTimeSampler:
   """Logit normal time sampler for a single data array.
 
   Sample time following a logit normal distribution from the span (default
@@ -176,7 +157,7 @@ class LogitNormalTimeSampler(TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class UniformStratifiedTimeSampler(TimeSampler):
+class UniformStratifiedTimeSampler:
   """Uniform stratified time sampler.
 
   See https://arxiv.org/abs/2107.00630 (I.1).
@@ -213,7 +194,7 @@ class UniformStratifiedTimeSampler(TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class UnbalancedTimestepSampler(TimeSampler):
+class UnbalancedTimestepSampler:
   """Unbalanced time sampler from the JointDiT paper.
 
   See https://arxiv.org/abs/2505.00482 (Section 3.1, and A.3).
@@ -265,3 +246,7 @@ class UnbalancedTimestepSampler(TimeSampler):
     f_for_g = jax_helpers.bcast_right(f.reshape(batch_shape), len(shape2))
     g = jax.lax.select(equal_mask, 1 - f_for_g, g)
     return {self.key1: f, self.key2: g}
+
+
+
+

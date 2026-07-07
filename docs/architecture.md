@@ -25,33 +25,32 @@ include:
   * **Typing and Utilities**: A set of common types and utility functions to
     ensure consistency and clarity.
 
-## Common Types (`arch_typing.py`)
+## Common Types
 
-Several important enums and type definitions are centralized in `arch_typing.py`
-to standardize the architecture's configuration.
+Types are defined in `lib/hd_typing.py` to standardize the architecture's configuration.
 
-### `ConditioningMechanism`
+### Conditioning Mechanisms
 
-This string specifies how a conditioning signal is injected into the backbone.
+Conditioning mechanisms are specified as strings (keys in `ConditioningEmbeddings`) defining how a conditioning signal is injected into the backbone.
 
-  * `adaptative_norm`: The conditioning embedding is used to modulate the scale
+  * `'adaptive_norm'`: The conditioning embedding is used to modulate the scale
     and shift in an adaptive normalization layer (e.g., AdaLN).
-  * `cross_attention`: The conditioning embedding is used as the key and value
+  * `'cross_attention'`: The conditioning embedding is used as the key and value
     in a cross-attention layer, with the model's intermediate representation as
     the query.
-  * `concatenate`: The conditioning is concatenated to the input of a layer or
+  * `'concatenate'`: The conditioning is concatenated to the input of a layer or
     module.
-  * `sum`: The conditioning is added to the input of a layer or module.
+  * `'sum'`: The conditioning is added to the input of a layer or module.
 
 ### Embedding Merge Functions
 
-When multiple embeddings are directed to the same `ConditioningMechanism`,
+When multiple embeddings are directed to the same mechanism,
 a merge function defines how they are combined. Two frozen dataclasses are
 provided in `conditioning_encoder.py`:
 
   * `SumEmbeddings()`: Embeddings are summed element-wise. This requires them
     to have the same shape.
-  * `ConcatEmbeddings()`: Embeddings are concatenated along the feature axis.
+  * `ConcatEmbeddings()`: Embeddings are concatenated along the last axis.
 
 The type alias `MergeEmbeddingsFn = Union[SumEmbeddings, ConcatEmbeddings]` is
 available for type annotations.
@@ -100,7 +99,6 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 from hackable_diffusion.lib.architecture.unet import Unet
-from hackable_diffusion.lib.architecture.arch_typing import ConditioningMechanism
 
 key = jax.random.PRNGKey(0)
 input_shape = (1, 64, 64, 3)

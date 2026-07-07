@@ -14,12 +14,12 @@
 
 """Backbones for discrete data."""
 
-from typing import Protocol
+from typing import Union
 import einops
 from flax import linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 
@@ -31,7 +31,7 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 ################################################################################
@@ -39,18 +39,7 @@ ConditionalBackbone = arch_typing.ConditionalBackbone
 ################################################################################
 
 
-class BaseTokenEmbedder(Protocol):
-  """Protocol for token embedders."""
-
-  embedding_dim: int
-
-  def __call__(
-      self, x: Int['batch *other_input 1'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class TokenEmbedder(nn.Module, BaseTokenEmbedder):
+class TokenEmbedder(nn.Module):
   """Token embedder that uses a dense layer.
 
   Attributes:
@@ -114,23 +103,15 @@ class TokenEmbedder(nn.Module, BaseTokenEmbedder):
     return token_embeddings
 
 
+BaseTokenEmbedder = Union[TokenEmbedder]
+
+
 ################################################################################
 # MARK: Token Projector
 ################################################################################
 
 
-class BaseProjector(Protocol):
-  """Protocol for projectors."""
-
-  embedding_dim: int
-
-  def __call__(
-      self, x: Float['batch *other_embedding F'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_input V']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class DenseProjector(nn.Module, BaseProjector):
+class DenseProjector(nn.Module):
   """Projector that uses a dense layer.
 
   Attributes:
@@ -179,6 +160,9 @@ class DenseProjector(nn.Module, BaseProjector):
     return output
 
 
+BaseProjector = Union[DenseProjector]
+
+
 ################################################################################
 # MARK: ConditionalDiscreteBackbone
 ################################################################################
@@ -213,7 +197,7 @@ class ConditionalDiscreteBackbone(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: Int['batch *other 1'],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
   ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
 

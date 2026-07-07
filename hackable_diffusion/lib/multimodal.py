@@ -56,7 +56,6 @@ import flax.linen as nn
 from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.corruption import base as corruption_base
 from hackable_diffusion.lib.inference import guidance as guidance_lib
@@ -598,7 +597,7 @@ class NestedSelfConditioningDiffusionNetwork(
     rng_collection: PRNG collection name for the self-conditioning mask.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: diffusion_network.ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
   processes: NestedProcess

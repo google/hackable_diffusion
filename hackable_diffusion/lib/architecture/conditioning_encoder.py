@@ -25,7 +25,6 @@ import dataclasses
 from typing import Protocol, Sequence, Union
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import mlp_blocks
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
@@ -44,11 +43,10 @@ Num = hd_typing.Num
 # MARK: Base Classes
 ################################################################################
 
-
 class BaseTimeEmbedder(Protocol):
   """Protocol for a time embedder."""
 
-  def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, time: hd_typing.TimeArray) -> jax.Array:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -59,9 +57,7 @@ class BaseEmbedder(Protocol):
   def output_shape(self) -> tuple[int, ...]:
     ...
 
-  def __call__(
-      self, conditioning: hd_typing.Conditioning
-  ) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, conditioning: hd_typing.Conditioning) -> jax.Array:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -73,7 +69,7 @@ class BaseConditioningEncoder(Protocol):
       time: hd_typing.TimeArray,  # pyrefly: ignore[not-a-type]
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> arch_typing.ConditioningEmbeddings:
+  ) -> hd_typing.ConditioningEmbeddings:
     ...
 
 
@@ -82,7 +78,7 @@ class BaseConditioningEncoder(Protocol):
 ################################################################################
 
 
-class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class SinusoidalTimeEmbedder(nn.Module):
   """Sinusoidal time embedder.
 
   This module encodes the time step `t` into a dense embedding.
@@ -134,7 +130,7 @@ class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
     return t_emb
 
 
-class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class ZeroTimeEmbedder(nn.Module):
   """Time embedder that returns zeros.
 
   This allows to train models without time conditioning.
@@ -150,7 +146,7 @@ class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
     return jnp.zeros((time.shape[0], self.num_features))
 
 
-class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class IdentityTimeEmbedder(nn.Module):
   """Time embedder that returns time without any transformation."""
 
   @kt.typechecked
@@ -163,7 +159,7 @@ class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
 ################################################################################
 
 
-class LabelEmbedder(nn.Module, BaseEmbedder):
+class LabelEmbedder(nn.Module):
   """Embedder for integer labels.
 
   Attributes:
@@ -204,7 +200,7 @@ class LabelEmbedder(nn.Module, BaseEmbedder):
     )(integer_inputs)
 
 
-class LinearEmbedder(nn.Module, BaseEmbedder):
+class LinearEmbedder(nn.Module):
   """Linear embedding.
 
   This module encodes an input into a dense embedding by applying a linear
@@ -250,7 +246,7 @@ class LinearEmbedder(nn.Module, BaseEmbedder):
     )(inputs)
 
 
-class MLPEmbedder(nn.Module, BaseEmbedder):
+class MLPEmbedder(nn.Module):
   """MLP embedding.
 
   This module encodes an input into a dense embedding by applying a MLP.
@@ -304,7 +300,7 @@ class MLPEmbedder(nn.Module, BaseEmbedder):
     return mlp_module(all_inputs, is_training=False)
 
 
-class FieldSelector(nn.Module, BaseEmbedder):
+class FieldSelector(nn.Module):
   """Identity embedder.
 
   This module returns one input without any transformation.
@@ -409,7 +405,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   time_embedder: BaseTimeEmbedder
   conditioning_embedders: dict[str, BaseEmbedder]
   merge_embeddings_fn: MergeEmbeddingsFn
-  conditioning_rules: arch_typing.ConditioningEmbeddings
+  conditioning_rules: hd_typing.ConditioningEmbeddings
   conditioning_dropout_rate: float = 0.0
 
   def setup(self):
@@ -434,7 +430,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
       time: hd_typing.TimeTree,  # pyrefly: ignore[not-a-type]
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> arch_typing.ConditioningEmbeddings:
+  ) -> hd_typing.ConditioningEmbeddings:
     """Encodes and combines time and conditioning signals.
 
     The output is a dictionary where keys are the embedding mechanisms specified

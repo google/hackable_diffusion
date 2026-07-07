@@ -109,7 +109,7 @@ and picks the corresponding token from the candidates ``Routing``.
 """
 
 import dataclasses
-from typing import Protocol
+from typing import Union
 
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import schedules
@@ -143,25 +143,11 @@ DiscreteSchedule = schedules.DiscreteSchedule
 ################################################################################
 
 
-class RemaskingFn(Protocol):
-  """Remasking strategy protocol.
-
-  We follow the original implementation of remasking in
-  https://arxiv.org/abs/2503.00307.
-
-  We return the probability of unmasking in the forward process. This is denoted
-  σ(t) in https://arxiv.org/abs/2503.00307. The return probability has the same
-  shape as the input time. Note that σ(t) in https://arxiv.org/abs/2503.00307 is
-  in fact dependent of `s` (the next time) and `t` (the current time).
-  """
-
-  def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    """Returns the probability of unmasking."""
-    ...
+# RemaskingFn Union type alias is defined after concrete implementations.
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NoRemaskingFn(RemaskingFn):
+class NoRemaskingFn:
   """No remasking strategy."""
 
   @kt.typechecked
@@ -170,7 +156,7 @@ class NoRemaskingFn(RemaskingFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class MaxCappedRemaskingFn(RemaskingFn):
+class MaxCappedRemaskingFn:
   """Max-capped remasking strategy.
 
   This is the original implementation of remasking in
@@ -208,7 +194,7 @@ class MaxCappedRemaskingFn(RemaskingFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class RescaledRemaskingFn(RemaskingFn):
+class RescaledRemaskingFn:
   """Rescaled remasking strategy.
 
   This is the original implementation of remasking in
@@ -251,29 +237,19 @@ class RescaledRemaskingFn(RemaskingFn):
     return self.rescale_factor * jnp.minimum((1.0 - alpha_s) / alpha_t, 1.0)
 
 
+RemaskingFn = Union[NoRemaskingFn, MaxCappedRemaskingFn, RescaledRemaskingFn]
+
+
 ################################################################################
 # MARK: Corrupted mask function
 ################################################################################
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class CorruptedMaskFn(Protocol):  # pyrefly: ignore[bad-class-definition]
-  """Corrupted mask function protocol.
-
-  This function takes the current xt, i.e., the "noisy" data and returns a mask
-  which indicates which regions are corrupted. The mask is True if the region is
-  corrupted and False otherwise. In the mask setting, this simply corresponds to
-  identifying the tokens which have the mask value. More complex masking schemes
-  can be defined as in https://arxiv.org/abs/2410.06264.
-  """
-
-  def __call__(self, xt: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    """Returns the corrupted mask."""
-    ...
+# CorruptedMaskFn Union type alias is defined after concrete implementations.
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class AllCorruptedMaskFn(CorruptedMaskFn):
+class AllCorruptedMaskFn:
   """Assume all tokens are corrupted."""
 
   @kt.typechecked
@@ -282,7 +258,7 @@ class AllCorruptedMaskFn(CorruptedMaskFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class MaskValueCorruptedMaskFn(CorruptedMaskFn):
+class MaskValueCorruptedMaskFn:
   """Corrupted mask function based on the mask value.
 
   Note that this function only makes sense for masking processes.
@@ -301,6 +277,9 @@ class MaskValueCorruptedMaskFn(CorruptedMaskFn):
   def __call__(self, xt: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     mask_value = self.process.process_num_categories - 1
     return xt == mask_value
+
+
+CorruptedMaskFn = Union[AllCorruptedMaskFn, MaskValueCorruptedMaskFn]
 
 
 ################################################################################
@@ -394,47 +373,11 @@ def _generate_candidates(
   return x0, x_noise, logits
 
 
-class RoutingStrategy(Protocol):
-  """Protocol for transforming routing weights.
-
-  A planner takes the routing weights computed by a sampler and
-  optionally transforms them before they are applied via ``_sample_routing``.
-  This allows injecting different selection strategies (e.g. greedy top-k)
-  without modifying the sampler logic.
-
-  When no planner is used (``planner=None``), the routing weights are
-  applied as-is via stochastic categorical sampling.
-  """
-
-  def __call__(
-      self,
-      routing_weights: Routing,
-      logits: Float['... M'],  # pyrefly: ignore[not-a-type]
-      x0: DataArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      next_time: TimeArray,  # pyrefly: ignore[not-a-type]
-      key: PRNGKey,
-  ) -> Routing:
-    """Transforms routing weights.
-
-    Args:
-      routing_weights: Per-position routing weights.
-      logits: Model logits ``(*, M)``.
-      x0: Sampled clean token ``(*, 1)``.
-      xt: Current state ``(*, 1)``.
-      time: Current diffusion time.
-      next_time: Next diffusion time.
-      key: Random key.
-
-    Returns:
-      Transformed routing weights.
-    """
-    ...
+# RoutingStrategy Union type alias is defined after concrete implementations.
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class GreedyPlanner(RoutingStrategy):
+class GreedyPlanner:
   """Confidence-based top-k greedy planner.
 
   Selects the top-k positions by confidence of the sampled x0 token, forces
@@ -529,6 +472,9 @@ class GreedyPlanner(RoutingStrategy):
         noise=jnp.where(to_update[..., None], 0.0, routing_weights.noise),
         clean=jnp.where(to_update[..., None], 1.0, 0.0),
     )
+
+
+RoutingStrategy = Union[GreedyPlanner]
 
 
 ################################################################################

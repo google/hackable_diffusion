@@ -16,10 +16,9 @@
 
 import dataclasses
 import functools
-from typing import Union
+from typing import Callable, Union
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -34,7 +33,7 @@ import kauldron.ktyping as kt
 DType = hd_typing.DType
 Float = hd_typing.Float
 
-ActivationFn = arch_typing.ActivationFn
+ActivationFn = Callable[[jax.Array], jax.Array]
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 

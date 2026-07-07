@@ -20,7 +20,6 @@ from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import multimodal
 from hackable_diffusion.lib import test_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.architecture import discrete
@@ -262,7 +261,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
 ################################################################################
 
 
-class SelfConditioningBackbone(nn.Module, arch_typing.ConditionalBackbone):
+class SelfConditioningBackbone(nn.Module, diffusion_network.ConditionalBackbone):
   """Backbone for self-conditioning tests.
 
   Accepts input of shape (B, ..., input_channels + num_classes) and returns
@@ -275,10 +274,10 @@ class SelfConditioningBackbone(nn.Module, arch_typing.ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: arch_typing.DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      x: hd_typing.DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> arch_typing.DataTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_typing.DataTree:  # pyrefly: ignore[not-a-type]
     return nn.Dense(features=self.num_classes)(x)
 
 

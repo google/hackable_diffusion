@@ -15,11 +15,10 @@
 """Diffusion network."""
 
 import dataclasses
-from typing import Callable, Protocol, cast
+from typing import Callable, Protocol, Union, cast
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import schedules
@@ -39,6 +38,7 @@ PyTree = hd_typing.PyTree
 GaussianSchedule = schedules.GaussianSchedule
 
 Conditioning = hd_typing.Conditioning
+ConditioningEmbeddings = hd_typing.ConditioningEmbeddings
 DataArray = hd_typing.DataArray
 DataTree = hd_typing.DataTree
 TargetInfo = hd_typing.TargetInfo
@@ -55,23 +55,74 @@ ShapeTree = hd_typing.ShapeTree
 ################################################################################
 
 
-class InputRescaler(Protocol):
-  """Rescales the input in a schedule-dependent way."""
-
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    ...
+################################################################################
+# MARK: Time rescaling functions
+################################################################################
 
 
-class TimeRescaler(Protocol):
-  """Rescales the time, optionally in a schedule-dependent way."""
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class LogSnrTimeRescaler:
+  """Time rescaler that uses the logsnr of the process."""
 
+  schedule: GaussianSchedule
+  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None  # pyrefly: ignore[not-a-type]
+
+  @kt.typechecked
   def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    ...
+    """Returns the time rescaled by the logsnr of the process."""
+    if self.postprocess_fn is None:
+      postprocess_fn = lambda x: x
+    else:
+      postprocess_fn = self.postprocess_fn
+    return postprocess_fn(self.schedule.logsnr(time))
+
+
+################################################################################
+# MARK: Input rescaling functions
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class MagnitudeScheduleInputRescaler:
+  """Input rescaler that uses the magnitude of the schedule."""
+
+  schedule: GaussianSchedule
+
+  @kt.typechecked
+  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+    """Returns the inputs rescaled by the magnitude of the schedule."""
+    alpha_t = self.schedule.alpha(time)
+    sigma_t = self.schedule.sigma(time)
+    alpha_t = jax_helpers.bcast_right(alpha_t, inputs.ndim)
+    sigma_t = jax_helpers.bcast_right(sigma_t, inputs.ndim)
+    magnitude = jnp.sqrt(jnp.square(alpha_t) + jnp.square(sigma_t))
+    return inputs / magnitude
+
+
+################################################################################
+# MARK: Rescaler Unions
+################################################################################
+
+TimeRescaler = Union[LogSnrTimeRescaler]
+InputRescaler = Union[MagnitudeScheduleInputRescaler]
 
 
 ################################################################################
 # MARK: Diffusion Network
 ################################################################################
+
+
+class ConditionalBackbone(Protocol):
+  """Protocol for a conditional backbone."""
+
+  def __call__(
+      self,
+      x: DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning_embeddings: ConditioningEmbeddings,
+      *,
+      is_training: bool,
+  ) -> DataTree:  # pyrefly: ignore[not-a-type]
+    ...
 
 
 class BaseDiffusionNetwork(Protocol):
@@ -117,7 +168,7 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       schedule-dependent. By default, we do not use rescaler.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: str
   data_dtype: DType = jnp.float32
@@ -231,7 +282,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       self-conditioning mask. Defaults to ``'self_conditioning'``.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: str
   process: discrete.CategoricalProcess | simplicial.SimplicialProcess
@@ -382,7 +433,7 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       schedule-dependent. By default, we do not use rescaler.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
   data_dtype: PyTree[DType]  # pyrefly: ignore[not-a-type]
@@ -467,45 +518,4 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
     return outputs
 
 
-################################################################################
-# MARK: Time rescaling functions
-################################################################################
 
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class LogSnrTimeRescaler(TimeRescaler):
-  """Time rescaler that uses the logsnr of the process."""
-
-  schedule: GaussianSchedule
-  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None  # pyrefly: ignore[not-a-type]
-
-  @kt.typechecked
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    """Returns the time rescaled by the logsnr of the process."""
-    if self.postprocess_fn is None:
-      postprocess_fn = lambda x: x
-    else:
-      postprocess_fn = self.postprocess_fn
-    return postprocess_fn(self.schedule.logsnr(time))
-
-
-################################################################################
-# MARK: Input rescaling functions
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class MagnitudeScheduleInputRescaler(InputRescaler):
-  """Input rescaler that uses the magnitude of the schedule."""
-
-  schedule: GaussianSchedule
-
-  @kt.typechecked
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    """Returns the inputs rescaled by the magnitude of the schedule."""
-    alpha_t = self.schedule.alpha(time)
-    sigma_t = self.schedule.sigma(time)
-    alpha_t = jax_helpers.bcast_right(alpha_t, inputs.ndim)
-    sigma_t = jax_helpers.bcast_right(sigma_t, inputs.ndim)
-    magnitude = jnp.sqrt(jnp.square(alpha_t) + jnp.square(sigma_t))
-    return inputs / magnitude

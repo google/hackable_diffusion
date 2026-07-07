@@ -15,14 +15,14 @@
 """Riemannian Flow Matching architectures."""
 
 import flax.linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import manifolds
-from hackable_diffusion.lib.architecture import arch_typing
 
 ################################################################################
 # MARK: Riemannian Conditional Backbone
 ################################################################################
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 class RiemannianConditionalBackbone(nn.Module, ConditionalBackbone):
