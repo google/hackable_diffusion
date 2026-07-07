@@ -17,9 +17,9 @@
 from typing import Protocol
 import einops
 from flax import linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 
@@ -31,7 +31,7 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 ################################################################################
@@ -213,7 +213,7 @@ class ConditionalDiscreteBackbone(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: Int['batch *other 1'],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
   ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
 

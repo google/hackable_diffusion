@@ -19,8 +19,8 @@ from typing import Any, Sequence
 import flax
 from flax import linen as nn
 
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 import jax
 
 
@@ -85,13 +85,13 @@ def get_pytree_shapes(pytree: dict[str, Any]) -> dict[str, Any]:
   return jax.tree_util.tree_map(lambda x: getattr(x, 'shape', None), pytree)
 
 
-class IdentityBackbone(nn.Module, arch_typing.ConditionalBackbone):
+class IdentityBackbone(nn.Module, diffusion_network.ConditionalBackbone):
 
   @nn.compact
   def __call__(
       self,
-      x: arch_typing.DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      x: hd_typing.DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> arch_typing.DataTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_typing.DataTree:  # pyrefly: ignore[not-a-type]
     return x

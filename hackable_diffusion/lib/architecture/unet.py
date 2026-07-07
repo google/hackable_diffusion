@@ -16,9 +16,9 @@
 
 from typing import Sequence
 import flax.linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
 
@@ -36,7 +36,7 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 ################################################################################
@@ -141,7 +141,7 @@ class Unet(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
   ) -> Float["batch height width output_channels"]:  # pyrefly: ignore[not-a-type]

@@ -39,9 +39,9 @@ simplex vertices. So, in practice, we have:
 from typing import Protocol
 import einops
 from flax import linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import discrete
 import jax
 import jax.numpy as jnp
@@ -55,7 +55,7 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 BaseProjector = discrete.BaseProjector
@@ -162,7 +162,7 @@ class ConditionalSimplicialBackbone(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: Float['batch *other V'],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
   ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
 

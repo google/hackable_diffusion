@@ -19,7 +19,6 @@ from typing import Callable, Protocol, cast
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import schedules
@@ -39,6 +38,7 @@ PyTree = hd_typing.PyTree
 GaussianSchedule = schedules.GaussianSchedule
 
 Conditioning = hd_typing.Conditioning
+ConditioningEmbeddings = hd_typing.ConditioningEmbeddings
 DataArray = hd_typing.DataArray
 DataTree = hd_typing.DataTree
 TargetInfo = hd_typing.TargetInfo
@@ -72,6 +72,19 @@ class TimeRescaler(Protocol):
 ################################################################################
 # MARK: Diffusion Network
 ################################################################################
+
+
+class ConditionalBackbone(Protocol):
+  """Protocol for a conditional backbone."""
+
+  def __call__(
+      self,
+      x: DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning_embeddings: ConditioningEmbeddings,
+      *,
+      is_training: bool,
+  ) -> DataTree:  # pyrefly: ignore[not-a-type]
+    ...
 
 
 class BaseDiffusionNetwork(Protocol):
@@ -117,7 +130,7 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       schedule-dependent. By default, we do not use rescaler.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: str
   data_dtype: DType = jnp.float32
@@ -231,7 +244,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       self-conditioning mask. Defaults to ``'self_conditioning'``.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: str
   process: discrete.CategoricalProcess | simplicial.SimplicialProcess
@@ -382,7 +395,7 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
       schedule-dependent. By default, we do not use rescaler.
   """
 
-  backbone_network: arch_typing.ConditionalBackbone
+  backbone_network: ConditionalBackbone
   conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
   prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
   data_dtype: PyTree[DType]  # pyrefly: ignore[not-a-type]

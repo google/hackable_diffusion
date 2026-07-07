@@ -19,9 +19,9 @@ We only recommend using this backbone for very simple datasets.
 
 from typing import Literal, Sequence
 from flax import linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import mlp_blocks
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -36,7 +36,7 @@ Float = hd_typing.Float
 
 DataArray = hd_typing.DataArray
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 ################################################################################
@@ -77,7 +77,7 @@ class ConditionalMLP(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
   ) -> DataArray:  # pyrefly: ignore[not-a-type]

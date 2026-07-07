@@ -96,6 +96,10 @@ TargetInfoTree = PyTree[Array['batch *_data_shape']]
 ConditioningKey = str  # e.g. 'label', 'text', 'image', ...
 Conditioning = Mapping[ConditioningKey, Any]
 
+ConditioningEmbeddingsKey = str  # e.g. 'adaptive_norm', 'cross_attention', ...
+ConditioningEmbeddings = dict[ConditioningEmbeddingsKey, Any]
+
+
 # Shape related structures.
 Shape = tuple[int, ...]
 ShapeTree = PyTree[Shape]

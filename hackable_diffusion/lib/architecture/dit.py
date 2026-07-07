@@ -15,9 +15,9 @@
 """DiT backbone."""
 
 from flax import linen as nn
+from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import dit_blocks
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -38,7 +38,7 @@ DType = hd_typing.DType
 
 DataArray = hd_typing.DataArray
 
-ConditionalBackbone = arch_typing.ConditionalBackbone
+ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 ################################################################################
 # MARK: DiT
@@ -93,7 +93,7 @@ class DiT(nn.Module, ConditionalBackbone):
   def __call__(
       self,
       x: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: arch_typing.ConditioningEmbeddings,
+      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
   ) -> DataArray:  # pyrefly: ignore[not-a-type]

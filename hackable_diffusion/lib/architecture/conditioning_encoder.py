@@ -25,7 +25,6 @@ import dataclasses
 from typing import Protocol, Sequence, Union
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import mlp_blocks
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
@@ -73,7 +72,7 @@ class BaseConditioningEncoder(Protocol):
       time: hd_typing.TimeArray,  # pyrefly: ignore[not-a-type]
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> arch_typing.ConditioningEmbeddings:
+  ) -> hd_typing.ConditioningEmbeddings:
     ...
 
 
@@ -409,7 +408,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   time_embedder: BaseTimeEmbedder
   conditioning_embedders: dict[str, BaseEmbedder]
   merge_embeddings_fn: MergeEmbeddingsFn
-  conditioning_rules: arch_typing.ConditioningEmbeddings
+  conditioning_rules: hd_typing.ConditioningEmbeddings
   conditioning_dropout_rate: float = 0.0
 
   def setup(self):
@@ -434,7 +433,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
       time: hd_typing.TimeTree,  # pyrefly: ignore[not-a-type]
       conditioning: hd_typing.Conditioning | None,
       is_training: bool,
-  ) -> arch_typing.ConditioningEmbeddings:
+  ) -> hd_typing.ConditioningEmbeddings:
     """Encodes and combines time and conditioning signals.
 
     The output is a dictionary where keys are the embedding mechanisms specified
