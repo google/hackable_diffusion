@@ -125,8 +125,11 @@ unet = Unet(
     attention_head_dim=-1, # auto-inferred
     attention_normalize_qk=True,
     attention_use_rope=False,
-    normalization_type='group_norm',
-    normalization_num_groups=32,
+    uncond_norm_strategy=hd.architecture.GroupNormStrategy(num_groups=32),
+    cond_norm_strategy=hd.architecture.ConditionalGroupNormStrategy(
+        num_groups=32,
+        use_shift=True,
+    ),
     activation='silu',
     skip_connection_fn=hd.architecture.NormalizedAddSkip(),
 )

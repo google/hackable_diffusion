@@ -50,7 +50,7 @@ class DiT(nn.Module, ConditionalBackbone):
 
   A Diffusion Transformer backbone based on https://arxiv.org/abs/2212.09748.
 
-  The conditioning type is determined by the block's `norm_factory`.
+  The conditioning type is determined by the block's `norm_strategy`.
 
   Attributes:
     num_blocks: Number of DiT blocks.
@@ -84,7 +84,9 @@ class DiT(nn.Module, ConditionalBackbone):
   use_padding_mask: bool = False
 
   def setup(self):
-    self.conditional_norm = self.block.norm_factory.conditional_norm()
+    self.conditional_norm = self.block.norm_strategy.build_layer(
+        name='ConditionalNorm'
+    )
 
   @kt.typechecked
   @nn.compact
@@ -121,7 +123,7 @@ class DiT(nn.Module, ConditionalBackbone):
           tokens_emb, cond, is_training=is_training, mask=padding_mask
       )
 
-    # Apply final adaptive norm.
+    # Apply final conditional norm.
     tokens_emb = self.conditional_norm(tokens_emb, c=nn.silu(cond))
 
     # Decode the tokens to the output.

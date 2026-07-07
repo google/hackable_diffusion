@@ -17,6 +17,7 @@
 import dataclasses
 
 from hackable_diffusion.lib.architecture import arch_typing
+from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.architecture import unet_blocks
@@ -26,13 +27,8 @@ import jax.numpy as jnp
 from absl.testing import absltest
 from absl.testing import parameterized
 
-
-
-# MARK: Type Aliases
-
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-NormalizationType = arch_typing.NormalizationType
 INVALID_INT = arch_typing.INVALID_INT
 
 
@@ -68,8 +64,15 @@ class Config:
   attention_rope_positions_fn: RoPEPositionsFn = SquareRoPEPositions()
 
   # normalization
-  normalization_type: NormalizationType = NormalizationType.GROUP_NORM
-  normalization_num_groups: int = 4
+  uncond_norm_strategy: normalization.NormStrategy = (
+      normalization.GroupNormStrategy(num_groups=4)
+  )
+  cond_norm_strategy: normalization.ConditionalNormStrategy = (
+      normalization.ConditionalGroupNormStrategy(
+          num_groups=4,
+          use_shift=True,
+      )
+  )
 
   # other
   activation: str = 'silu'
@@ -82,7 +85,12 @@ class Config:
 
 
 DEFAULT_CONFIG = Config()
-RMSNORM_CONFIG = Config(normalization_type=NormalizationType.RMS_NORM)
+RMSNORM_CONFIG = Config(
+    uncond_norm_strategy=normalization.RMSNormStrategy(),
+    cond_norm_strategy=normalization.ConditionalRMSNormStrategy(
+        use_shift=True
+    ),
+)
 OUTPUT_CHANNELS_CONFIG = Config(output_channels=2)
 
 
@@ -108,7 +116,7 @@ class UnetTest(parameterized.TestCase):
         'cross_attention': jnp.ones((2, 16, 32)),
     }
     x = jnp.ones(x_shape)
-    model = unet.Unet(**dataclasses.asdict(config), dtype=jnp.float32)  # pyrefly: ignore[bad-argument-type]
+    model = unet.Unet(**config.__dict__, dtype=jnp.float32)  # pyrefly: ignore[bad-argument-type]
     variables = model.init(
         {'params': self.key, 'dropout': self.key},
         x=x,
@@ -137,7 +145,7 @@ class UnetTest(parameterized.TestCase):
     }
     x = jnp.ones(x_shape)
     model = unet.Unet(
-        **dataclasses.asdict(config),  # pyrefly: ignore[bad-argument-type]
+        **config.__dict__,  # pyrefly: ignore[bad-argument-type]
         dtype=jnp.float32,
     )
     variables = model.init(

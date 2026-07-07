@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for normalization layers."""
+"""Tests for normalization strategies."""
 
+import dataclasses
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import normalization
 import jax
 from jax import lax
@@ -30,7 +30,6 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-NormalizationType = arch_typing.NormalizationType
 PyTree = hd_typing.PyTree
 
 ################################################################################
@@ -103,33 +102,29 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_unconditional_rmsnorm_at_init(self):
     """Tests unconditional RMSNorm at init."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=False,
-    )
+    strategy = normalization.RMSNormStrategy()
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x)
 
     output_new = norm_layer.apply(params, self.x)
 
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
-    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+    output_ref = self.x * lax.rsqrt(x2 + strategy.epsilon)
 
     self.assertEqual(output_new.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     np.testing.assert_allclose(output_new, output_ref, rtol=1e-5, atol=1e-5)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_rmsnorm_at_init(self):
     """Tests conditional normalization at init when scale=0 and shift=0."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=True)
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x, self.c)
     output = norm_layer.apply(params, self.x, self.c)
     self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
 
     # At init, scale=0 and shift=0, so output is same as in unconditional.
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
-    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+    output_ref = self.x * lax.rsqrt(x2 + strategy.epsilon)
     np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
         output,
         output_ref,
@@ -143,17 +138,15 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_conditional_rmsnorm_perturbed(self):
     """Tests conditional normalization when scale!=0 and shift!=0."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=True)
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x, self.c)
     params_perturbed = _perturb_params(params=params, key=self.rng)
     output_perturbed = norm_layer.apply(params_perturbed, self.x, self.c)
 
     # Compute unconditional output for comparison.
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
-    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+    output_ref = self.x * lax.rsqrt(x2 + strategy.epsilon)
 
     self.assertEqual(output_perturbed.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     self.assertFalse(
@@ -166,11 +159,8 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_unconditional_groupnorm_at_init(self):
     """Tests unconditional GroupNorm at init."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.GROUP_NORM,
-        conditional=False,
-        num_groups=self.num_groups,
-    )
+    strategy = normalization.GroupNormStrategy(num_groups=self.num_groups)
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x)
     output_new = norm_layer.apply(params, self.x)
 
@@ -183,11 +173,11 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_conditional_groupnorm_at_init(self):
     """Tests conditional GroupNorm at init when scale=0 and shift=0."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.GROUP_NORM,
-        conditional=True,
+    strategy = normalization.ConditionalGroupNormStrategy(
         num_groups=self.num_groups,
+        use_shift=True,
     )
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x, self.c)
     output_new = norm_layer.apply(params, self.x, self.c)
 
@@ -201,11 +191,11 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_conditional_groupnorm_perturbed(self):
     """Tests conditional GroupNorm when scale!=0 and shift!=0."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.GROUP_NORM,
-        conditional=True,
+    strategy = normalization.ConditionalGroupNormStrategy(
         num_groups=self.num_groups,
+        use_shift=True,
     )
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x, self.c)
     params_perturbed = _perturb_params(params=params, key=self.rng)
     output = norm_layer.apply(params_perturbed, self.x, self.c)
@@ -223,22 +213,10 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   def test_rmsnorm_padding_invariance(self):
-    """Tests RMSNorm padding invariance.
-
-    Here we test that RMSNorm is padding invariant.
-    We consider two data points of shape (b, seq_len, seq_len, c) where n is the
-    number of elements. One data point has seq_len=m and the other has
-    seq_len=n, with m < n. The first k < m elements are the same in both data
-    points, and the rest are 0. We then apply RMSNorm to both data points and
-    check that the first k elements are the same in both outputs.
-    """
-
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=False,
-    )
+    """Tests RMSNorm padding invariance."""
+    strategy = normalization.RMSNormStrategy()
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x_small)
-    # Perturb the params.
     params_perturbed = _perturb_params(params=params, key=self.rng)
 
     out_small = norm_layer.apply(params_perturbed, self.x_small)
@@ -251,10 +229,8 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_unconditional_layernorm_at_init(self):
     """Tests unconditional LayerNorm at init."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.LAYER_NORM,
-        conditional=False,
-    )
+    strategy = normalization.LayerNormStrategy()
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x)
     output_new = norm_layer.apply(params, self.x)
 
@@ -267,10 +243,8 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_conditional_layernorm_at_init(self):
     """Tests conditional LayerNorm at init when scale=0 and shift=0."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.LAYER_NORM,
-        conditional=True,
-    )
+    strategy = normalization.ConditionalLayerNormStrategy(use_shift=True)
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x, self.c)
     output_new = norm_layer.apply(params, self.x, self.c)
 
@@ -283,10 +257,8 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_conditional_layernorm_perturbed(self):
     """Tests conditional LayerNorm when scale!=0 and shift!=0."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.LAYER_NORM,
-        conditional=True,
-    )
+    strategy = normalization.ConditionalLayerNormStrategy(use_shift=True)
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x, self.c)
     params_perturbed = _perturb_params(params=params, key=self.rng)
     output = norm_layer.apply(params_perturbed, self.x, self.c)
@@ -303,16 +275,9 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   def test_layernorm_padding_invariance(self):
-    """Tests LayerNorm padding invariance.
-
-    LayerNorm normalizes over the last (channel) dimension, so it should be
-    padding invariant, similar to RMSNorm.
-    """
-
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.LAYER_NORM,
-        conditional=False,
-    )
+    """Tests LayerNorm padding invariance."""
+    strategy = normalization.LayerNormStrategy()
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x_small)
     params_perturbed = _perturb_params(params=params, key=self.rng)
 
@@ -325,13 +290,9 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   def test_groupnorm_padding_non_invariance(self):
-    """Tests GroupNorm padding invariance."""
-
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.GROUP_NORM,
-        conditional=False,
-        num_groups=self.num_groups,
-    )
+    """Tests GroupNorm padding non-invariance."""
+    strategy = normalization.GroupNormStrategy(num_groups=self.num_groups)
+    norm_layer = strategy.build_layer(name="Norm")
     params = norm_layer.init(self.rng, self.x_small)
     params_perturbed = _perturb_params(params=params, key=self.rng)
 
@@ -348,27 +309,26 @@ class NormalizationTest(parameterized.TestCase):
   @parameterized.named_parameters(
       dict(
           testcase_name="rmsnorm",
-          normalization_method=NormalizationType.RMS_NORM,
-          num_groups=None,
+          strategy_factory=lambda: normalization.RMSNormStrategy(),
           mask_dim=1,
       ),
       dict(
           testcase_name="groupnorm",
-          normalization_method=NormalizationType.GROUP_NORM,
-          num_groups=5,
+          strategy_factory=lambda: normalization.GroupNormStrategy(
+              num_groups=5
+          ),
           mask_dim=10,
       ),
       dict(
           testcase_name="layernorm",
-          normalization_method=NormalizationType.LAYER_NORM,
-          num_groups=None,
+          strategy_factory=lambda: normalization.LayerNormStrategy(),
           mask_dim=1,
       ),
   )
-  def test_masked_padding_invariance(
-      self, normalization_method, num_groups, mask_dim
-  ):
+  def test_masked_padding_invariance(self, strategy_factory, mask_dim):
     """Tests masked padding invariance."""
+    strategy = strategy_factory()
+    norm_layer = strategy.build_layer(name="Norm")
 
     mask_shape_small = (
         self.x_shape[0],
@@ -389,14 +349,7 @@ class NormalizationTest(parameterized.TestCase):
     mask_large = jnp.zeros(mask_shape_large, dtype=jnp.bool_)
     mask_large = mask_large.at[:, :, : self.unpadded_seq_len, :].set(True)
 
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=normalization_method,
-        conditional=False,
-        num_groups=num_groups,
-    )
     params = norm_layer.init(self.rng, self.x_small, mask=mask_small)
-
-    # Perturb the params.
     params_perturbed = _perturb_params(params=params, key=self.rng)
 
     out_small = norm_layer.apply(
@@ -413,17 +366,12 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_groupnorm_broadcastable_mask_fails(self):
     """Tests GroupNorm with a broadcastable mask raises ValueError."""
+    strategy = normalization.GroupNormStrategy(num_groups=self.num_groups)
+    norm_layer = strategy.build_layer(name="Norm")
 
     mask_shape_large = (self.x_shape[0], self.x_shape[1], self.large_seq_len, 1)
-
     mask_large = jnp.zeros(mask_shape_large, dtype=jnp.bool_)
     mask_large = mask_large.at[:, :, : self.unpadded_seq_len, :].set(True)
-
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.GROUP_NORM,
-        conditional=False,
-        num_groups=self.num_groups,
-    )
 
     with self.assertRaisesRegex(
         ValueError,
@@ -435,111 +383,81 @@ class NormalizationTest(parameterized.TestCase):
 
   def test_rmsnorm_mask_equivalence(self):
     """Tests that RMSNorm produces same values for non-padding tokens with or without mask."""
+    strategy = normalization.RMSNormStrategy()
+    norm_layer = strategy.build_layer(name="Norm")
 
-    # Create a mask for those non-padding tokens.
     mask_large = jnp.zeros(
         (self.x_shape[0], self.x_shape[1], self.large_seq_len, 1),
         dtype=jnp.bool_,
     )
     mask_large = mask_large.at[:, : self.unpadded_seq_len, :].set(True)
 
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=False,
-    )
     params = norm_layer.init(self.rng, self.x_large)
-
-    # Perturb the params.
     params_perturbed = _perturb_params(params=params, key=self.rng)
 
-    # Run with and without mask.
     out_no_mask = norm_layer.apply(params_perturbed, self.x_large)
     out_masked = norm_layer.apply(
         params_perturbed, self.x_large, mask=mask_large
     )
 
-    # Check that for the valid tokens, the results are identical.
     np.testing.assert_allclose(
         out_no_mask[:, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         out_masked[:, : self.unpadded_seq_len, :],  # pyrefly: ignore[bad-index]
         atol=1e-6,
-        err_msg=(
-            "RMSNorm output for valid tokens should be invariant to the mask."
-        ),
     )
 
   def test_conditional_rmsnorm_scale_only_at_init(self):
     """Tests conditional RMSNorm with scale-only (no shift) at init."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-        use_conditional_shift=False,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=False)
+    norm_layer = strategy.build_layer(name="ConditionalNorm")
     params = norm_layer.init(self.rng, self.x, self.c)
     output = norm_layer.apply(params, self.x, self.c)
     self.assertEqual(output.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
 
-    # At init, scale=0, so output should match plain RMSNorm.
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
-    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+    output_ref = self.x * lax.rsqrt(x2 + strategy.epsilon)
     np.testing.assert_allclose(output, output_ref, rtol=1e-5, atol=1e-5)  # pyrefly: ignore[no-matching-overload]
 
   def test_conditional_rmsnorm_scale_only_perturbed(self):
     """Tests conditional RMSNorm scale-only with perturbed params."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-        use_conditional_shift=False,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=False)
+    norm_layer = strategy.build_layer(name="ConditionalNorm")
     params = norm_layer.init(self.rng, self.x, self.c)
     params_perturbed = _perturb_params(params=params, key=self.rng)
     output_perturbed = norm_layer.apply(params_perturbed, self.x, self.c)
 
-    # Compute unconditional RMSNorm for comparison.
     x2 = jnp.mean(self.x**2, -1, keepdims=True)
-    output_ref = self.x * lax.rsqrt(x2 + norm_layer.epsilon)
+    output_ref = self.x * lax.rsqrt(x2 + strategy.epsilon)
 
     self.assertEqual(output_perturbed.shape, self.x_shape)  # pyrefly: ignore[missing-attribute]
     self.assertFalse(
         np.allclose(output_perturbed, output_ref, rtol=1e-5, atol=1e-5),  # pyrefly: ignore[bad-argument-type]
-        msg=(
-            "Scale-only conditional output should differ from unconditional"
-            " output after perturbing params."
-        ),
     )
 
   def test_conditional_scale_only_projects_to_ch(self):
     """Tests that scale-only conditioning projects to ch (not ch*2)."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-        use_conditional_shift=False,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=False)
+    norm_layer = strategy.build_layer(name="ConditionalNorm")
     params = norm_layer.init(self.rng, self.x, self.c)
-    # The Dense layer should project to ch (not ch * 2).
-    dense_kernel = params["params"]["Dense_0"]["kernel"]
-    expected_shape = (self.c_shape[-1], self.x_shape[-1])  # (cond_dim, ch)
+    # Under the new _NormalizationLayer, conditioning params are nested.
+    dense_kernel = params["params"]["conditioning"]["Dense_Scale"]["kernel"]
+    expected_shape = (self.c_shape[-1], self.x_shape[-1])
     self.assertEqual(dense_kernel.shape, expected_shape)
 
   def test_conditional_scale_shift_projects_to_ch_times_2(self):
     """Tests that scale+shift conditioning projects to ch * 2."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-        use_conditional_shift=True,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=True)
+    norm_layer = strategy.build_layer(name="ConditionalNorm")
     params = norm_layer.init(self.rng, self.x, self.c)
-    dense_kernel = params["params"]["Dense_0"]["kernel"]
+    # Under the new _NormalizationLayer, conditioning params are nested.
+    dense_kernel = params["params"]["conditioning"]["Dense_ScaleShift"]["kernel"]
     expected_shape = (self.c_shape[-1], self.x_shape[-1] * 2)
     self.assertEqual(dense_kernel.shape, expected_shape)
 
   def test_conditional_rmsnorm_scale_only_padding_invariance(self):
     """Tests scale-only conditional RMSNorm padding invariance."""
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=NormalizationType.RMS_NORM,
-        conditional=True,
-        use_conditional_shift=False,
-    )
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=False)
+    norm_layer = strategy.build_layer(name="ConditionalNorm")
     c_small = jax.random.normal(self.rng, self.c_shape)
     params = norm_layer.init(self.rng, self.x_small, c_small)
     params_perturbed = _perturb_params(params=params, key=self.rng)
@@ -552,29 +470,51 @@ class NormalizationTest(parameterized.TestCase):
         atol=1e-5,
     )
 
+  def test_conditional_norm_requires_conditioning(self):
+    """Tests that conditional norm raises when c is not provided."""
+    strategy = normalization.ConditionalRMSNormStrategy(use_shift=True)
+    norm_layer = strategy.build_layer(name="Norm")
+    params = norm_layer.init(self.rng, self.x, self.c)
+    with self.assertRaisesRegex(
+        ValueError,
+        "Conditioning 'c' must be provided for a conditional norm layer.",
+    ):
+      norm_layer.apply(params, self.x)
+
   @parameterized.product(
-      normalization_method=[
-          NormalizationType.RMS_NORM,
-          NormalizationType.LAYER_NORM,
-          NormalizationType.GROUP_NORM,
+      strategy_factories=[
+          (
+              lambda: normalization.RMSNormStrategy(),
+              lambda: normalization.ConditionalRMSNormStrategy(
+                  use_shift=True
+              ),
+          ),
+          (
+              lambda: normalization.LayerNormStrategy(),
+              lambda: normalization.ConditionalLayerNormStrategy(
+                  use_shift=True,
+              ),
+          ),
+          (
+              lambda: normalization.GroupNormStrategy(num_groups=5),
+              lambda: normalization.ConditionalGroupNormStrategy(
+                  num_groups=5,
+                  use_shift=True,
+              ),
+          ),
       ],
       conditional=[False, True],
       dtype=[jnp.float32, jnp.bfloat16],
   )
-  def test_output_dtype(self, normalization_method, conditional, dtype):
+  def test_output_dtype(self, strategy_factories, conditional, dtype):
     """Tests that the output dtype matches the configured dtype."""
-    num_groups = (
-        self.num_groups
-        if (normalization_method == NormalizationType.GROUP_NORM)
-        else None
-    )
+    uncond_factory, cond_factory = strategy_factories
+    if conditional:
+      strategy = dataclasses.replace(cond_factory(), dtype=dtype)
+    else:
+      strategy = dataclasses.replace(uncond_factory(), dtype=dtype)
 
-    norm_layer = normalization.NormalizationLayer(
-        normalization_method=normalization_method,
-        conditional=conditional,
-        num_groups=num_groups,
-        dtype=dtype,
-    )
+    norm_layer = strategy.build_layer(name="Norm")
 
     x = self.x.astype(dtype)
     if conditional:

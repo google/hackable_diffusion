@@ -20,6 +20,7 @@ from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import normalization
+
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet_blocks
 import jax
@@ -73,12 +74,9 @@ class Unet(nn.Module, ConditionalBackbone):
       as in https://arxiv.org/abs/2104.09864.
     attention_rope_positions_fn: The position function of rotary positional
       embeddings.
-    normalization_type: Type of normalization to use ('group_norm' or
-      'rms_norm').
-    normalization_num_groups: Number of groups for GroupNorm, if used.
+    norm_strategy: Strategy for creating normalization layers.
     activation: Name of the activation function (e.g., 'silu', 'gelu').
-    skip_connection_method: Method for skip connections ('unnormalized_add' or
-      'normalized_add').
+    skip_connection_fn: Function for skip connections.
     output_channels: Number of output channels. If None, defaults to the number
       of input channels.
     zero_init_output: If True, the final layer weights are initialized to zero.
@@ -108,8 +106,8 @@ class Unet(nn.Module, ConditionalBackbone):
   attention_rope_positions_fn: RoPEPositionsFn
 
   # normalization
-  normalization_type: normalization.NormalizationType
-  normalization_num_groups: int | None
+  uncond_norm_strategy: normalization.UnconditionalNormStrategy
+  cond_norm_strategy: normalization.ConditionalNormStrategy
 
   # other
   activation: str
@@ -138,13 +136,9 @@ class Unet(nn.Module, ConditionalBackbone):
     self.num_scales = len(self.channels_multiplier)
     self.activation_fn = getattr(jax.nn, self.activation)
 
-    self.norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=self.normalization_type,
-        num_groups=self.normalization_num_groups,
-        dtype=self.dtype,
+    self.post_norm = self.uncond_norm_strategy.build_layer(
+        name="PostNorm"
     )
-
-    self.post_unconditional_norm = self.norm_factory.unconditional_norm()
 
   @nn.compact
   @kt.typechecked
@@ -190,7 +184,8 @@ class Unet(nn.Module, ConditionalBackbone):
     for i in range(self.num_scales):
       for j in range(self.num_residual_blocks[i]):
         x = unet_blocks.ConvResidualBlock(
-            norm_factory=self.norm_factory,
+            uncond_norm_strategy=self.uncond_norm_strategy,
+            cond_norm_strategy=self.cond_norm_strategy,
             output_channels=self.base_channels * self.channels_multiplier[i],
             activation_fn=self.activation_fn,
             skip_connection_fn=self.skip_connection_fn,
@@ -200,7 +195,7 @@ class Unet(nn.Module, ConditionalBackbone):
         )(x=x, adaptive_norm_emb=adaptive_norm_emb, is_training=is_training)
         if self.self_attention_bool[i]:
           x = unet_blocks.AttentionResidualBlock(
-              norm_factory=self.norm_factory,
+              norm_strategy=self.uncond_norm_strategy,
               cross_attention_bool=self.cross_attention_bool[i],
               use_rope=self.attention_use_rope,
               rope_positions_fn=self.attention_rope_positions_fn,
@@ -219,7 +214,8 @@ class Unet(nn.Module, ConditionalBackbone):
 
       if i != self.num_scales - 1:
         x = unet_blocks.ConvResidualBlock(
-            norm_factory=self.norm_factory,
+            uncond_norm_strategy=self.uncond_norm_strategy,
+            cond_norm_strategy=self.cond_norm_strategy,
             output_channels=self.base_channels * self.channels_multiplier[i],
             activation_fn=self.activation_fn,
             skip_connection_fn=self.skip_connection_fn,
@@ -234,7 +230,8 @@ class Unet(nn.Module, ConditionalBackbone):
     middle_ch_multiplier = self.channels_multiplier[-1]
 
     x = unet_blocks.ConvResidualBlock(
-        norm_factory=self.norm_factory,
+        uncond_norm_strategy=self.uncond_norm_strategy,
+        cond_norm_strategy=self.cond_norm_strategy,
         output_channels=self.base_channels * middle_ch_multiplier,
         activation_fn=self.activation_fn,
         skip_connection_fn=self.skip_connection_fn,
@@ -244,7 +241,7 @@ class Unet(nn.Module, ConditionalBackbone):
     )(x=x, adaptive_norm_emb=adaptive_norm_emb, is_training=is_training)
     # uses cross attention by default if cross_attention_emb is given.
     x = unet_blocks.AttentionResidualBlock(
-        norm_factory=self.norm_factory,
+        norm_strategy=self.uncond_norm_strategy,
         cross_attention_bool=True,
         use_rope=self.attention_use_rope,
         rope_positions_fn=self.attention_rope_positions_fn,
@@ -256,7 +253,8 @@ class Unet(nn.Module, ConditionalBackbone):
         name="Middle_AttentionResidualBlock",
     )(x=x, cross_attention_emb=cross_attention_emb, is_training=is_training)
     x = unet_blocks.ConvResidualBlock(
-        norm_factory=self.norm_factory,
+        uncond_norm_strategy=self.uncond_norm_strategy,
+        cond_norm_strategy=self.cond_norm_strategy,
         output_channels=self.base_channels * middle_ch_multiplier,
         activation_fn=self.activation_fn,
         skip_connection_fn=self.skip_connection_fn,
@@ -272,7 +270,8 @@ class Unet(nn.Module, ConditionalBackbone):
         x = jnp.concatenate([x, skip], axis=-1)
 
         x = unet_blocks.ConvResidualBlock(
-            norm_factory=self.norm_factory,
+            uncond_norm_strategy=self.uncond_norm_strategy,
+            cond_norm_strategy=self.cond_norm_strategy,
             output_channels=self.base_channels * self.channels_multiplier[i],
             activation_fn=self.activation_fn,
             skip_connection_fn=self.skip_connection_fn,
@@ -282,7 +281,7 @@ class Unet(nn.Module, ConditionalBackbone):
         )(x=x, adaptive_norm_emb=adaptive_norm_emb, is_training=is_training)
         if self.self_attention_bool[i]:
           x = unet_blocks.AttentionResidualBlock(
-              norm_factory=self.norm_factory,
+              norm_strategy=self.uncond_norm_strategy,
               cross_attention_bool=self.cross_attention_bool[i],
               use_rope=self.attention_use_rope,
               rope_positions_fn=self.attention_rope_positions_fn,
@@ -300,7 +299,8 @@ class Unet(nn.Module, ConditionalBackbone):
 
       if i != 0:
         x = unet_blocks.ConvResidualBlock(
-            norm_factory=self.norm_factory,
+            uncond_norm_strategy=self.uncond_norm_strategy,
+            cond_norm_strategy=self.cond_norm_strategy,
             output_channels=self.base_channels * self.channels_multiplier[i],
             activation_fn=self.activation_fn,
             skip_connection_fn=self.skip_connection_fn,
@@ -318,7 +318,7 @@ class Unet(nn.Module, ConditionalBackbone):
     )
 
     x = unet_blocks.OutputConvBlock(
-        norm_factory=self.norm_factory,
+        norm_strategy=self.uncond_norm_strategy,
         activation_fn=self.activation_fn,
         num_output_channels=num_output_channels,
         dtype=self.dtype,

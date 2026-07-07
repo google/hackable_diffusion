@@ -83,8 +83,11 @@ UNET_CONFIG = {
     'attention_normalize_qk': True,
     'attention_use_rope': False,
     'attention_rope_positions_fn': sequence_embedders.SquareRoPEPositions(),
-    'normalization_type': normalization.NormalizationType.GROUP_NORM,
-    'normalization_num_groups': 4,
+    'uncond_norm_strategy': normalization.GroupNormStrategy(num_groups=4),
+    'cond_norm_strategy': normalization.ConditionalGroupNormStrategy(
+        num_groups=4,
+        use_shift=True,
+    ),
     'skip_connection_fn': unet_blocks.UnnormalizedAddSkip(),
     'downsample_fn': unet_blocks.MaxPoolDownsample(),
     'upsample_fn': unet_blocks.ImageResizeUpsample(resize_method='nearest'),

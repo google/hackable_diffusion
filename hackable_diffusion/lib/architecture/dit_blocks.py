@@ -71,13 +71,12 @@ class PositionalEmbedding(nn.Module):
 
 
 class DiTBlock(nn.Module):
-  """A DiT transformer block with configurable adaptive normalization.
+  """A DiT transformer block with configurable conditional normalization.
 
   The conditioning behavior is fully determined by three inputs:
 
-  - `norm_factory`: A `NormalizationLayerFactory` that configures the base
-    normalization method (e.g. RMSNorm, LayerNorm) and the conditioning style
-    (scale-only vs scale+shift).
+  - `norm_strategy`: A `NormStrategy` that configures the base
+    normalization method (e.g. RMSNorm, LayerNorm).
   - `use_gates`: Whether to apply zero-init gates on residual branches.
   - `zero_init_output`: Whether to zero-init output projections in attention
     and FFN. Required to be True for identity-at-init when `use_gates=False`.
@@ -86,33 +85,24 @@ class DiTBlock(nn.Module):
 
   - **Flux** (https://github.com/black-forest-labs/flux):
 
-      norm_factory = NormalizationLayerFactory(
-          normalization_method='rms_norm',
-          use_conditional_shift=False,
-      )
+      norm_strategy = RMSNormStrategy()
       use_gates = False
       zero_init_output = True
+      # build_layer called with use_shift=False
 
   - **SD3 / MMDiT** (https://arxiv.org/abs/2403.03206):
 
-      norm_factory = NormalizationLayerFactory(
-          normalization_method='rms_norm',
-          use_scale=False,
-          use_conditional_shift=True,
-      )
+      norm_strategy = RMSNormStrategy(use_scale=False)
       use_gates = True
       zero_init_output = False
+      # build_layer called with use_shift=True
 
   - **Original DiT** (https://arxiv.org/abs/2212.09748):
 
-      norm_factory = NormalizationLayerFactory(
-          normalization_method='layer_norm',
-          use_bias=False,
-          use_scale=False,
-          use_conditional_shift=True,
-      )
+      norm_strategy = LayerNormStrategy(use_bias=False, use_scale=False)
       use_gates = True
       zero_init_output = False
+      # build_layer called with use_shift=True
 
   Identity-at-init: each residual branch computes `x + branch(x)`. At init,
   the branch output must be zero so that the block acts as identity. This is
@@ -127,7 +117,7 @@ class DiTBlock(nn.Module):
     hidden_size: The hidden size of the block.
     num_heads: The number of attention heads.
     head_dim: The dimension of each attention head.
-    norm_factory: Factory for creating conditional normalization layers.
+    norm_strategy: Strategy for creating conditional normalization layers.
     use_gates: Whether to use zero-init gates on residual branches.
     ffn_type: Feed-forward network type. 'swiglu' uses a gated SwiGLU FFN,
       'dense' uses a standard Dense layer.
@@ -147,7 +137,7 @@ class DiTBlock(nn.Module):
   """
 
   hidden_size: int
-  norm_factory: normalization.NormalizationLayerFactory
+  norm_strategy: normalization.ConditionalNormStrategy
   num_heads: int = INVALID_INT
   head_dim: int = INVALID_INT
   use_gates: bool = True
@@ -200,12 +190,12 @@ class DiTBlock(nn.Module):
         dropout_rate=self.dropout_rate,
     )
 
-    # Adaptive normalization.
-    self.conditional_norm_attn = self.norm_factory.conditional_norm(
-        norm_name='ConditionalNorm_Attention'
+    # Conditional normalization.
+    self.conditional_norm_attn = self.norm_strategy.build_layer(
+        name='ConditionalNorm_Attention'
     )
-    self.conditional_norm_mlp = self.norm_factory.conditional_norm(
-        norm_name='ConditionalNorm_MLP'
+    self.conditional_norm_mlp = self.norm_strategy.build_layer(
+        name='ConditionalNorm_MLP'
     )
 
     # Gates.
@@ -278,7 +268,7 @@ class DiTBlockFlux(DiTBlock):
   zero-init output projections in attention and FFN to ensure identity-at-init.
   """
 
-  norm_factory: normalization.NormalizationLayerFactory = dataclasses.field(
+  norm_strategy: normalization.ConditionalNormStrategy = dataclasses.field(
       init=False
   )
   use_gates: bool = dataclasses.field(init=False, default=False)
@@ -287,9 +277,8 @@ class DiTBlockFlux(DiTBlock):
   attn_use_bias: bool = dataclasses.field(init=False, default=False)
 
   def __post_init__(self):
-    self.norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=arch_typing.NormalizationType.RMS_NORM,
-        use_conditional_shift=False,
+    self.norm_strategy = normalization.ConditionalRMSNormStrategy(
+        use_shift=False
     )
     super().__post_init__()
 
@@ -301,7 +290,7 @@ class DiTBlockSD3(DiTBlock):
   adaptive conditioning and zero-init gates on residual branches.
   """
 
-  norm_factory: normalization.NormalizationLayerFactory = dataclasses.field(
+  norm_strategy: normalization.ConditionalNormStrategy = dataclasses.field(
       init=False
   )
   use_gates: bool = dataclasses.field(init=False, default=True)
@@ -310,10 +299,8 @@ class DiTBlockSD3(DiTBlock):
   attn_use_bias: bool = dataclasses.field(init=False, default=False)
 
   def __post_init__(self):
-    self.norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=arch_typing.NormalizationType.RMS_NORM,
-        use_scale=False,
-        use_conditional_shift=True,
+    self.norm_strategy = normalization.ConditionalRMSNormStrategy(
+        use_shift=True,
     )
     super().__post_init__()
 
@@ -325,7 +312,7 @@ class DiTBlockAdaLNZero(DiTBlock):
   shift adaptive conditioning and zero-init gates on residual branches.
   """
 
-  norm_factory: normalization.NormalizationLayerFactory = dataclasses.field(
+  norm_strategy: normalization.ConditionalNormStrategy = dataclasses.field(
       init=False
   )
   use_gates: bool = dataclasses.field(init=False, default=True)
@@ -334,11 +321,8 @@ class DiTBlockAdaLNZero(DiTBlock):
   attn_use_bias: bool = dataclasses.field(init=False, default=True)
 
   def __post_init__(self):
-    self.norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=arch_typing.NormalizationType.LAYER_NORM,
-        use_bias=False,
-        use_scale=False,
-        use_conditional_shift=True,
+    self.norm_strategy = normalization.ConditionalLayerNormStrategy(
+        use_shift=True,
     )
     super().__post_init__()
 

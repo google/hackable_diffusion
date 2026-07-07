@@ -15,7 +15,6 @@
 """Tests for the DiT blocks."""
 
 from hackable_diffusion.lib import test_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import dit_blocks
 from hackable_diffusion.lib.architecture import normalization
 import jax
@@ -23,9 +22,6 @@ import jax.numpy as jnp
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
-INVALID_INT = arch_typing.INVALID_INT
-NormalizationType = arch_typing.NormalizationType
 
 
 class DiTBlockTest(parameterized.TestCase):
@@ -39,44 +35,38 @@ class DiTBlockTest(parameterized.TestCase):
   @parameterized.named_parameters(
       dict(
           testcase_name='rms_norm_swiglu',
-          norm_factory=normalization.NormalizationLayerFactory(
-              normalization_method=NormalizationType.RMS_NORM,
-              use_conditional_shift=False,
+          norm_strategy=normalization.ConditionalRMSNormStrategy(
+              use_shift=False
           ),
           use_gates=False,
           ffn_type='swiglu',
       ),
       dict(
           testcase_name='rms_norm_dense',
-          norm_factory=normalization.NormalizationLayerFactory(
-              normalization_method=NormalizationType.RMS_NORM,
-              use_conditional_shift=False,
+          norm_strategy=normalization.ConditionalRMSNormStrategy(
+              use_shift=False
           ),
           use_gates=False,
           ffn_type='dense',
       ),
       dict(
           testcase_name='ln_zero_swiglu',
-          norm_factory=normalization.NormalizationLayerFactory(
-              normalization_method=NormalizationType.LAYER_NORM,
-              use_bias=False,
-              use_scale=False,
+          norm_strategy=normalization.ConditionalLayerNormStrategy(
+              use_shift=True,
           ),
           use_gates=True,
           ffn_type='swiglu',
       ),
       dict(
           testcase_name='ln_zero_dense',
-          norm_factory=normalization.NormalizationLayerFactory(
-              normalization_method=NormalizationType.LAYER_NORM,
-              use_bias=False,
-              use_scale=False,
+          norm_strategy=normalization.ConditionalLayerNormStrategy(
+              use_shift=True,
           ),
           use_gates=True,
           ffn_type='dense',
       ),
   )
-  def test_output_shape(self, norm_factory, use_gates, ffn_type):
+  def test_output_shape(self, norm_strategy, use_gates, ffn_type):
     input_shape = (self.batch, self.n, self.d)
     cond_shape = (self.batch, self.c)
     x = jnp.ones(input_shape)
@@ -84,7 +74,7 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         num_heads=4,
-        norm_factory=norm_factory,
+        norm_strategy=norm_strategy,
         use_gates=use_gates,
         ffn_type=ffn_type,
     )
@@ -95,23 +85,20 @@ class DiTBlockTest(parameterized.TestCase):
   @parameterized.named_parameters(
       dict(
           testcase_name='rms_norm',
-          norm_factory=normalization.NormalizationLayerFactory(
-              normalization_method=NormalizationType.RMS_NORM,
-              use_conditional_shift=False,
+          norm_strategy=normalization.ConditionalRMSNormStrategy(
+              use_shift=False
           ),
           use_gates=False,
       ),
       dict(
           testcase_name='ln_zero',
-          norm_factory=normalization.NormalizationLayerFactory(
-              normalization_method=NormalizationType.LAYER_NORM,
-              use_bias=False,
-              use_scale=False,
+          norm_strategy=normalization.ConditionalLayerNormStrategy(
+              use_shift=True,
           ),
           use_gates=True,
       ),
   )
-  def test_zero_init_is_identity(self, norm_factory, use_gates):
+  def test_zero_init_is_identity(self, norm_strategy, use_gates):
     """Tests identity-at-init."""
     input_shape = (self.batch, self.n, self.d)
     cond_shape = (self.batch, self.c)
@@ -120,7 +107,7 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         num_heads=4,
-        norm_factory=norm_factory,
+        norm_strategy=norm_strategy,
         use_gates=use_gates,
     )
     variables = module.init(self.key, x, cond, is_training=False)
@@ -137,9 +124,8 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         num_heads=4,
-        norm_factory=normalization.NormalizationLayerFactory(
-            normalization_method=NormalizationType.RMS_NORM,
-            use_conditional_shift=False,
+        norm_strategy=normalization.ConditionalRMSNormStrategy(
+            use_shift=False
         ),
         use_gates=False,
         ffn_type='swiglu',
@@ -150,21 +136,19 @@ class DiTBlockTest(parameterized.TestCase):
     expected_variables_shapes = {
         'params': {
             'ConditionalNorm_Attention': {
-                'Dense_0': {
-                    'kernel': (self.c, self.d),
-                    'bias': (self.d,),
-                },
-                'RMSNorm_0': {
-                    'scale': (self.d,),
+                'conditioning': {
+                    'Dense_Scale': {
+                        'kernel': (self.c, self.d),
+                        'bias': (self.d,),
+                    },
                 },
             },
             'ConditionalNorm_MLP': {
-                'Dense_0': {
-                    'kernel': (self.c, self.d),
-                    'bias': (self.d,),
-                },
-                'RMSNorm_0': {
-                    'scale': (self.d,),
+                'conditioning': {
+                    'Dense_Scale': {
+                        'kernel': (self.c, self.d),
+                        'bias': (self.d,),
+                    },
                 },
             },
             'ffn': {
@@ -196,10 +180,8 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         num_heads=4,
-        norm_factory=normalization.NormalizationLayerFactory(
-            normalization_method=NormalizationType.LAYER_NORM,
-            use_bias=False,
-            use_scale=False,
+        norm_strategy=normalization.ConditionalLayerNormStrategy(
+            use_shift=True,
         ),
         use_gates=True,
         ffn_type='dense',
@@ -218,9 +200,11 @@ class DiTBlockTest(parameterized.TestCase):
                 'bias': (self.d,),
             },
             'ConditionalNorm_Attention': {
-                'Dense_0': {
-                    'kernel': (self.c, self.d * 2),
-                    'bias': (self.d * 2,),
+                'conditioning': {
+                    'Dense_ScaleShift': {
+                        'kernel': (self.c, self.d * 2),
+                        'bias': (self.d * 2,),
+                    },
                 },
             },
             'ffn': {
@@ -232,9 +216,11 @@ class DiTBlockTest(parameterized.TestCase):
                 },
             },
             'ConditionalNorm_MLP': {
-                'Dense_0': {
-                    'kernel': (self.c, self.d * 2),
-                    'bias': (self.d * 2,),
+                'conditioning': {
+                    'Dense_ScaleShift': {
+                        'kernel': (self.c, self.d * 2),
+                        'bias': (self.d * 2,),
+                    },
                 },
             },
             'attn': {
@@ -255,9 +241,8 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         num_heads=4,
-        norm_factory=normalization.NormalizationLayerFactory(
-            normalization_method=NormalizationType.RMS_NORM,
-            use_conditional_shift=False,
+        norm_strategy=normalization.ConditionalRMSNormStrategy(
+            use_shift=False
         ),
         use_gates=False,
         zero_init_output=False,
@@ -284,9 +269,8 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         num_heads=4,
-        norm_factory=normalization.NormalizationLayerFactory(
-            normalization_method=NormalizationType.RMS_NORM,
-            use_conditional_shift=False,
+        norm_strategy=normalization.ConditionalRMSNormStrategy(
+            use_shift=False
         ),
         use_gates=False,
         ffn_type=ffn_type,

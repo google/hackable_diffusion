@@ -12,268 +12,272 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Normalization layers.
+"""Normalization strategies and layers.
 
-Implements the following methods:
+Implements explicit conditional and unconditional strategies for:
 - RMSNorm: https://arxiv.org/abs/1910.07467
 - GroupNorm: https://arxiv.org/abs/1803.08494
 - LayerNorm: https://arxiv.org/abs/1607.06450
+
+Note: scale/shift are (B, C) and x is channels-last (B, ..., C),
+so we insert singleton spatial dims to broadcast over spatial axes.
 """
 
-import einops
+import dataclasses
+from typing import Union
+
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.architecture import arch_typing
+import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
-
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
 DType = hd_typing.DType
-Float = hd_typing.Float
-Bool = hd_typing.Bool
-
-NormalizationType = arch_typing.NormalizationType
-
 
 ################################################################################
-# MARK: NormalizationLayer
+# MARK: Private Modules
 ################################################################################
 
 
-class NormalizationLayer(nn.Module):
-  """A generic normalization layer with optional conditioning.
+class _ConditioningWithTransform(nn.Module):
+  """Implements conditioning with potential scale and shift modulation."""
 
-  This layer applies a specified normalization method to the input tensor `x`.
-  If `conditional` is True, it then applies a learned scale and shift
-  transformation conditioned on an embedding `c`.
-
-  The scale and shift are computed from conditioning `c` using a dense layer.
-
-  Supported normalization methods:
-
-  - RMSNorm: https://arxiv.org/abs/1910.07467 with `reduction_axes=-1`, meaning
-  that normalization statistics are computed along the last dimension.
-
-  - GroupNorm: https://arxiv.org/abs/1803.08494 with `reduction_axes=None`,
-  meaning that normalization statistics are computed over all dimensions except
-  the batch dimension.
-
-  - LayerNorm: https://arxiv.org/abs/1607.06450 with `reduction_axes=-1`,
-  meaning
-  that normalization statistics are computed along the last dimension.
-
-  Sharp bit: for the normalization statistics to be correct in the case of
-  padded inputs, please provide a mask when calling this layer.
-
-  Attributes:
-    normalization_method: The normalization method to use.
-    conditional: Whether to apply conditional scaling and shifting.
-    num_groups: The number of groups to use for group normalization. If None,
-      group normalization cannot be used and an error will be raised.
-    epsilon: Epsilon value for numerical stability in normalization.
-    dtype: The data type of the computation.
-    use_bias: Whether to use bias in the normalization layer.
-    use_scale: Whether to use scale in the normalization layer.
-    use_conditional_shift: Whether to use conditional shift in the normalization
-      layer (only applies when `conditional` is True).
-  """
-
-  normalization_method: NormalizationType
-  conditional: bool
-  num_groups: int | None = None
-  epsilon: float = 1e-5
+  use_shift: bool = True
   dtype: DType = jnp.float32
-  use_bias: bool = True
-  use_scale: bool = True
-  use_conditional_shift: bool = True
 
-  def setup(self):
-    if (
-        self.normalization_method == NormalizationType.GROUP_NORM
-        and self.num_groups is None
-    ):
-      raise ValueError("num_groups must be specified for Group normalization.")
+  @nn.compact
+  def __call__(self, x: jax.Array, c: jax.Array) -> jax.Array:
+    ch = x.shape[-1]
+    spatial_dims = x.ndim - 2
+    broadcast_shape = (x.shape[0], *[1] * spatial_dims, ch)
+
+    if self.use_shift:
+      scale_and_shift = nn.Dense(
+          ch * 2,
+          kernel_init=nn.initializers.zeros_init(),
+          bias_init=nn.initializers.zeros_init(),
+          dtype=self.dtype,
+          name="Dense_ScaleShift",
+      )(c)
+      scale, shift = jnp.split(scale_and_shift, 2, axis=-1)
+      return (1.0 + scale.reshape(broadcast_shape)) * x + shift.reshape(
+          broadcast_shape
+      )
+    else:
+      scale = nn.Dense(
+          ch,
+          kernel_init=nn.initializers.zeros_init(),
+          bias_init=nn.initializers.zeros_init(),
+          dtype=self.dtype,
+          name="Dense_Scale",
+      )(c)
+      return (1.0 + scale.reshape(broadcast_shape)) * x
+
+
+class _SafeGroupNorm(nn.GroupNorm):
+  """GroupNorm that validates the mask shape to prevent JAX reshape errors."""
+
+  @nn.compact
+  def __call__(self, x: jax.Array, mask: jax.Array | None = None) -> jax.Array:
+    if mask is not None and mask.shape[-1] != x.shape[-1]:
+      raise ValueError(
+          "If using GroupNorm with a mask, the mask's last dimension must"
+          " match the input's channel dimension. Otherwise, one cannot"
+          " reshape the mask during the grouping operation."
+      )
+    return super().__call__(x, mask=mask)
+
+
+class _NormalizationLayer(nn.Module):
+  """Orchestrates a base normalizer and optional conditioning."""
+
+  base_norm: nn.Module
+  conditioning: nn.Module | None = None
 
   @nn.compact
   @kt.typechecked
   def __call__(
       self,
-      x: Float["batch *other channels"],  # pyrefly: ignore[not-a-type]
-      c: Float["batch cond_dim"] | None = None,
-      mask: (
-          Bool["batch *#other #channels"] | Bool["batch *#other"] | None
-      ) = None,
-  ) -> Float["batch *other channels"]:  # pyrefly: ignore[not-a-type]
-    """Run the normalization layer.
+      x: jax.Array,
+      c: jax.Array | None = None,
+      *,
+      mask: jax.Array | None = None,
+  ) -> jax.Array:
+    x = self.base_norm(x, mask=mask)
 
-    If `mask` is provided, it is expected to be broadcastable to the shape of
-    `x`. This is in accordance with Flax conventions. The mask indicates at
-    which positions the reduction features (like mean and variance in the case
-    of GroupNorm) should be computed.
-
-    Args:
-      x: The input tensor.
-      c: The conditioning tensor.
-      mask: (Optional) The mask to use for normalization. The value of the mask
-        is true when the element is valid and false when it is padding, i.e., we
-        only compute the reduction over the valid values.
-
-    Returns:
-      The normalized tensor.
-    """
-
-    x_shape = x.shape
-    ch = x_shape[-1]
-
-    if self.normalization_method == NormalizationType.RMS_NORM:
-      x = nn.RMSNorm(
-          epsilon=self.epsilon,
-          dtype=self.dtype,
-          reduction_axes=-1,  # For (B ... ch) results in (B ... ) RMS values.
-          feature_axes=-1,  # Per channel scale.
-          use_scale=self.use_scale,
-      )(x=x, mask=mask)
-    elif self.normalization_method == NormalizationType.GROUP_NORM:
-
-      # If using GroupNorm the mask data must be such that the last dimension
-      # corresponds to the channels.
-      if mask is not None and mask.shape[-1] != x_shape[-1]:
+    if self.conditioning is not None:
+      if c is None:
         raise ValueError(
-            "If using GroupNorm with a mask, the mask's last dimension must"
-            " match the input's channel dimension. Otherwise, one cannot"
-            " reshape the mask during the grouping operation."
+            "Conditioning 'c' must be provided for a conditional norm layer."
         )
-
-      x = nn.GroupNorm(
-          epsilon=self.epsilon,
-          dtype=self.dtype,
-          reduction_axes=None,  # Reduction over all non-batch axes.
-          num_groups=self.num_groups,
-          use_bias=self.use_bias,
-          use_scale=self.use_scale,
-      )(x=x, mask=mask)
-    elif self.normalization_method == NormalizationType.LAYER_NORM:
-      x = nn.LayerNorm(
-          epsilon=self.epsilon,
-          dtype=self.dtype,
-          use_bias=self.use_bias,
-          use_scale=self.use_scale,
-          reduction_axes=-1,  # For (B ... ch) results in (B ... ) values.
-          feature_axes=-1,  # Per channel scale.
-      )(x=x, mask=mask)
-    else:
-      raise ValueError(
-          "Unsupported normalization method: %s" % self.normalization_method
-      )
-
-    if self.conditional:
-      x = einops.rearrange(x, "b ... c -> b c ...")  # (B, ch, ...).
-      # Scale + shift adaptive conditioning.
-      if self.use_conditional_shift:
-        scale_and_shift = nn.Dense(
-            ch * 2,
-            kernel_init=nn.zeros_init(),
-            bias_init=nn.zeros_init(),
-            dtype=self.dtype,
-        )(c)
-        scale, shift = jnp.split(scale_and_shift, 2, axis=-1)  # (B, ch) each.
-        scale = jax_helpers.bcast_right(scale, x.ndim)
-        shift = jax_helpers.bcast_right(shift, x.ndim)
-      else:
-        # Scale-only adaptive conditioning (no shift).
-        scale = nn.Dense(
-            ch,
-            kernel_init=nn.zeros_init(),
-            bias_init=nn.zeros_init(),
-            dtype=self.dtype,
-        )(c)
-        scale = jax_helpers.bcast_right(scale, x.ndim)
-        shift = jnp.zeros_like(scale)
-      x = (1.0 + scale) * x + shift
-      x = einops.rearrange(x, "b c ... -> b ... c")
+      x = self.conditioning(x, c)
 
     return x
 
 
 ################################################################################
-# MARK: NormalizationLayerFactory
+# MARK: Normalization Strategies (Configuration Mappings)
 ################################################################################
 
 
-class NormalizationLayerFactory:
-  """A factory for creating normalization layers.
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class RMSNormStrategy:
+  """Unconditional RMS Normalization strategy."""
 
-  This class provides a convenient way to configure and create
-  `NormalizationLayer` instances. It separates the configuration of the
-  normalization from its application, allowing for easy injection of different
-  normalization strategies.
+  epsilon: float = 1e-5
+  use_scale: bool = True
+  dtype: DType = jnp.float32
 
-  It can create both conditional and unconditional normalization layers via
-  the `conditional_norm_factory` and `unconditional_norm_factory` properties.
-
-  Attributes:
-    normalization_method: The normalization method to use (e.g., 'rms_norm').
-    num_groups: The number of groups to use for group normalization. If None,
-      group normalization cannot be used and an error will be raised.
-    epsilon: A small float added to variance to avoid dividing by zero.
-    dtype: The data type of the computation.
-    use_bias: Whether to use bias in the normalization layer.
-    use_scale: Whether to use scale in the normalization layer.
-    use_conditional_shift: Whether to use conditional shift in the normalization
-      layer (only applies when `conditional` is True).
-  """
-
-  def __init__(
-      self,
-      normalization_method: NormalizationType,
-      num_groups: int | None = None,
-      epsilon: float = 1e-5,
-      dtype: DType = jnp.float32,
-      use_bias: bool = True,
-      use_scale: bool = True,
-      use_conditional_shift: bool = True,
-  ):
-    self.normalization_method = normalization_method
-    self.epsilon = epsilon
-    self.num_groups = num_groups
-    self.dtype = dtype
-    self.use_bias = use_bias
-    self.use_scale = use_scale
-    self.use_conditional_shift = use_conditional_shift
-
-  def unconditional_norm(
-      self, norm_name: str = "UnconditionalNorm"
-  ) -> NormalizationLayer:
-    """Returns a factory for creating unconditional normalization layers."""
-    return NormalizationLayer(
-        normalization_method=self.normalization_method,
-        conditional=False,
-        num_groups=self.num_groups,
-        epsilon=self.epsilon,
-        name=norm_name,
-        dtype=self.dtype,
-        use_bias=self.use_bias,
-        use_scale=self.use_scale,
-        use_conditional_shift=self.use_conditional_shift,
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    return _NormalizationLayer(
+        base_norm=nn.RMSNorm(
+            epsilon=self.epsilon,
+            use_scale=self.use_scale,
+            dtype=self.dtype,
+        ),
+        conditioning=None,
+        name=name or "RMSNorm",
     )
 
-  def conditional_norm(
-      self, norm_name: str = "ConditionalNorm"
-  ) -> NormalizationLayer:
-    """Returns a conditional normalization layer."""
-    return NormalizationLayer(
-        normalization_method=self.normalization_method,
-        conditional=True,
-        num_groups=self.num_groups,
-        epsilon=self.epsilon,
-        name=norm_name,
-        dtype=self.dtype,
-        use_bias=self.use_bias,
-        use_scale=self.use_scale,
-        use_conditional_shift=self.use_conditional_shift,
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ConditionalRMSNormStrategy:
+  """Conditional RMS Normalization strategy."""
+
+  epsilon: float = 1e-5
+  use_shift: bool = True
+  dtype: DType = jnp.float32
+
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    return _NormalizationLayer(
+        base_norm=nn.RMSNorm(
+            epsilon=self.epsilon,
+            use_scale=False,
+            dtype=self.dtype,
+        ),
+        conditioning=_ConditioningWithTransform(
+            use_shift=self.use_shift, dtype=self.dtype
+        ),
+        name=name or "ConditionalRMSNorm",
     )
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class LayerNormStrategy:
+  """Unconditional Layer Normalization strategy."""
+
+  epsilon: float = 1e-5
+  use_bias: bool = True
+  use_scale: bool = True
+  dtype: DType = jnp.float32
+
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    return _NormalizationLayer(
+        base_norm=nn.LayerNorm(
+            epsilon=self.epsilon,
+            use_bias=self.use_bias,
+            use_scale=self.use_scale,
+            reduction_axes=-1,
+            feature_axes=-1,
+            dtype=self.dtype,
+        ),
+        conditioning=None,
+        name=name or "LayerNorm",
+    )
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ConditionalLayerNormStrategy:
+  """Conditional Layer Normalization strategy."""
+
+  epsilon: float = 1e-5
+  use_shift: bool = True
+  dtype: DType = jnp.float32
+
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    return _NormalizationLayer(
+        base_norm=nn.LayerNorm(
+            epsilon=self.epsilon,
+            use_bias=False,
+            use_scale=False,
+            reduction_axes=-1,
+            feature_axes=-1,
+            dtype=self.dtype,
+        ),
+        conditioning=_ConditioningWithTransform(
+            use_shift=self.use_shift, dtype=self.dtype
+        ),
+        name=name or "ConditionalLayerNorm",
+    )
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class GroupNormStrategy:
+  """Unconditional Group Normalization strategy."""
+
+  num_groups: int
+  epsilon: float = 1e-5
+  use_bias: bool = True
+  use_scale: bool = True
+  dtype: DType = jnp.float32
+
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    return _NormalizationLayer(
+        base_norm=_SafeGroupNorm(
+            num_groups=self.num_groups,
+            epsilon=self.epsilon,
+            use_bias=self.use_bias,
+            use_scale=self.use_scale,
+            reduction_axes=None,
+            dtype=self.dtype,
+        ),
+        conditioning=None,
+        name=name or "GroupNorm",
+    )
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ConditionalGroupNormStrategy:
+  """Conditional Group Normalization strategy."""
+
+  num_groups: int
+  epsilon: float = 1e-5
+  use_shift: bool = True
+  dtype: DType = jnp.float32
+
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    return _NormalizationLayer(
+        base_norm=_SafeGroupNorm(
+            num_groups=self.num_groups,
+            epsilon=self.epsilon,
+            use_bias=False,
+            use_scale=False,
+            reduction_axes=None,
+            dtype=self.dtype,
+        ),
+        conditioning=_ConditioningWithTransform(
+            use_shift=self.use_shift, dtype=self.dtype
+        ),
+        name=name or "ConditionalGroupNorm",
+    )
+
+
+################################################################################
+# MARK: Strategy Type Unions
+################################################################################
+
+UnconditionalNormStrategy = Union[
+    RMSNormStrategy, LayerNormStrategy, GroupNormStrategy
+]
+
+ConditionalNormStrategy = Union[
+    ConditionalRMSNormStrategy,
+    ConditionalLayerNormStrategy,
+    ConditionalGroupNormStrategy,
+]
+
+NormStrategy = Union[UnconditionalNormStrategy, ConditionalNormStrategy]

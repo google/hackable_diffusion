@@ -16,7 +16,6 @@
 
 # pylint: disable=g-importing-member
 from hackable_diffusion.lib.architecture.arch_typing import ConditionalBackbone
-from hackable_diffusion.lib.architecture.arch_typing import NormalizationType
 from hackable_diffusion.lib.architecture.attention import MultiHeadAttention
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseConditioningEncoder
 from hackable_diffusion.lib.architecture.conditioning_encoder import BaseEmbedder
@@ -46,8 +45,15 @@ from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockSD3
 from hackable_diffusion.lib.architecture.dit_blocks import Patchify
 from hackable_diffusion.lib.architecture.mlp import ConditionalMLP
 from hackable_diffusion.lib.architecture.mlp_blocks import MLP
-from hackable_diffusion.lib.architecture.normalization import NormalizationLayer
-from hackable_diffusion.lib.architecture.normalization import NormalizationLayerFactory
+from hackable_diffusion.lib.architecture.normalization import ConditionalGroupNormStrategy
+from hackable_diffusion.lib.architecture.normalization import ConditionalLayerNormStrategy
+from hackable_diffusion.lib.architecture.normalization import ConditionalNormStrategy
+from hackable_diffusion.lib.architecture.normalization import ConditionalRMSNormStrategy
+from hackable_diffusion.lib.architecture.normalization import GroupNormStrategy
+from hackable_diffusion.lib.architecture.normalization import LayerNormStrategy
+from hackable_diffusion.lib.architecture.normalization import NormStrategy
+from hackable_diffusion.lib.architecture.normalization import RMSNormStrategy
+from hackable_diffusion.lib.architecture.normalization import UnconditionalNormStrategy
 from hackable_diffusion.lib.architecture.riemannian import RiemannianConditionalBackbone
 from hackable_diffusion.lib.architecture.sequence_embedders import LinearRoPEPositions
 from hackable_diffusion.lib.architecture.sequence_embedders import RandomFourierSequenceEmbedding

@@ -37,7 +37,7 @@ Float = hd_typing.Float
 ActivationFn = arch_typing.ActivationFn
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-NormalizationLayerFactory = normalization.NormalizationLayerFactory
+
 
 BaseInput = Float["batch height width input_channels"]
 BaseOutput = Float["batch height width output_channels"]
@@ -62,9 +62,11 @@ Conv1x1 = functools.partial(nn.Conv, kernel_size=(1, 1), padding="SAME")
 ################################################################################
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class UnnormalizedAddSkip:
   """Unnormalized addition skip connection (x + skip)."""
 
+  @kt.typechecked
   def __call__(
       self,
       x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
@@ -73,9 +75,11 @@ class UnnormalizedAddSkip:
     return x + skip
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class NormalizedAddSkip:
   """Normalized addition skip connection ((x + skip) / sqrt(2))."""
 
+  @kt.typechecked
   def __call__(
       self,
       x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
@@ -84,45 +88,39 @@ class NormalizedAddSkip:
     return (x + skip) / jnp.sqrt(2)
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class MaxPoolDownsample:
   """Max pooling downsample function."""
 
-  def __init__(
-      self,
-      window_shape: tuple[int, int] = (2, 2),
-      strides: tuple[int, int] = (2, 2),
-  ):
-    self.window_shape = window_shape
-    self.strides = strides
+  window_shape: tuple[int, int] = (2, 2)
+  strides: tuple[int, int] = (2, 2)
 
+  @kt.typechecked
   def __call__(
       self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
   ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
     return nn.max_pool(x, window_shape=self.window_shape, strides=self.strides)
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class AvgPoolDownsample:
   """Average pooling downsample function."""
 
-  def __init__(
-      self,
-      window_shape: tuple[int, int] = (2, 2),
-      strides: tuple[int, int] = (2, 2),
-  ):
-    self.window_shape = window_shape
-    self.strides = strides
+  window_shape: tuple[int, int] = (2, 2)
+  strides: tuple[int, int] = (2, 2)
 
+  @kt.typechecked
   def __call__(
       self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
   ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
     return nn.avg_pool(x, window_shape=self.window_shape, strides=self.strides)
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class ImageResizeUpsample:
   """Image resizing upsample function."""
 
-  def __init__(self, resize_method: str = "nearest"):
-    self.resize_method = resize_method
+  resize_method: str
 
   def __call__(
       self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
@@ -132,6 +130,7 @@ class ImageResizeUpsample:
         (x.shape[0], 2 * x.shape[1], 2 * x.shape[2], x.shape[3]),
         method=self.resize_method,
     )
+
 
 SkipConnectionFn = Union[UnnormalizedAddSkip, NormalizedAddSkip]
 DownsampleFn = Union[MaxPoolDownsample, AvgPoolDownsample]
@@ -175,20 +174,20 @@ class OutputConvBlock(nn.Module):
 
   Attributes:
     num_output_channels: The number of output channels.
-    norm_factory: Factory for creating normalization layers.
+    norm_strategy: Strategy for building normalization layers.
     activation_fn: The activation function.
     zero_init: Whether to initialize the output convolution with zeros.
     dtype: The data type of the computation.
   """
 
   num_output_channels: int
-  norm_factory: NormalizationLayerFactory
+  norm_strategy: normalization.NormStrategy
   activation_fn: ActivationFn
   zero_init: bool
   dtype: DType = jnp.float32
 
   def setup(self):
-    self.unconditional_norm = self.norm_factory.unconditional_norm()
+    self.norm = self.norm_strategy.build_layer(name="Norm")
 
     if self.zero_init:
       self.output_conv = ZerosConv3x3
@@ -200,7 +199,7 @@ class OutputConvBlock(nn.Module):
   def __call__(self, x: BaseInput) -> BaseOutput:  # pyrefly: ignore[not-a-type]
     """Projects the output tensor."""
 
-    x = self.unconditional_norm(x)
+    x = self.norm(x)
     x = self.activation_fn(x)
 
     x = self.output_conv(
@@ -219,7 +218,7 @@ class ConvResidualBlock(nn.Module):
   """Convolutional residual block with optional resampling.
 
   Attributes:
-    norm_factory: Factory for creating normalization layers.
+    norm_strategy: Strategy for building normalization layers.
     output_channels: The number of output channels.
     activation_fn: The activation function.
     skip_connection_fn: The skip connection function.
@@ -230,7 +229,8 @@ class ConvResidualBlock(nn.Module):
     dtype: The data type of the computation.
   """
 
-  norm_factory: NormalizationLayerFactory
+  uncond_norm_strategy: normalization.NormStrategy
+  cond_norm_strategy: normalization.ConditionalNormStrategy
   output_channels: int
   activation_fn: ActivationFn
   skip_connection_fn: SkipConnectionFn
@@ -239,8 +239,10 @@ class ConvResidualBlock(nn.Module):
   dtype: DType = jnp.float32
 
   def setup(self):
-    self.unconditional_norm = self.norm_factory.unconditional_norm()
-    self.conditional_norm = self.norm_factory.conditional_norm()
+    self.norm = self.uncond_norm_strategy.build_layer(name="Norm")
+    self.adaptive_norm = self.cond_norm_strategy.build_layer(
+        name="AdaptiveNorm"
+    )
 
     self.init_input = kernel_init
     self.init_output = nn.initializers.zeros_init()
@@ -255,7 +257,7 @@ class ConvResidualBlock(nn.Module):
   ) -> BaseOutput | UpsampleOutput | DownsampleOutput:
     input_channels = x.shape[-1]
     skip = x
-    x = self.unconditional_norm(x)
+    x = self.norm(x)
     x = self.activation_fn(x)
 
     if self.resample_fn:
@@ -268,7 +270,7 @@ class ConvResidualBlock(nn.Module):
         dtype=self.dtype,
     )(x)
 
-    x = self.conditional_norm(x, self.activation_fn(adaptive_norm_emb))
+    x = self.adaptive_norm(x, self.activation_fn(adaptive_norm_emb))
     x = self.activation_fn(x)
     x = nn.Dropout(rate=self.dropout_rate, deterministic=not is_training)(x)
     x = Conv3x3(
@@ -298,7 +300,7 @@ class AttentionResidualBlock(nn.Module):
 
 
   Attributes:
-    norm_factory: Factory for creating normalization layers.
+    norm_strategy: Strategy for building normalization layers.
     cross_attention_bool: If True, uses cross-attention with
       `cross_attention_emb` as key/value source if `cross_attention_emb` is not
       None. If False, uses self-attention.
@@ -314,7 +316,7 @@ class AttentionResidualBlock(nn.Module):
     dtype: The data type of the computation.
   """
 
-  norm_factory: NormalizationLayerFactory
+  norm_strategy: normalization.NormStrategy
   cross_attention_bool: bool
   use_rope: bool
   rope_positions_fn: RoPEPositionsFn
@@ -325,7 +327,7 @@ class AttentionResidualBlock(nn.Module):
   dtype: DType = jnp.float32
 
   def setup(self):
-    self.unconditional_norm = self.norm_factory.unconditional_norm()
+    self.norm = self.norm_strategy.build_layer(name="Norm")
 
   @nn.compact
   @kt.typechecked
@@ -338,7 +340,7 @@ class AttentionResidualBlock(nn.Module):
   ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
     skip = x
     b, h, w, channels = x.shape
-    x = self.unconditional_norm(x)
+    x = self.norm(x)
     x = x.reshape(b, h * w, channels)
     x = attention.MultiHeadAttention(
         num_heads=self.num_heads,

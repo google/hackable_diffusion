@@ -15,7 +15,6 @@
 """Tests for the DiT backbone."""
 
 from hackable_diffusion.lib import test_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import dit
 from hackable_diffusion.lib.architecture import dit_blocks
 from hackable_diffusion.lib.architecture import normalization
@@ -24,12 +23,6 @@ import jax.numpy as jnp
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
-################################################################################
-# MARK: Type Aliases
-################################################################################
-
-NormalizationType = arch_typing.NormalizationType
 
 
 ################################################################################
@@ -61,9 +54,8 @@ class DiTTest(parameterized.TestCase):
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
             num_heads=4,
-            norm_factory=normalization.NormalizationLayerFactory(
-                normalization_method=NormalizationType.RMS_NORM,
-                use_conditional_shift=False,
+            norm_strategy=normalization.ConditionalRMSNormStrategy(
+                use_shift=False
             ),
             use_gates=False,
         ),
@@ -102,10 +94,8 @@ class DiTTest(parameterized.TestCase):
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
             num_heads=4,
-            norm_factory=normalization.NormalizationLayerFactory(
-                normalization_method=NormalizationType.LAYER_NORM,
-                use_bias=False,
-                use_scale=False,
+            norm_strategy=normalization.ConditionalLayerNormStrategy(
+                use_shift=True,
             ),
             use_gates=True,
             ffn_type='dense',
@@ -145,9 +135,11 @@ class DiTTest(parameterized.TestCase):
             'bias': (self.embedding_dim,),
         },
         'ConditionalNorm_Attention': {
-            'Dense_0': {
-                'kernel': (self.cond_dim, self.embedding_dim * 2),
-                'bias': (self.embedding_dim * 2,),
+            'conditioning': {
+                'Dense_ScaleShift': {
+                    'kernel': (self.cond_dim, self.embedding_dim * 2),
+                    'bias': (self.embedding_dim * 2,),
+                },
             },
         },
         'ffn': {
@@ -159,9 +151,11 @@ class DiTTest(parameterized.TestCase):
             },
         },
         'ConditionalNorm_MLP': {
-            'Dense_0': {
-                'kernel': (self.cond_dim, self.embedding_dim * 2),
-                'bias': (self.embedding_dim * 2,),
+            'conditioning': {
+                'Dense_ScaleShift': {
+                    'kernel': (self.cond_dim, self.embedding_dim * 2),
+                    'bias': (self.embedding_dim * 2,),
+                },
             },
         },
         'attn': {
@@ -206,9 +200,11 @@ class DiTTest(parameterized.TestCase):
             'Block_1': block_params,
             'Block_2': block_params,
             'ConditionalNorm': {
-                'Dense_0': {
-                    'kernel': (self.cond_dim, self.embedding_dim * 2),
-                    'bias': (self.embedding_dim * 2,),
+                'conditioning': {
+                    'Dense_ScaleShift': {
+                        'kernel': (self.cond_dim, self.embedding_dim * 2),
+                        'bias': (self.embedding_dim * 2,),
+                    },
                 },
             },
             'decoder': {
@@ -237,9 +233,8 @@ class DiTTest(parameterized.TestCase):
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
             num_heads=4,
-            norm_factory=normalization.NormalizationLayerFactory(
-                normalization_method=NormalizationType.RMS_NORM,
-                use_conditional_shift=False,
+            norm_strategy=normalization.ConditionalRMSNormStrategy(
+                use_shift=False
             ),
             use_gates=False,
         ),
@@ -267,9 +262,8 @@ class DiTTest(parameterized.TestCase):
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
             num_heads=4,
-            norm_factory=normalization.NormalizationLayerFactory(
-                normalization_method=NormalizationType.RMS_NORM,
-                use_conditional_shift=False,
+            norm_strategy=normalization.ConditionalRMSNormStrategy(
+                use_shift=False
             ),
             use_gates=False,
         ),

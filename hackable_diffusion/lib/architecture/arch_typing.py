@@ -18,7 +18,6 @@ Please refer to individual modules for more detailed documentation and
 definitions of the components.
 """
 
-import enum
 from typing import Any, Callable, Protocol
 from hackable_diffusion.lib import hd_typing
 import jax
@@ -41,12 +40,6 @@ INVALID_INT = -1
 ################################################################################
 # MARK: Enums
 ################################################################################
-
-
-class NormalizationType(enum.StrEnum):
-  RMS_NORM = "rms_norm"
-  GROUP_NORM = "group_norm"
-  LAYER_NORM = "layer_norm"
 
 
 ################################################################################
@@ -83,4 +76,3 @@ class ConditionalBackbone(Protocol):
       is_training: bool,
   ) -> DataTree:  # pyrefly: ignore[not-a-type]
     ...
-

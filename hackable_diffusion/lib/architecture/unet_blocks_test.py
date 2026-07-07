@@ -31,9 +31,29 @@ from absl.testing import parameterized
 ################################################################################
 
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-NormalizationType = arch_typing.NormalizationType
 ResampleType = Literal['down', 'up'] | None
 INVALID_INT = arch_typing.INVALID_INT
+
+
+def _get_norm_strategy(
+    normalization_type: str,
+) -> tuple[normalization.NormStrategy, normalization.ConditionalNormStrategy]:
+  if normalization_type == 'default_group_norm':
+    uncond = normalization.GroupNormStrategy(num_groups=4)
+    cond = normalization.ConditionalGroupNormStrategy(
+        num_groups=4, use_shift=True
+    )
+  elif normalization_type == 'default_rms_norm':
+    uncond = normalization.RMSNormStrategy()
+    cond = normalization.ConditionalRMSNormStrategy(use_shift=True)
+  elif normalization_type == 'default_layer_norm':
+    uncond = normalization.LayerNormStrategy()
+    cond = normalization.ConditionalLayerNormStrategy(use_shift=True)
+  else:
+    raise ValueError(f'Unknown normalization type {normalization_type}')
+
+  return uncond, cond
+
 
 ################################################################################
 # MARK: Tests
@@ -67,24 +87,20 @@ class OutputBlockTest(parameterized.TestCase):
     self.key = jax.random.PRNGKey(0)
 
   @parameterized.named_parameters(
-      ('group_norm_zero_init', 'group_norm', True),
-      ('rms_norm_zero_init', 'rms_norm', True),
-      ('group_norm', 'group_norm', False),
-      ('rms_norm', 'rms_norm', False),
+      ('group_norm_zero_init', 'default_group_norm', True),
+      ('rms_norm_zero_init', 'default_rms_norm', True),
+      ('group_norm', 'default_group_norm', False),
+      ('rms_norm', 'default_rms_norm', False),
   )
   def test_output_block_output_shape(
-      self, normalization_type: NormalizationType, zero_init: bool
+      self, normalization_type: str, zero_init: bool
   ):
     """Tests OutputBlock output shape."""
     num_output_channels = 3
-    norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=normalization_type,
-        num_groups=4 if normalization_type == 'group_norm' else None,
-        dtype=jnp.float32,
-    )
+    uncond_norm_strategy, _ = _get_norm_strategy(normalization_type)
     block = unet_blocks.OutputConvBlock(
         num_output_channels=num_output_channels,
-        norm_factory=norm_factory,
+        norm_strategy=uncond_norm_strategy,
         activation_fn=jax.nn.silu,
         zero_init=zero_init,
         dtype=jnp.float32,
@@ -106,19 +122,18 @@ class ConvResidualBlockTest(parameterized.TestCase):
   def _get_conv_residual_block(
       self,
       resample_type: ResampleType,
-      normalization_type: NormalizationType,
+      normalization_type: str,
   ) -> unet_blocks.ConvResidualBlock:
-    """Returns a ConvResidualBlock for testing."""
-    norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=normalization_type,
-        num_groups=4 if normalization_type == 'group_norm' else None,
-        dtype=jnp.float32,
+    uncond_norm_strategy, cond_norm_strategy = _get_norm_strategy(
+        normalization_type
     )
+
     downsample_fn = unet_blocks.AvgPoolDownsample()
     upsample_fn = unet_blocks.ImageResizeUpsample(resize_method='nearest')
 
     return unet_blocks.ConvResidualBlock(
-        norm_factory=norm_factory,
+        uncond_norm_strategy=uncond_norm_strategy,
+        cond_norm_strategy=cond_norm_strategy,
         output_channels=32,
         activation_fn=jax.nn.silu,
         skip_connection_fn=unet_blocks.UnnormalizedAddSkip(),
@@ -132,17 +147,17 @@ class ConvResidualBlockTest(parameterized.TestCase):
     )
 
   @parameterized.named_parameters(
-      ('downsample_group_norm', 'down', 'group_norm', (2, 8, 8, 32)),
-      ('upsample_group_norm', 'up', 'group_norm', (2, 32, 32, 32)),
-      ('same_group_norm', None, 'group_norm', (2, 16, 16, 32)),
-      ('downsample_rms_norm', 'down', 'rms_norm', (2, 8, 8, 32)),
-      ('upsample_rms_norm', 'up', 'rms_norm', (2, 32, 32, 32)),
-      ('same_rms_norm', None, 'rms_norm', (2, 16, 16, 32)),
+      ('downsample_group_norm', 'down', 'default_group_norm', (2, 8, 8, 32)),
+      ('upsample_group_norm', 'up', 'default_group_norm', (2, 32, 32, 32)),
+      ('same_group_norm', None, 'default_group_norm', (2, 16, 16, 32)),
+      ('downsample_rms_norm', 'down', 'default_rms_norm', (2, 8, 8, 32)),
+      ('upsample_rms_norm', 'up', 'default_rms_norm', (2, 32, 32, 32)),
+      ('same_rms_norm', None, 'default_rms_norm', (2, 16, 16, 32)),
   )
   def test_conv_residual_block_output_shape(
       self,
       resample_type: ResampleType,
-      normalization_type: NormalizationType,
+      normalization_type: str,
       expected_shape: Tuple[int, ...],
   ):
     """Tests ConvResidualBlock output shape."""
@@ -179,16 +194,12 @@ class AttentionResidualBlockTest(parameterized.TestCase):
   def _get_attention_residual_block(
       self,
       cross_attention_bool: bool,
-      normalization_type: NormalizationType,
+      normalization_type: str,
   ) -> unet_blocks.AttentionResidualBlock:
     """Returns an AttentionResidualBlock for testing."""
-    norm_factory = normalization.NormalizationLayerFactory(
-        normalization_method=normalization_type,
-        num_groups=4 if normalization_type == 'group_norm' else None,
-        dtype=jnp.float32,
-    )
+    uncond_norm_strategy, _ = _get_norm_strategy(normalization_type)
     return unet_blocks.AttentionResidualBlock(
-        norm_factory=norm_factory,
+        norm_strategy=uncond_norm_strategy,
         skip_connection_fn=unet_blocks.UnnormalizedAddSkip(),
         cross_attention_bool=cross_attention_bool,
         dtype=jnp.float32,
@@ -200,15 +211,15 @@ class AttentionResidualBlockTest(parameterized.TestCase):
     )
 
   @parameterized.named_parameters(
-      ('self_attn_group_norm', False, 'group_norm'),
-      ('cross_attn_group_norm', True, 'group_norm'),
-      ('self_attn_rms_norm', False, 'rms_norm'),
-      ('cross_attn_rms_norm', True, 'rms_norm'),
+      ('self_attn_group_norm', False, 'default_group_norm'),
+      ('cross_attn_group_norm', True, 'default_group_norm'),
+      ('self_attn_rms_norm', False, 'default_rms_norm'),
+      ('cross_attn_rms_norm', True, 'default_rms_norm'),
   )
   def test_attention_residual_block_output_shape(
       self,
       cross_attention_bool: bool,
-      normalization_type: NormalizationType,
+      normalization_type: str,
   ):
     """Tests AttentionResidualBlock output shape."""
     block = self._get_attention_residual_block(

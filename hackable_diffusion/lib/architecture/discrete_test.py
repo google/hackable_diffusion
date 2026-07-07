@@ -19,6 +19,7 @@ import itertools
 from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import discrete
 from hackable_diffusion.lib.architecture import mlp
+from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.architecture import unet_blocks
@@ -87,8 +88,10 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         attention_normalize_qk=False,
         attention_use_rope=False,
         attention_rope_positions_fn=sequence_embedders.SquareRoPEPositions(),
-        normalization_type=arch_typing.NormalizationType.RMS_NORM,
-        normalization_num_groups=0,
+        uncond_norm_strategy=normalization.RMSNormStrategy(),
+        cond_norm_strategy=normalization.ConditionalRMSNormStrategy(
+            use_shift=True
+        ),
         activation='relu',
         skip_connection_fn=unet_blocks.UnnormalizedAddSkip(),
     )

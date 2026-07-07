@@ -93,8 +93,10 @@ def get_config():
       attention_rope_positions_fn=hd.architecture.SquareRoPEPositions(),
       attention_num_heads=-1,
       attention_head_dim=64,
-      normalization_type=hd.architecture.NormalizationType.RMS_NORM,
-      normalization_num_groups=None,
+      uncond_norm_strategy=hd.architecture.RMSNormStrategy(),
+      cond_norm_strategy=hd.architecture.ConditionalRMSNormStrategy(
+          use_shift=True
+      ),
       activation="gelu",
       skip_connection_fn=hd.architecture.UnnormalizedAddSkip(),
   )
