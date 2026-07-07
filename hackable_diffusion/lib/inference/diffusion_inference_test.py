@@ -17,7 +17,7 @@
 from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import test_helpers
-from hackable_diffusion.lib.architecture import arch_typing
+from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -33,7 +33,6 @@ import jax.numpy as jnp
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
 
 ################################################################################
 # MARK: Type Aliases
@@ -78,8 +77,7 @@ UNET_CONFIG = {
     'bottleneck_dropout_rate': 0.0,
     'num_residual_blocks': (1, 1),
     'zero_init_output': False,
-    'attention_num_heads': 2,
-    'attention_head_dim': arch_typing.INVALID_INT,
+    'attention_heads_spec': attention.AttentionHeadsSpec(num_heads=2),
     'attention_normalize_qk': True,
     'attention_use_rope': False,
     'attention_rope_positions_fn': sequence_embedders.SquareRoPEPositions(),

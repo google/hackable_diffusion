@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the attention module."""
+"""Tests for the attention strategies and layers."""
 
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import test_helpers
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
@@ -32,11 +31,9 @@ from absl.testing import parameterized
 ################################################################################
 
 Float = hd_typing.Float
-
 LinearRoPEPositions = sequence_embedders.LinearRoPEPositions
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
-INVALID_INT = arch_typing.INVALID_INT
 
 ################################################################################
 # MARK: Attention Tests
@@ -59,100 +56,61 @@ class AttentionTest(parameterized.TestCase):
     self.x = jnp.ones((self.batch_size, self.seq_len_q, self.dim))
     self.c = jnp.ones((self.batch_size, self.seq_len_kv, self.dim))
 
-  @parameterized.named_parameters(
-      ("head_dim_not_specified", INVALID_INT, 16),
-      ("num_heads_not_specified", 32, INVALID_INT),
-  )
-  def test_attention_dims_factory(self, head_dim: int, num_heads: int):
-    """Tests the factory when head_dim or num_heads is specified.
+  # MARK: AttentionHeadsSpec tests
 
-    More precisely, we test that the factory returns the correct head dimension
-    and number of heads when head_dim or num_heads is specified.
+  def test_heads_spec_infer_num_heads(self):
+    heads_spec = attention.AttentionHeadsSpec(head_dim=16)
+    head_dim, num_heads = heads_spec.resolve(self.dim)
+    self.assertEqual(head_dim, 16)
+    self.assertEqual(num_heads, 8)
 
-    Args:
-      head_dim: The head dimension.
-      num_heads: The number of heads.
-    """
-    if head_dim == INVALID_INT:
-      head_dim_predicted = self.dim // num_heads
-    else:
-      head_dim_predicted = head_dim
-    if num_heads == INVALID_INT:
-      num_heads_predicted = self.dim // head_dim
-    else:
-      num_heads_predicted = num_heads
+  def test_heads_spec_infer_head_dim(self):
+    heads_spec = attention.AttentionHeadsSpec(num_heads=32)
+    head_dim, num_heads = heads_spec.resolve(self.dim)
+    self.assertEqual(head_dim, 4)
+    self.assertEqual(num_heads, 32)
 
-    factory = attention.attention_dims_factory(
-        head_dim=head_dim, num_heads=num_heads
-    )
-    head_dim, num_heads = factory(self.x)
-    self.assertEqual(head_dim, head_dim_predicted)
-    self.assertEqual(num_heads, num_heads_predicted)
-
-  @parameterized.named_parameters(
-      ("zero_num_heads", 0, INVALID_INT),
-      ("negative_num_heads", -4, INVALID_INT),
-      ("zero_head_dim", INVALID_INT, 0),
-      ("negative_head_dim", INVALID_INT, -4),
-  )
-  def test_attention_dims_factory_raises_error_on_non_positive_args(
-      self, num_heads: int, head_dim: int
-  ):
+  def test_heads_spec_no_args_raises(self):
     with self.assertRaisesRegex(
-        ValueError,
-        "(Head dimension|Number of heads) must be positive or INVALID_INT.",
+        ValueError, 'At least num_heads or head_dim must be provided.'
     ):
-      attention.attention_dims_factory(head_dim=head_dim, num_heads=num_heads)
+      attention.AttentionHeadsSpec()
 
-  def test_attention_dims_factory_raises_error_on_invalid_arguments(self):
-    """Tests that the factory raises errors for invalid arguments.
+  def test_heads_spec_both_specified(self):
+    heads_spec = attention.AttentionHeadsSpec(num_heads=4, head_dim=32)
+    head_dim, num_heads = heads_spec.resolve(128)
+    self.assertEqual(head_dim, 32)
+    self.assertEqual(num_heads, 4)
 
-    More precisely, we test that the factory raises an error when head_dim AND
-    num_heads are NOT specified.
-    """
+  def test_heads_spec_both_specified_mismatch_raises(self):
+    heads_spec = attention.AttentionHeadsSpec(num_heads=4, head_dim=32)
     with self.assertRaisesRegex(
-        ValueError, "Either head_dim or num_heads must be specified."
+        ValueError, 'Expected embedding_dim=128.*got 256.'
     ):
-      attention.attention_dims_factory(
-          head_dim=INVALID_INT, num_heads=INVALID_INT
-      )
+      heads_spec.resolve(256)
 
-  def test_attention_dims_factory_raises_error_on_both_valid_arguments(self):
-    """Tests that the factory raises errors for invalid arguments.
-
-    More precisely, we test that the factory raises an error when both head_dim
-    AND num_heads are specified.
-    """
+  def test_heads_spec_non_divisible_head_dim_raises(self):
+    heads_spec = attention.AttentionHeadsSpec(head_dim=17)
     with self.assertRaisesRegex(
-        ValueError, "Either head_dim or num_heads must be INVALID_INT."
+        ValueError, 'Embedding dim 128 is not divisible by head_dim 17.'
     ):
-      attention.attention_dims_factory(
-          head_dim=self.head_dim, num_heads=self.num_heads
-      )
+      heads_spec.resolve(self.dim)
 
-  @parameterized.named_parameters(
-      ("num_heads_does_not_divide_embedding_dim", INVALID_INT, 17),
-      ("head_dim_does_not_divide_embedding_dim", 17, INVALID_INT),
-  )
-  def test_attention_dims_factory_raises_error_on_non_divisible_embedding_dim(
-      self,
-      head_dim: int,
-      num_heads: int,
-  ):
-    """Tests that the factory raises errors for non-divisible embedding dim."""
+  def test_heads_spec_non_divisible_num_heads_raises(self):
+    heads_spec = attention.AttentionHeadsSpec(num_heads=17)
     with self.assertRaisesRegex(
-        ValueError, ".* is not divisible by (head_dim|num_heads) .*"
+        ValueError, 'Embedding dim 128 is not divisible by num_heads 17.'
     ):
-      attention.attention_dims_factory(head_dim=head_dim, num_heads=num_heads)(
-          self.x
-      )
+      heads_spec.resolve(self.dim)
 
   # MARK: MultiHeadAttention tests
 
   def test_multi_head_attention_mask_invariance(self):
     """Tests that masked tokens do not affect the attention output."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
     )
 
     # Create an initial input sequence
@@ -214,9 +172,11 @@ class AttentionTest(parameterized.TestCase):
     )
 
   def test_multi_head_cross_attention_different_lengths_and_mask(self):
-    """Tests cross-attention with different sequence lengths and key masking."""
+    """Test cross-attention with different seq len and key masking."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
     )
 
     rng1, rng2 = jax.random.split(self.rng)
@@ -289,7 +249,9 @@ class AttentionTest(parameterized.TestCase):
     """Tests the output shape of MultiHeadAttention."""
     c = self.c if context == "c" else None
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         use_rope=use_rope,
         rope_positions_fn=rope_positions_fn,
     )
@@ -299,9 +261,11 @@ class AttentionTest(parameterized.TestCase):
     self.assertEqual(output.shape, x_curr.shape)  # pyrefly: ignore[missing-attribute]
 
   def test_multi_head_attention_zero_init_output(self):
-    """Tests that zero_init_output=True initializes output to zeros."""
+    """Test zero_init_output=True initializes output to zeros."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         zero_init_output=True,
     )
     variables = module.init(self.rng, self.x, self.c)
@@ -333,9 +297,11 @@ class AttentionTest(parameterized.TestCase):
       ("no_qk_norm", False),
   )
   def test_multi_head_attention_params_shape(self, normalize_qk: bool):
-    """Tests that MultiHeadAttention has the correct parameters."""
+    """Tests MultiHeadAttention has the correct parameters."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         use_rope=True,
         rope_positions_fn=SquareRoPEPositions(),
         normalize_qk=normalize_qk,
@@ -398,7 +364,9 @@ class AttentionTest(parameterized.TestCase):
       self, pass_context: bool, invalid_seq_len: int, expected_regex: str
   ):
     """Tests that an invalid mask shape raises a ValueError."""
-    module = attention.MultiHeadAttention(num_heads=self.num_heads)
+    module = attention.MultiHeadAttention(
+        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=self.num_heads)
+    )
 
     c = self.c if pass_context else None
 
@@ -415,13 +383,13 @@ class AttentionTest(parameterized.TestCase):
 
   def test_multi_head_attention_dropout_disabled_during_evaluation(self):
     """Verifies dropout is inactive when is_training=False (evaluation mode)."""
-    # Initialize with an aggressive dropout rate (e.g., 0.5)
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         dropout_rate=0.5,
     )
 
-    # Generate random inputs to capture exact matrix values
     rng1, rng2 = jax.random.split(self.rng)
     x_rand = jax.random.normal(
         rng1, (self.batch_size, self.seq_len_q, self.dim)
@@ -429,8 +397,6 @@ class AttentionTest(parameterized.TestCase):
 
     variables = module.init(rng2, x_rand, c=None)
 
-    # Run twice with evaluation mode (is_training=False).
-    # Even with a 50% dropout rate, the outputs should be completely identical.
     output_eval_1 = module.apply(variables, x_rand, c=None, is_training=False)
     output_eval_2 = module.apply(variables, x_rand, c=None, is_training=False)
 
@@ -441,9 +407,11 @@ class AttentionTest(parameterized.TestCase):
     )
 
   def test_multi_head_attention_dropout_active_during_training(self):
-    """Verifies dropout alters outputs randomly when is_training=True."""
+    """Verifies dropout alters outputs when is_training=True."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         dropout_rate=0.5,
     )
 
@@ -454,8 +422,6 @@ class AttentionTest(parameterized.TestCase):
 
     variables = module.init(rng2, x_rand, c=None)
 
-    # Flax requires a 'dropout' RNG stream state passed inside a dict
-    # whenever execution hits an active nn.Dropout layer during training.
     output_train_1 = module.apply(
         variables,
         x_rand,
@@ -471,16 +437,15 @@ class AttentionTest(parameterized.TestCase):
         rngs={"dropout": rng_dropout2},
     )
 
-    # Since two distinct keys were injected into the dropout stream,
-    # different masks were dropped, meaning outputs must differ.
     self.assertFalse(jnp.allclose(output_train_1, output_train_2, atol=1e-5))  # pyrefly: ignore[bad-argument-type]
 
   def test_multi_head_attention_dropout_scales_retained_activations(self):
     """Verifies dropout scales active entries by 1 / (1 - rate) during training."""
-    # Set a 50% rate. Active entries must double in value (multiplied by 2.0)
     rate = 0.5
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         dropout_rate=rate,
     )
 
@@ -500,8 +465,6 @@ class AttentionTest(parameterized.TestCase):
         rngs={"dropout": rng_dropout},
     )
 
-    # Standard inverted dropout behavior means active values must be larger
-    # than non-dropped values to preserve target expectation bounds.
     max_train_val = float(jnp.max(jnp.abs(output_train)))  # pyrefly: ignore[bad-argument-type]
     max_eval_val = float(jnp.max(jnp.abs(output_eval)))  # pyrefly: ignore[bad-argument-type]
 
@@ -516,7 +479,9 @@ class AttentionTest(parameterized.TestCase):
   def test_multi_head_attention_use_bias(self, use_bias):
     """Verifies that use_bias controls bias in all projections."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         use_bias=use_bias,
     )
     variables = module.init(self.rng, self.x, c=None)
@@ -524,7 +489,6 @@ class AttentionTest(parameterized.TestCase):
 
     bias_paths = [p for p in leaves_with_paths if "bias" in p]
     if use_bias:
-      # Dense_Q, Dense_K, Dense_V, Dense_Output each have a bias
       self.assertLen(bias_paths, 4)
     else:
       self.assertEmpty(bias_paths)
@@ -532,7 +496,9 @@ class AttentionTest(parameterized.TestCase):
   def test_multi_head_attention_no_bias_output_shape(self):
     """Verifies output shape is correct when use_bias=False."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         use_bias=False,
     )
     variables = module.init(self.rng, self.x, c=None)
@@ -542,7 +508,9 @@ class AttentionTest(parameterized.TestCase):
   def test_multi_head_attention_no_bias_param_shapes(self):
     """Verifies parameter shapes when use_bias=False."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         use_bias=False,
     )
     variables = module.init(self.rng, self.x, c=None)
@@ -567,7 +535,9 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_method_output_shape(self, qk_norm_method):
     """Verifies output shape is correct for each qk_norm_method."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=True,
         qk_norm_method=qk_norm_method,
     )
@@ -578,7 +548,9 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_l2_param_shapes(self):
     """Verifies L2 QK normalization creates a norm_qk_scale parameter."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=True,
         qk_norm_method="l2",
     )
@@ -594,7 +566,9 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_rms_norm_param_shapes(self):
     """Verifies RMSNorm QK normalization creates RMSNorm_Q/K scale params."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=True,
         qk_norm_method="rms_norm",
     )
@@ -611,7 +585,9 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_rms_norm_with_rope(self):
     """Verifies RMSNorm QK norm works with RoPE (norm before RoPE)."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=True,
         qk_norm_method="rms_norm",
         use_rope=True,
@@ -625,7 +601,9 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_l2_with_rope(self):
     """Verifies L2 QK norm works with RoPE (norm before RoPE)."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=True,
         qk_norm_method="l2",
         use_rope=True,
@@ -639,7 +617,9 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_disabled_has_no_norm_params(self):
     """Verifies that normalize_qk=False creates no norm params."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=False,
     )
     variables = module.init(self.rng, self.x, c=None)
@@ -650,9 +630,11 @@ class AttentionTest(parameterized.TestCase):
   def test_qk_norm_invalid_method_raises_error(self):
     """Verifies that an invalid qk_norm_method raises ValueError."""
     module = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        ),
         normalize_qk=True,
-        qk_norm_method="invalid_method",  # pytype: disable=wrong-arg-types
+        qk_norm_method="invalid_method",  # type: ignore
     )
     with self.assertRaisesRegex(
         ValueError, "Unsupported QK normalization method"

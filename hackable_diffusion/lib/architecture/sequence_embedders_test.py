@@ -15,7 +15,6 @@
 """Tests for sequence embedders."""
 
 
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
 import jax.numpy as jnp
@@ -31,7 +30,6 @@ from absl.testing import parameterized
 LinearRoPEPositions = sequence_embedders.LinearRoPEPositions
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
-INVALID_INT = arch_typing.INVALID_INT
 
 ################################################################################
 # MARK: Tests
@@ -43,7 +41,7 @@ def _get_invalid_num_features_params():
   params = []
   modes = ["sinusoidal_embedding", "random_fourier_embedding"]
   feature_values = [
-      ("default", INVALID_INT),
+      ("default", -1),
       ("zero", 0),
       ("negative", -10),
   ]

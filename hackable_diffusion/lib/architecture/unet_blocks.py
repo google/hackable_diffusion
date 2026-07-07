@@ -307,11 +307,7 @@ class AttentionResidualBlock(nn.Module):
     use_rope: Whether to use rotary positional embeddings in attention.
     rope_positions_fn: The position function of rotary positional embeddings.
     skip_connection_fn: The skip connection function.
-    num_heads: The number of attention heads. If set to INVALID_INT, it is
-      inferred from head_dim and input channels.
-    head_dim: The dimension of each attention head. If set to INVALID_INT, it is
-      inferred from num_heads and input channels. One of num_heads or head_dim
-      must be INVALID_INT.
+    attention_heads_spec: num_heads and head_dim for the attention mecanism.
     normalize_qk: Whether to normalize query and key in attention.
     dtype: The data type of the computation.
   """
@@ -321,8 +317,7 @@ class AttentionResidualBlock(nn.Module):
   use_rope: bool
   rope_positions_fn: RoPEPositionsFn
   skip_connection_fn: SkipConnectionFn
-  num_heads: int
-  head_dim: int
+  attention_heads_spec: attention.AttentionHeadsSpec
   normalize_qk: bool = False
   dtype: DType = jnp.float32
 
@@ -343,8 +338,7 @@ class AttentionResidualBlock(nn.Module):
     x = self.norm(x)
     x = x.reshape(b, h * w, channels)
     x = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
-        head_dim=self.head_dim,
+        attention_heads_spec=self.attention_heads_spec,
         use_rope=self.use_rope,
         normalize_qk=self.normalize_qk,
         rope_positions_fn=self.rope_positions_fn,

@@ -121,8 +121,7 @@ unet = Unet(
     upsample_fn=hd.architecture.ImageResizeUpsample(resize_method='bilinear'),
     self_attention_bool=(False, True, True),
     cross_attention_bool=(False, True, True),
-    attention_num_heads=8,
-    attention_head_dim=-1, # auto-inferred
+    attention_heads_spec=hd.architecture.AttentionHeadsSpec(num_heads=8),
     attention_normalize_qk=True,
     attention_use_rope=False,
     uncond_norm_strategy=hd.architecture.GroupNormStrategy(num_groups=32),

@@ -91,8 +91,7 @@ def get_config():
       attention_normalize_qk=True,
       attention_use_rope=True,
       attention_rope_positions_fn=hd.architecture.SquareRoPEPositions(),
-      attention_num_heads=-1,
-      attention_head_dim=64,
+      attention_heads_spec=hd.architecture.AttentionHeadsSpec(head_dim=64),
       uncond_norm_strategy=hd.architecture.RMSNormStrategy(),
       cond_norm_strategy=hd.architecture.ConditionalRMSNormStrategy(
           use_shift=True

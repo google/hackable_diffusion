@@ -16,7 +16,8 @@
 
 from typing import Literal, Tuple
 
-from hackable_diffusion.lib.architecture import arch_typing
+
+from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet_blocks
@@ -32,7 +33,6 @@ from absl.testing import parameterized
 
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 ResampleType = Literal['down', 'up'] | None
-INVALID_INT = arch_typing.INVALID_INT
 
 
 def _get_norm_strategy(
@@ -203,18 +203,17 @@ class AttentionResidualBlockTest(parameterized.TestCase):
         skip_connection_fn=unet_blocks.UnnormalizedAddSkip(),
         cross_attention_bool=cross_attention_bool,
         dtype=jnp.float32,
-        head_dim=16,
-        num_heads=INVALID_INT,
+        attention_heads_spec=attention.AttentionHeadsSpec(head_dim=16),
         normalize_qk=True,
         use_rope=False,
         rope_positions_fn=SquareRoPEPositions(),
     )
 
   @parameterized.named_parameters(
-      ('self_attn_group_norm', False, 'default_group_norm'),
-      ('cross_attn_group_norm', True, 'default_group_norm'),
-      ('self_attn_rms_norm', False, 'default_rms_norm'),
-      ('cross_attn_rms_norm', True, 'default_rms_norm'),
+      ('self_attention_group_norm', False, 'default_group_norm'),
+      ('cross_attention_group_norm', True, 'default_group_norm'),
+      ('self_attention_rms_norm', False, 'default_rms_norm'),
+      ('cross_attention_rms_norm', True, 'default_rms_norm'),
   )
   def test_attention_residual_block_output_shape(
       self,

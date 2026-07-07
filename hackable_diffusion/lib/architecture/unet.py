@@ -19,6 +19,7 @@ import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import arch_typing
+from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
 
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -63,11 +64,7 @@ class Unet(nn.Module, ConditionalBackbone):
     cross_attention_bool: Sequence indicating if cross-attention is used at each
       scale. In the middle block, cross attention is used by default if
       embeddings for cross attention is given.
-    attention_num_heads: Number of attention heads. If set to INVALID_INT, it is
-      inferred from head_dim and input channels.
-    attention_head_dim: Dimension of each attention head. If set to INVALID_INT,
-      it is inferred from num_heads and input channels. One of num_heads or
-      head_dim must be INVALID_INT.
+    attention_heads_spec: num_heads and head_dim for the attention mecanism.
     attention_normalize_qk: Whether to normalize query and key in attention as
       in https://arxiv.org/abs/2010.04245.
     attention_use_rope: Whether to use rotary positional embeddings in attention
@@ -99,8 +96,7 @@ class Unet(nn.Module, ConditionalBackbone):
   # attention
   self_attention_bool: Sequence[bool]
   cross_attention_bool: Sequence[bool]
-  attention_num_heads: int
-  attention_head_dim: int
+  attention_heads_spec: attention.AttentionHeadsSpec
   attention_normalize_qk: bool
   attention_use_rope: bool
   attention_rope_positions_fn: RoPEPositionsFn
@@ -200,8 +196,7 @@ class Unet(nn.Module, ConditionalBackbone):
               use_rope=self.attention_use_rope,
               rope_positions_fn=self.attention_rope_positions_fn,
               skip_connection_fn=self.skip_connection_fn,
-              num_heads=self.attention_num_heads,
-              head_dim=self.attention_head_dim,
+              attention_heads_spec=self.attention_heads_spec,
               normalize_qk=self.attention_normalize_qk,
               dtype=self.dtype,
               name=f"Down_{i}_AttentionResidualBlock_{j}",
@@ -246,8 +241,7 @@ class Unet(nn.Module, ConditionalBackbone):
         use_rope=self.attention_use_rope,
         rope_positions_fn=self.attention_rope_positions_fn,
         skip_connection_fn=self.skip_connection_fn,
-        num_heads=self.attention_num_heads,
-        head_dim=self.attention_head_dim,
+        attention_heads_spec=self.attention_heads_spec,
         normalize_qk=self.attention_normalize_qk,
         dtype=self.dtype,
         name="Middle_AttentionResidualBlock",
@@ -286,8 +280,7 @@ class Unet(nn.Module, ConditionalBackbone):
               use_rope=self.attention_use_rope,
               rope_positions_fn=self.attention_rope_positions_fn,
               skip_connection_fn=self.skip_connection_fn,
-              num_heads=self.attention_num_heads,
-              head_dim=self.attention_head_dim,
+              attention_heads_spec=self.attention_heads_spec,
               normalize_qk=self.attention_normalize_qk,
               dtype=self.dtype,
               name=f"Up_{i}_AttentionResidualBlock_{j}",

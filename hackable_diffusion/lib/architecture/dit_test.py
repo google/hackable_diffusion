@@ -18,6 +18,7 @@ from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import dit
 from hackable_diffusion.lib.architecture import dit_blocks
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import attention
 import jax
 import jax.numpy as jnp
 
@@ -53,7 +54,7 @@ class DiTTest(parameterized.TestCase):
         num_blocks=2,
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
-            num_heads=4,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
             norm_strategy=normalization.ConditionalRMSNormStrategy(
                 use_shift=False
             ),
@@ -93,7 +94,7 @@ class DiTTest(parameterized.TestCase):
         num_blocks=2,
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
-            num_heads=4,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
             norm_strategy=normalization.ConditionalLayerNormStrategy(
                 use_shift=True,
             ),
@@ -152,13 +153,13 @@ class DiTTest(parameterized.TestCase):
         },
         'ConditionalNorm_MLP': {
             'conditioning': {
-                'Dense_ScaleShift': {
-                    'kernel': (self.cond_dim, self.embedding_dim * 2),
-                    'bias': (self.embedding_dim * 2,),
-                },
+              'Dense_ScaleShift': {
+                  'kernel': (self.cond_dim, self.embedding_dim * 2),
+                  'bias': (self.embedding_dim * 2,),
+              },
             },
         },
-        'attn': {
+        'attention': {
             'Dense_Q': {
                 'kernel': (self.embedding_dim, self.embedding_dim),
                 'bias': (self.embedding_dim,),
@@ -232,7 +233,7 @@ class DiTTest(parameterized.TestCase):
         num_blocks=2,
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
-            num_heads=4,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
             norm_strategy=normalization.ConditionalRMSNormStrategy(
                 use_shift=False
             ),
@@ -261,7 +262,7 @@ class DiTTest(parameterized.TestCase):
         num_blocks=1,
         block=dit_blocks.DiTBlock(
             hidden_size=self.embedding_dim,
-            num_heads=4,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
             norm_strategy=normalization.ConditionalRMSNormStrategy(
                 use_shift=False
             ),

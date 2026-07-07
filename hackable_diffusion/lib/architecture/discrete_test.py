@@ -16,7 +16,8 @@
 
 import itertools
 
-from hackable_diffusion.lib.architecture import arch_typing
+
+from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import discrete
 from hackable_diffusion.lib.architecture import mlp
 from hackable_diffusion.lib.architecture import normalization
@@ -83,8 +84,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         bottleneck_dropout_rate=0.0,
         self_attention_bool=(False,),
         cross_attention_bool=(False,),
-        attention_num_heads=arch_typing.INVALID_INT,
-        attention_head_dim=8,
+        attention_heads_spec=attention.AttentionHeadsSpec(head_dim=8),
         attention_normalize_qk=False,
         attention_use_rope=False,
         attention_rope_positions_fn=sequence_embedders.SquareRoPEPositions(),

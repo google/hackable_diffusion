@@ -14,12 +14,12 @@
 
 """Attention layers and utils."""
 
-from typing import Callable, Literal
+import dataclasses
+from typing import Literal
 import warnings
 
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
 import jax.numpy as jnp
@@ -36,7 +36,6 @@ DType = hd_typing.DType
 
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-INVALID_INT = arch_typing.INVALID_INT
 
 AttnQKNormMethod = Literal["l2", "rms_norm"]
 
@@ -52,52 +51,52 @@ MASK_LOGITS_VALUE = -1e9
 ################################################################################
 
 
-def attention_dims_factory(
-    head_dim: int, num_heads: int
-) -> Callable[[Float["batch sequence dim"]], tuple[int, int]]:  # pyrefly: ignore[not-a-type]
-  """Returns a function that returns the head dimension and number of heads."""
+@dataclasses.dataclass(frozen=True)
+class AttentionHeadsSpec:
+  """Configuration for multi-head attention dimensionality.
 
-  if head_dim != INVALID_INT and head_dim <= 0:
-    raise ValueError("Head dimension must be positive or INVALID_INT.")
-  elif num_heads != INVALID_INT and num_heads <= 0:
-    raise ValueError("Number of heads must be positive or INVALID_INT.")
+  Specify at least one of `num_heads` or `head_dim`. When only one is set, the
+  other is inferred from the embedding dimension at call time via `resolve()`.
+  When both are set, `resolve()` validates that the embedding dimension matches
+  `num_heads * head_dim`.
 
-  if head_dim == INVALID_INT and num_heads == INVALID_INT:
-    raise ValueError("Either head_dim or num_heads must be specified.")
-  elif head_dim != INVALID_INT and num_heads == INVALID_INT:
+  Attributes:
+    num_heads: Fixed number of attention heads.
+    head_dim: Fixed dimension per head.
+  """
 
-    def get_attention_dims(
-        x: Float["batch sequence dim"],  # pyrefly: ignore[not-a-type]
-    ) -> tuple[int, int]:
-      *_, d = x.shape  # batch size, sequence length, embedding dim
+  num_heads: int | None = None
+  head_dim: int | None = None
 
-      if d % head_dim != 0:
+  def __post_init__(self):
+    if not self.num_heads and not self.head_dim:
+      raise ValueError("At least num_heads or head_dim must be provided.")
+
+  def resolve(self, embedding_dim: int) -> tuple[int, int]:
+    """Returns (head_dim, num_heads) given the embedding dimension."""
+    if self.head_dim and self.num_heads:
+      expected = self.head_dim * self.num_heads
+      if embedding_dim != expected:
         raise ValueError(
-            f"Embedding dim {d} is not divisible by head_dim {head_dim}."
+            f"Expected embedding_dim={expected}, got {embedding_dim}."
+            f" (head_dim={self.head_dim} * num_heads={self.num_heads})"
         )
+      return self.head_dim, self.num_heads
 
-      num_heads = d // head_dim
-      return head_dim, num_heads
-
-    return get_attention_dims
-
-  elif head_dim == INVALID_INT and num_heads != INVALID_INT:
-
-    def get_attention_dims(
-        x: Float["batch sequence dim"],  # pyrefly: ignore[not-a-type]
-    ) -> tuple[int, int]:
-      *_, d = x.shape  # batch size, sequence length
-      if d % num_heads != 0:
+    if self.head_dim:
+      if embedding_dim % self.head_dim != 0:
         raise ValueError(
-            f"Embedding dim {d} is not divisible by num_heads {num_heads}."
+            f"Embedding dim {embedding_dim} is not divisible by"
+            f" head_dim {self.head_dim}."
         )
-      head_dim = d // num_heads
-      return head_dim, num_heads
+      return self.head_dim, embedding_dim // self.head_dim
 
-    return get_attention_dims
-
-  else:
-    raise ValueError("Either head_dim or num_heads must be INVALID_INT.")
+    if embedding_dim % self.num_heads != 0:
+      raise ValueError(
+          f"Embedding dim {embedding_dim} is not divisible by"
+          f" num_heads {self.num_heads}."
+      )
+    return embedding_dim // self.num_heads, self.num_heads
 
 
 @kt.typechecked
@@ -152,29 +151,29 @@ def _dot_product_attention(
   b, _, t, _ = q.shape
 
   # Attention scores
-  attn_logits = jnp.einsum("bhtd,bhsd->bhts", q, k) * rescale
+  attention_logits = jnp.einsum("bhtd,bhsd->bhts", q, k) * rescale
 
   # We apply the mask to the logits before softmax so that the softmax is zero
   # for masked tokens.
   if mask is not None:
     bcast_mask = jnp.expand_dims(mask, axis=(1, 2))
-    attn_logits = jnp.where(bcast_mask, attn_logits, MASK_LOGITS_VALUE)
+    attention_logits = jnp.where(bcast_mask, attention_logits, MASK_LOGITS_VALUE)
 
   # Softmax and attention weights
-  attn_weights = _stable_softmax(logits=attn_logits)
+  attention_weights = _stable_softmax(logits=attention_logits)
 
   if dropout_rate > 0.0:
-    attn_weights = nn.Dropout(rate=dropout_rate)(
-        attn_weights, deterministic=not is_training
+    attention_weights = nn.Dropout(rate=dropout_rate)(
+        attention_weights, deterministic=not is_training
     )
 
   # Calculate attention output
-  attn_output = jnp.einsum("bhts,bhsd->bhtd", attn_weights, v)
+  attention_output = jnp.einsum("bhts,bhsd->bhtd", attention_weights, v)
 
   # Merge heads and project to output dimension
-  attn_output = attn_output.transpose(0, 2, 1, 3).reshape(b, t, -1)
+  attention_output = attention_output.transpose(0, 2, 1, 3).reshape(b, t, -1)
 
-  return attn_output
+  return attention_output
 
 
 ################################################################################
@@ -195,15 +194,12 @@ class MultiHeadAttention(nn.Module):
   It supports RoPE for positional embeddings and QK normalization.
 
   Attributes:
-    num_heads: The number of attention heads. If set to INVALID_INT, it is
-      inferred from head_dim and input channels.
-    head_dim: The dimension of each attention head. If set to INVALID_INT, it is
-      inferred from num_heads and input channels. One of num_heads or head_dim
-      must be INVALID_INT.
+    attention_heads_spec: An AttentionHeadsSpec instance that specifies num_heads
+      and/or head_dim for the attention layer.
     normalize_qk: Whether to normalize query and key before attention.
     use_rope: Whether to use rotary positional embeddings on query and key.
-    rope_positions_fn: The position function of rotary positional embeddings
-      to use if use_rope is True.
+    rope_positions_fn: The position function of rotary positional embeddings to
+      use if use_rope is True.
     use_bias: Whether to use bias in the QKV and output projections.
     zero_init_output: If True, the kernel of the final output projection layer
       is initialized to zeros.
@@ -211,8 +207,7 @@ class MultiHeadAttention(nn.Module):
     dtype: The data type of the computation.
   """
 
-  num_heads: int = INVALID_INT
-  head_dim: int = INVALID_INT
+  attention_heads_spec: AttentionHeadsSpec
   normalize_qk: bool = False
   qk_norm_method: AttnQKNormMethod = "l2"
   use_rope: bool = False
@@ -230,10 +225,6 @@ class MultiHeadAttention(nn.Module):
       self.init_output = nn.initializers.zeros_init()
     else:
       self.init_output = nn.linear.default_kernel_init
-
-    self.get_attention_dims = attention_dims_factory(
-        head_dim=self.head_dim, num_heads=self.num_heads
-    )
 
   @nn.compact
   @kt.typechecked
@@ -254,6 +245,7 @@ class MultiHeadAttention(nn.Module):
         for tokens we want to mask. If None, no masking is performed. In
         cross-attention, mask is applied to the key/value sequence which comes
         from c. In self-attention, the mask is applied to x.
+      is_training: Whether the model is in training mode (for dropout)
 
     Returns:
       The output tensor.
@@ -271,7 +263,7 @@ class MultiHeadAttention(nn.Module):
             f" expected shape {c.shape[:2]}."
         )
     b, _, d = x.shape  # batch size, sequence length, embedding dim
-    head_d, num_heads = self.get_attention_dims(x)
+    head_d, num_heads = self.attention_heads_spec.resolve(d)
 
     # if c is None, use x (self-attention)
     y = x if c is None else c
@@ -344,7 +336,7 @@ class MultiHeadAttention(nn.Module):
       )(k)
       # shape is [batch, num_heads, sequence_length, head_dim]
 
-    attn_output = _dot_product_attention(
+    attention_output = _dot_product_attention(
         q=q,
         k=k,
         v=v,
@@ -354,12 +346,12 @@ class MultiHeadAttention(nn.Module):
         is_training=is_training,
     )
 
-    attn_output = nn.Dense(
+    attention_output = nn.Dense(
         features=d,
         use_bias=self.use_bias,
         kernel_init=self.init_output,
         dtype=self.dtype,
         name="Dense_Output",
-    )(attn_output)
+    )(attention_output)
 
-    return attn_output
+    return attention_output

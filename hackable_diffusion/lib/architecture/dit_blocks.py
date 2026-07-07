@@ -19,7 +19,6 @@ import dataclasses
 import einops
 from flax import linen as nn
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.architecture import arch_typing
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import mlp_blocks
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -38,7 +37,6 @@ Num = hd_typing.Num
 
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-INVALID_INT = arch_typing.INVALID_INT
 
 
 ################################################################################
@@ -115,8 +113,7 @@ class DiTBlock(nn.Module):
 
   Attributes:
     hidden_size: The hidden size of the block.
-    num_heads: The number of attention heads.
-    head_dim: The dimension of each attention head.
+    attention_heads_spec: num_heads and head_dim for the attention mecanism.
     norm_strategy: Strategy for creating conditional normalization layers.
     use_gates: Whether to use zero-init gates on residual branches.
     ffn_type: Feed-forward network type. 'swiglu' uses a gated SwiGLU FFN,
@@ -124,8 +121,8 @@ class DiTBlock(nn.Module):
     ffn_use_bias: Whether to use bias in the FFN. Modern DiT architectures tend
       to avoid bias in the FFN.
     ffn_activation: Activation function for the FFN.
-    attn_normalize_qk: Whether to normalize query and key in attention.
-    attn_use_bias: Whether to use bias in the attention QKV and output
+    attention_normalize_qk: Whether to normalize query and key in attention.
+    attention_use_bias: Whether to use bias in the attention QKV and output
       projections.
     mlp_ratio: The ratio of the MLP hidden dimension to the hidden size.
     use_rope: Whether to use RoPE.
@@ -138,14 +135,13 @@ class DiTBlock(nn.Module):
 
   hidden_size: int
   norm_strategy: normalization.ConditionalNormStrategy
-  num_heads: int = INVALID_INT
-  head_dim: int = INVALID_INT
+  attention_heads_spec: attention.AttentionHeadsSpec
   use_gates: bool = True
   ffn_type: mlp_blocks.FFNType = 'swiglu'
   ffn_use_bias: bool = False
   ffn_activation: str = 'gelu'
-  attn_normalize_qk: bool = True
-  attn_use_bias: bool = True
+  attention_normalize_qk: bool = True
+  attention_use_bias: bool = True
   mlp_ratio: float = 4.0
   use_rope: bool = False
   dropout_rate: float = 0.0
@@ -178,20 +174,19 @@ class DiTBlock(nn.Module):
         use_bias=self.ffn_use_bias,
     )
     # Attention
-    self.attn = attention.MultiHeadAttention(
-        num_heads=self.num_heads,
-        head_dim=self.head_dim,
+    self.attention = attention.MultiHeadAttention(
+        attention_heads_spec=self.attention_heads_spec,
         use_rope=self.use_rope,
         rope_positions_fn=self.rope_positions_fn,
         zero_init_output=self.zero_init_output,
         dtype=self.dtype,
-        normalize_qk=self.attn_normalize_qk,
-        use_bias=self.attn_use_bias,
+        normalize_qk=self.attention_normalize_qk,
+        use_bias=self.attention_use_bias,
         dropout_rate=self.dropout_rate,
     )
 
     # Conditional normalization.
-    self.conditional_norm_attn = self.norm_strategy.build_layer(
+    self.conditional_norm_attention = self.norm_strategy.build_layer(
         name='ConditionalNorm_Attention'
     )
     self.conditional_norm_mlp = self.norm_strategy.build_layer(
@@ -238,12 +233,12 @@ class DiTBlock(nn.Module):
     use_gates = self.use_gates
 
     # Attention Branch.
-    x_normed = self.conditional_norm_attn(x, c=cond_activated)
-    attn_out = self.attn(x_normed, c=None, mask=mask, is_training=is_training)
+    x_normed = self.conditional_norm_attention(x, c=cond_activated)
+    attention_out = self.attention(x_normed, c=None, mask=mask, is_training=is_training)
     if use_gates:
       gate_msa = self.gate_msa(cond_activated)
-      attn_out = gate_msa[..., None, :] * attn_out
-    x = x + attn_out
+      attention_out = gate_msa[..., None, :] * attention_out
+    x = x + attention_out
 
     # MLP Branch.
     x_normed = self.conditional_norm_mlp(x, c=cond_activated)
@@ -273,8 +268,8 @@ class DiTBlockFlux(DiTBlock):
   )
   use_gates: bool = dataclasses.field(init=False, default=False)
   zero_init_output: bool = dataclasses.field(init=False, default=True)
-  attn_normalize_qk: bool = dataclasses.field(init=False, default=True)
-  attn_use_bias: bool = dataclasses.field(init=False, default=False)
+  attention_normalize_qk: bool = dataclasses.field(init=False, default=True)
+  attention_use_bias: bool = dataclasses.field(init=False, default=False)
 
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalRMSNormStrategy(
@@ -295,8 +290,8 @@ class DiTBlockSD3(DiTBlock):
   )
   use_gates: bool = dataclasses.field(init=False, default=True)
   zero_init_output: bool = dataclasses.field(init=False, default=False)
-  attn_normalize_qk: bool = dataclasses.field(init=False, default=True)
-  attn_use_bias: bool = dataclasses.field(init=False, default=False)
+  attention_normalize_qk: bool = dataclasses.field(init=False, default=True)
+  attention_use_bias: bool = dataclasses.field(init=False, default=False)
 
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalRMSNormStrategy(
@@ -317,8 +312,8 @@ class DiTBlockAdaLNZero(DiTBlock):
   )
   use_gates: bool = dataclasses.field(init=False, default=True)
   zero_init_output: bool = dataclasses.field(init=False, default=False)
-  attn_normalize_qk: bool = dataclasses.field(init=False, default=False)
-  attn_use_bias: bool = dataclasses.field(init=False, default=True)
+  attention_normalize_qk: bool = dataclasses.field(init=False, default=False)
+  attention_use_bias: bool = dataclasses.field(init=False, default=True)
 
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalLayerNormStrategy(
@@ -349,8 +344,8 @@ class Patchify(nn.Module):
   @nn.compact
   @kt.typechecked
   def __call__(
-      self, x: Float["*batch height width channels"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["*batch seq_dim emb_dim"]:  # pyrefly: ignore[not-a-type]
+      self, x: Float['*batch height width channels']  # pyrefly: ignore[not-a-type]
+  ) -> Float['*batch seq_dim emb_dim']:  # pyrefly: ignore[not-a-type]
     hp, wp = self.patch_size
     _, h, w, _ = x.shape
     if h % hp != 0 or w % wp != 0:

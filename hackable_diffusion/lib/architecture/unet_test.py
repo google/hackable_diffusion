@@ -16,7 +16,7 @@
 
 import dataclasses
 
-from hackable_diffusion.lib.architecture import arch_typing
+from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
@@ -29,7 +29,6 @@ from absl.testing import parameterized
 
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-INVALID_INT = arch_typing.INVALID_INT
 
 
 ################################################################################
@@ -57,8 +56,9 @@ class Config:
   # attention
   self_attention_bool: tuple[bool, ...] = (False, True)
   cross_attention_bool: tuple[bool, ...] = (False, True)
-  attention_num_heads: int = INVALID_INT
-  attention_head_dim: int = 16
+  attention_heads_spec: attention.AttentionHeadsSpec = attention.AttentionHeadsSpec(
+      head_dim=16
+  )
   attention_normalize_qk: bool = True
   attention_use_rope: bool = False
   attention_rope_positions_fn: RoPEPositionsFn = SquareRoPEPositions()
