@@ -43,11 +43,10 @@ Num = hd_typing.Num
 # MARK: Base Classes
 ################################################################################
 
-
 class BaseTimeEmbedder(Protocol):
   """Protocol for a time embedder."""
 
-  def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, time: hd_typing.TimeArray) -> jax.Array:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -58,9 +57,7 @@ class BaseEmbedder(Protocol):
   def output_shape(self) -> tuple[int, ...]:
     ...
 
-  def __call__(
-      self, conditioning: hd_typing.Conditioning
-  ) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, conditioning: hd_typing.Conditioning) -> jax.Array:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -81,7 +78,7 @@ class BaseConditioningEncoder(Protocol):
 ################################################################################
 
 
-class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class SinusoidalTimeEmbedder(nn.Module):
   """Sinusoidal time embedder.
 
   This module encodes the time step `t` into a dense embedding.
@@ -133,7 +130,7 @@ class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
     return t_emb
 
 
-class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class ZeroTimeEmbedder(nn.Module):
   """Time embedder that returns zeros.
 
   This allows to train models without time conditioning.
@@ -149,7 +146,7 @@ class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
     return jnp.zeros((time.shape[0], self.num_features))
 
 
-class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class IdentityTimeEmbedder(nn.Module):
   """Time embedder that returns time without any transformation."""
 
   @kt.typechecked
@@ -162,7 +159,7 @@ class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
 ################################################################################
 
 
-class LabelEmbedder(nn.Module, BaseEmbedder):
+class LabelEmbedder(nn.Module):
   """Embedder for integer labels.
 
   Attributes:
@@ -203,7 +200,7 @@ class LabelEmbedder(nn.Module, BaseEmbedder):
     )(integer_inputs)
 
 
-class LinearEmbedder(nn.Module, BaseEmbedder):
+class LinearEmbedder(nn.Module):
   """Linear embedding.
 
   This module encodes an input into a dense embedding by applying a linear
@@ -249,7 +246,7 @@ class LinearEmbedder(nn.Module, BaseEmbedder):
     )(inputs)
 
 
-class MLPEmbedder(nn.Module, BaseEmbedder):
+class MLPEmbedder(nn.Module):
   """MLP embedding.
 
   This module encodes an input into a dense embedding by applying a MLP.
@@ -303,7 +300,7 @@ class MLPEmbedder(nn.Module, BaseEmbedder):
     return mlp_module(all_inputs, is_training=False)
 
 
-class FieldSelector(nn.Module, BaseEmbedder):
+class FieldSelector(nn.Module):
   """Identity embedder.
 
   This module returns one input without any transformation.

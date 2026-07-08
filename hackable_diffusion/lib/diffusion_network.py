@@ -15,7 +15,7 @@
 """Diffusion network."""
 
 import dataclasses
-from typing import Callable, Protocol, cast
+from typing import Callable, Protocol, Union, cast
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
@@ -55,18 +55,56 @@ ShapeTree = hd_typing.ShapeTree
 ################################################################################
 
 
-class InputRescaler(Protocol):
-  """Rescales the input in a schedule-dependent way."""
-
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    ...
+################################################################################
+# MARK: Time rescaling functions
+################################################################################
 
 
-class TimeRescaler(Protocol):
-  """Rescales the time, optionally in a schedule-dependent way."""
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class LogSnrTimeRescaler:
+  """Time rescaler that uses the logsnr of the process."""
 
+  schedule: GaussianSchedule
+  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None  # pyrefly: ignore[not-a-type]
+
+  @kt.typechecked
   def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    ...
+    """Returns the time rescaled by the logsnr of the process."""
+    if self.postprocess_fn is None:
+      postprocess_fn = lambda x: x
+    else:
+      postprocess_fn = self.postprocess_fn
+    return postprocess_fn(self.schedule.logsnr(time))
+
+
+################################################################################
+# MARK: Input rescaling functions
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class MagnitudeScheduleInputRescaler:
+  """Input rescaler that uses the magnitude of the schedule."""
+
+  schedule: GaussianSchedule
+
+  @kt.typechecked
+  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+    """Returns the inputs rescaled by the magnitude of the schedule."""
+    alpha_t = self.schedule.alpha(time)
+    sigma_t = self.schedule.sigma(time)
+    alpha_t = jax_helpers.bcast_right(alpha_t, inputs.ndim)
+    sigma_t = jax_helpers.bcast_right(sigma_t, inputs.ndim)
+    magnitude = jnp.sqrt(jnp.square(alpha_t) + jnp.square(sigma_t))
+    return inputs / magnitude
+
+
+################################################################################
+# MARK: Rescaler Unions
+################################################################################
+
+TimeRescaler = Union[LogSnrTimeRescaler]
+InputRescaler = Union[MagnitudeScheduleInputRescaler]
 
 
 ################################################################################
@@ -480,45 +518,4 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
     return outputs
 
 
-################################################################################
-# MARK: Time rescaling functions
-################################################################################
 
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class LogSnrTimeRescaler(TimeRescaler):
-  """Time rescaler that uses the logsnr of the process."""
-
-  schedule: GaussianSchedule
-  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None  # pyrefly: ignore[not-a-type]
-
-  @kt.typechecked
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    """Returns the time rescaled by the logsnr of the process."""
-    if self.postprocess_fn is None:
-      postprocess_fn = lambda x: x
-    else:
-      postprocess_fn = self.postprocess_fn
-    return postprocess_fn(self.schedule.logsnr(time))
-
-
-################################################################################
-# MARK: Input rescaling functions
-################################################################################
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class MagnitudeScheduleInputRescaler(InputRescaler):
-  """Input rescaler that uses the magnitude of the schedule."""
-
-  schedule: GaussianSchedule
-
-  @kt.typechecked
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    """Returns the inputs rescaled by the magnitude of the schedule."""
-    alpha_t = self.schedule.alpha(time)
-    sigma_t = self.schedule.sigma(time)
-    alpha_t = jax_helpers.bcast_right(alpha_t, inputs.ndim)
-    sigma_t = jax_helpers.bcast_right(sigma_t, inputs.ndim)
-    magnitude = jnp.sqrt(jnp.square(alpha_t) + jnp.square(sigma_t))
-    return inputs / magnitude

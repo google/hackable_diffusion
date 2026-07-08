@@ -36,7 +36,7 @@ simplex vertices. So, in practice, we have:
   * Simplicial: `V = process.process_num_categories`
 """
 
-from typing import Protocol
+from typing import Union
 import einops
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
@@ -65,18 +65,7 @@ BaseProjector = discrete.BaseProjector
 ################################################################################
 
 
-class BaseLogitEmbedder(Protocol):
-  """Protocol for probability embedders."""
-
-  embedding_dim: int
-
-  def __call__(
-      self, x: Float['batch *other_input V'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class DenseEmbedder(nn.Module, BaseLogitEmbedder):
+class DenseEmbedder(nn.Module):
   """Probability embedder that uses a dense layer.
 
   Attributes:
@@ -126,6 +115,9 @@ class DenseEmbedder(nn.Module, BaseLogitEmbedder):
       )
 
     return logit_embeddings
+
+
+BaseLogitEmbedder = Union[DenseEmbedder]
 
 
 ################################################################################

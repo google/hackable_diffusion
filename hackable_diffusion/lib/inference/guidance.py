@@ -46,7 +46,7 @@ class GuidanceFn(Protocol):
   def __call__(
       self,
       xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeTree,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
@@ -126,3 +126,6 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
         cond_outputs,
         uncond_outputs,
     )
+
+
+

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-from typing import Protocol, Sequence
+from typing import Sequence, Union
 
 from hackable_diffusion.lib import fast_random
 from hackable_diffusion.lib import hd_typing
@@ -72,33 +72,14 @@ class SamplingPrecisionMode(enum.StrEnum):
 ################################################################################
 
 
-class SimplicialPostCorruptionFn(Protocol):
-  """Post-corruption function protocol for simplicial (log-prob) data.
-
-  The purpose of a post-corruption function is to project the noisy
-  log-probability array onto a constrained subspace after each corruption or
-  reverse-diffusion step.  The canonical example is symmetrising a
-  simplex-valued edge-attribute matrix so that edge (i, j) and edge (j, i)
-  share the same categorical distribution — the simplicial analogue of
-  ``SymmetricPostCorruptionFn`` from the discrete process.
-
-  Unlike the discrete variant, the input and output here are log-probability
-  arrays of shape (*batch, num_categories), not integer token arrays.
-  """
-
-  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    """Project the log-probability array."""
-    ...
-
-
-class IdentitySimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
+class IdentitySimplicialPostCorruptionFn:
   """Identity post-corruption function (no projection)."""
 
   def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     return log_x
 
 
-class SymmetricSimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
+class SymmetricSimplicialPostCorruptionFn:
   """Symmetric post-corruption function for simplex-valued edge matrices.
 
   This is the simplicial analogue of ``SymmetricPostCorruptionFn`` from the
@@ -138,6 +119,9 @@ class SymmetricSimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
     diag_mask = jnp.eye(n, dtype=jnp.bool_)[None, :, :, None]
     log_y = jnp.where(diag_mask, no_edge_log, log_y)
     return log_y
+
+
+SimplicialPostCorruptionFn = Union[IdentitySimplicialPostCorruptionFn, SymmetricSimplicialPostCorruptionFn]
 
 
 ################################################################################

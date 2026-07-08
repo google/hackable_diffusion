@@ -95,7 +95,7 @@ is reached or an early stopping condition is met.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Protocol
+from typing import Any, Protocol, Union
 
 from hackable_diffusion.lib import corruption
 from hackable_diffusion.lib import hd_typing
@@ -172,20 +172,10 @@ class ARStateHandler(Protocol):
 ################################################################################
 
 
-class EarlyStoppingFn(Protocol):
-  """Determines whether to terminate the AR loop early.
-
-  The function receives the full sampler state and must return a JAX
-  boolean *scalar* (``True`` → stop).  The canonical implementation
-  checks ``jnp.all(sampler_state['done'])`` where ``done`` is a
-  per-batch-element boolean array.
-  """
-
-  def __call__(self, sampler_state: SamplerState) -> Bool['']:  # pyrefly: ignore[not-a-type]
-    """Returns true when the AR loop should terminate."""
+# EarlyStoppingFn Union type alias is defined after concrete implementations.
 
 
-class DoneEarlyStoppingFn(EarlyStoppingFn):
+class DoneEarlyStoppingFn:
   """Stops when every batch element is done."""
 
   def __call__(self, sampler_state: SamplerState) -> Bool['']:  # pyrefly: ignore[not-a-type]
@@ -194,6 +184,9 @@ class DoneEarlyStoppingFn(EarlyStoppingFn):
           'DoneEarlyStoppingFn requires sampler_state["done"] to be set.'
       )
     return jnp.all(sampler_state['done'])
+
+
+EarlyStoppingFn = Union[DoneEarlyStoppingFn]
 
 
 ################################################################################

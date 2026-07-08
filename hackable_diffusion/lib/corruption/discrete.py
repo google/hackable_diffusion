@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-from typing import Protocol, Sequence
+from typing import Sequence, Union
 
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
@@ -71,21 +71,7 @@ class SamplingPrecisionMode(enum.StrEnum):
 ################################################################################
 
 
-class PostCorruptionFn(Protocol):
-  """Post corruption function protocol.
-
-  The purpose of a post corruption function is to project the labels on a new
-  space. For instance in the case of the adjacency graph, we use a symmetric
-  projection function, so that the noisy labels are also symmetric. This is used
-  in DiGress https://arxiv.org/abs/2209.14734u
-  """
-
-  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
-    """Project the labels."""
-    ...
-
-
-class IdentityPostCorruptionFn(PostCorruptionFn):
+class IdentityPostCorruptionFn:
   """Identity post corruption function."""
 
   def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
@@ -93,7 +79,7 @@ class IdentityPostCorruptionFn(PostCorruptionFn):
     return x
 
 
-class SymmetricPostCorruptionFn(PostCorruptionFn):
+class SymmetricPostCorruptionFn:
   """Symmetric projection function.
 
   This is used in DiGress https://arxiv.org/abs/2209.14734 in order to noise the
@@ -118,6 +104,9 @@ class SymmetricPostCorruptionFn(PostCorruptionFn):
     )
     x_sym = x_without_trail_tri_sym[..., None]
     return x_sym
+
+
+PostCorruptionFn = Union[IdentityPostCorruptionFn, SymmetricPostCorruptionFn]
 
 
 ################################################################################

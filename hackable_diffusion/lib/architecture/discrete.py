@@ -14,7 +14,7 @@
 
 """Backbones for discrete data."""
 
-from typing import Protocol
+from typing import Union
 import einops
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
@@ -39,18 +39,7 @@ ConditionalBackbone = diffusion_network.ConditionalBackbone
 ################################################################################
 
 
-class BaseTokenEmbedder(Protocol):
-  """Protocol for token embedders."""
-
-  embedding_dim: int
-
-  def __call__(
-      self, x: Int['batch *other_input 1'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class TokenEmbedder(nn.Module, BaseTokenEmbedder):
+class TokenEmbedder(nn.Module):
   """Token embedder that uses a dense layer.
 
   Attributes:
@@ -114,23 +103,15 @@ class TokenEmbedder(nn.Module, BaseTokenEmbedder):
     return token_embeddings
 
 
+BaseTokenEmbedder = Union[TokenEmbedder]
+
+
 ################################################################################
 # MARK: Token Projector
 ################################################################################
 
 
-class BaseProjector(Protocol):
-  """Protocol for projectors."""
-
-  embedding_dim: int
-
-  def __call__(
-      self, x: Float['batch *other_embedding F'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_input V']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class DenseProjector(nn.Module, BaseProjector):
+class DenseProjector(nn.Module):
   """Projector that uses a dense layer.
 
   Attributes:
@@ -177,6 +158,9 @@ class DenseProjector(nn.Module, BaseProjector):
     )(x)
 
     return output
+
+
+BaseProjector = Union[DenseProjector]
 
 
 ################################################################################
