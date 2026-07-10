@@ -31,9 +31,6 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-ConditionalBackbone = diffusion_network.ConditionalBackbone
-
-
 ################################################################################
 # MARK: Token Embedder
 ################################################################################
@@ -184,7 +181,7 @@ class DenseProjector(nn.Module, BaseProjector):
 ################################################################################
 
 
-class ConditionalDiscreteBackbone(nn.Module, ConditionalBackbone):
+class ConditionalDiscreteBackbone(nn.Module):
   """Conditional discrete backbone for diffusion models.
 
   Attributes:
@@ -194,7 +191,7 @@ class ConditionalDiscreteBackbone(nn.Module, ConditionalBackbone):
     token_projector: The token projector to use for the discrete model.
   """
 
-  base_backbone: ConditionalBackbone
+  base_backbone: 'diffusion_network.ConditionalBackbone'
   token_embedder: BaseTokenEmbedder
   token_projector: BaseProjector
 

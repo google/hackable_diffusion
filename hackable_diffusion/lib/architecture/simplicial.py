@@ -55,8 +55,6 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-ConditionalBackbone = diffusion_network.ConditionalBackbone
-
 
 BaseProjector = discrete.BaseProjector
 
@@ -133,7 +131,7 @@ class DenseEmbedder(nn.Module, BaseLogitEmbedder):
 ################################################################################
 
 
-class ConditionalSimplicialBackbone(nn.Module, ConditionalBackbone):
+class ConditionalSimplicialBackbone(nn.Module):
   """Conditional simplicial backbone for diffusion models.
 
   Attributes:
@@ -143,7 +141,7 @@ class ConditionalSimplicialBackbone(nn.Module, ConditionalBackbone):
     logit_projector: The probability projector to use for the simplicial model.
   """
 
-  base_backbone: ConditionalBackbone
+  base_backbone: 'diffusion_network.ConditionalBackbone'
   logit_embedder: BaseLogitEmbedder
   logit_projector: BaseProjector
 

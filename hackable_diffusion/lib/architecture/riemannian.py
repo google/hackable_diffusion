@@ -22,16 +22,14 @@ from hackable_diffusion.lib import manifolds
 # MARK: Riemannian Conditional Backbone
 ################################################################################
 
-ConditionalBackbone = diffusion_network.ConditionalBackbone
 
-
-class RiemannianConditionalBackbone(nn.Module, ConditionalBackbone):
+class RiemannianConditionalBackbone(nn.Module):
   """Velocity model for Riemannian Flow Matching.
 
   Projects the output of a backbone network to the tangent space of a manifold.
   """
 
-  backbone: ConditionalBackbone
+  backbone: 'diffusion_network.ConditionalBackbone'
   manifold: manifolds.Manifold
 
   @nn.compact

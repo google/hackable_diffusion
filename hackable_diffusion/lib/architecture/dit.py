@@ -38,14 +38,13 @@ DType = hd_typing.DType
 
 DataArray = hd_typing.DataArray
 
-ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 ################################################################################
 # MARK: DiT
 ################################################################################
 
 
-class DiT(nn.Module, ConditionalBackbone):
+class DiT(nn.Module):
   """DiT model.
 
   A Diffusion Transformer backbone based on https://arxiv.org/abs/2212.09748.

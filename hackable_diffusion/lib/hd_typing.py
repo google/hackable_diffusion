@@ -14,8 +14,7 @@
 
 """Common typing definitions."""
 
-from typing import Any
-from collections.abc import Mapping  # pylint: disable=g-multiple-import,g-importing-member
+from typing import Any, Mapping
 import kauldron.ktyping as kt
 
 # pylint: disable=g-multiple-import,g-importing-member, unused-import

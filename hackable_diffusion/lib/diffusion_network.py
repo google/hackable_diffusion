@@ -15,7 +15,7 @@
 """Diffusion network."""
 
 import dataclasses
-from typing import Callable, Protocol, cast
+from typing import Callable, Protocol
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers

@@ -36,7 +36,6 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 
 RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
-ConditionalBackbone = diffusion_network.ConditionalBackbone
 
 
 ################################################################################
@@ -44,7 +43,7 @@ ConditionalBackbone = diffusion_network.ConditionalBackbone
 ################################################################################
 
 
-class Unet(nn.Module, ConditionalBackbone):
+class Unet(nn.Module):
   """A U-Net architecture backbone with conditional signals.
 
   Based on:

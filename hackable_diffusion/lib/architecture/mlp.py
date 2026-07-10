@@ -36,15 +36,13 @@ Float = hd_typing.Float
 
 DataArray = hd_typing.DataArray
 
-ConditionalBackbone = diffusion_network.ConditionalBackbone
-
 
 ################################################################################
 # MARK: ConditionalMLP
 ################################################################################
 
 
-class ConditionalMLP(nn.Module, ConditionalBackbone):
+class ConditionalMLP(nn.Module):
   """Conditional MLP backbone for diffusion models.
 
   Receives `x`, processes them first separately using `hidden_sizes_preprocess`
