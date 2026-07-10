@@ -39,15 +39,13 @@ DiscreteSchedule = schedules.DiscreteSchedule
 
 
 @kt.typechecked
-def compute_discrete_diffusion_loss(
+def _compute_discrete_diffusion_loss(
     preds: TargetInfo,
     targets: TargetInfo,
     time: TimeArray,  # pyrefly: ignore[not-a-type]
     *,
-    schedule: DiscreteSchedule | None = None,
     use_mask: bool = False,
     mask_key: str = 'is_corrupted',
-    weight_fn: base.WeightFn | None = None,
     normalize_by_mask: bool = True,
 ) -> LossOutput:  # pyrefly: ignore[not-a-type]
   """Compute the discrete diffusion loss."""
@@ -100,18 +98,7 @@ def compute_discrete_diffusion_loss(
         f'neg_xentropy should have shape ({bsz}, 1), got {neg_xentropy.shape}'
     )
 
-  if weight_fn is not None:
-    weight = weight_fn(
-        schedule=schedule,  # pyrefly: ignore[bad-argument-type]
-        preds=preds,
-        targets=targets,
-        time=time,
-    )
-    weight = jax_helpers.flatten_non_batch_dims(weight)
-  else:
-    # No weighting is applied.
-    weight = 1.0
-  weighted_loss = -1.0 * weight * neg_xentropy
+  weighted_loss = -1.0 * neg_xentropy
 
   weighted_loss = jnp.squeeze(weighted_loss, axis=-1)
 
@@ -143,14 +130,12 @@ class NoWeightDiscreteLoss(base.DiffusionLoss):
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> LossOutput:  # pyrefly: ignore[not-a-type]
 
-    return compute_discrete_diffusion_loss(
+    return _compute_discrete_diffusion_loss(
         preds=preds,
         targets=targets,
         time=time,
-        schedule=None,
         use_mask=self.use_mask,
         mask_key=self.mask_key,
-        weight_fn=None,
         normalize_by_mask=self.normalize_by_mask,
     )
 
@@ -171,29 +156,20 @@ class MD4Loss(base.DiffusionLoss):
       targets: TargetInfo,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> LossOutput:  # pyrefly: ignore[not-a-type]
-    def _weight_fn(
-        schedule: DiscreteSchedule,
-        preds: TargetInfo,
-        targets: TargetInfo,
-        time: TimeArray,  # pyrefly: ignore[not-a-type]
-    ) -> TimeArray:  # pyrefly: ignore[not-a-type]
-      """Weight function for the MD4 loss."""
-      del preds  # Unused.
-      time = jax_helpers.bcast_right(time, targets['x0'].ndim)
-      alpha = schedule.alpha(time)
-      alpha_der = jax_helpers.egrad(schedule.alpha)(time)
-      alpha = jax_helpers.flatten_non_batch_dims(alpha)
-      alpha_der = jax_helpers.flatten_non_batch_dims(alpha_der)
-      weight = -1.0 * alpha_der / jnp.clip(1.0 - alpha, min=1e-12)
-      return weight
+    time_b = jax_helpers.bcast_right(time, targets['x0'].ndim)
+    alpha = self.schedule.alpha(time_b)
+    alpha_der = jax_helpers.egrad(self.schedule.alpha)(time_b)
+    alpha = jax_helpers.flatten_non_batch_dims(alpha)
+    alpha_der = jax_helpers.flatten_non_batch_dims(alpha_der)
+    weight = -1.0 * alpha_der / jnp.clip(1.0 - alpha, min=1e-12)
+    weight = jnp.squeeze(weight, axis=-1)
 
-    return compute_discrete_diffusion_loss(
+    loss = _compute_discrete_diffusion_loss(
         preds=preds,
         targets=targets,
         time=time,
-        schedule=self.schedule,
         use_mask=self.use_mask,
         mask_key=self.mask_key,
-        weight_fn=_weight_fn,  # pyrefly: ignore[bad-argument-type]
         normalize_by_mask=self.normalize_by_mask,
     )
+    return loss * weight

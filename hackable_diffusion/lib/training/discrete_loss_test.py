@@ -47,23 +47,14 @@ class DiscreteLossTest(parameterized.TestCase):
     self.targets = {'x0': x0}
     self.schedule = schedules.LinearDiscreteSchedule()
 
-  @parameterized.named_parameters(
-      (
-          'with_weight_fn',
-          lambda schedule, preds, targets, time: jnp.ones_like(time),
-      ),
-      ('without_weight_fn', None),
-  )
-  def test_diffusion_cross_entropy_loss_computation(self, weight_fn):
-    """Tests loss can be computed with and without a weight function."""
+  def test_diffusion_cross_entropy_loss_computation(self):
+    """Tests base diffusion cross entropy loss computation."""
 
-    loss_fn = lambda preds, targets, time: discrete_loss.compute_discrete_diffusion_loss(
+    loss_fn = lambda preds, targets, time: discrete_loss._compute_discrete_diffusion_loss(
         preds=preds,
         targets=targets,
         time=time,
-        schedule=self.schedule,
         use_mask=False,
-        weight_fn=weight_fn,
     )
     loss = loss_fn(self.preds, self.targets, self.time)
 
@@ -76,18 +67,7 @@ class DiscreteLossTest(parameterized.TestCase):
         ),
         axis=-1,  # average over sequence length
     )
-    if weight_fn:
-      coeff = jax_helpers.flatten_non_batch_dims(
-          weight_fn(
-              schedule=self.schedule,
-              preds=self.preds,
-              targets=self.targets,
-              time=self.time,
-          )
-      )[..., 0]
-    else:
-      coeff = 1.0
-    expected_loss = -1.0 * coeff * expected_loss
+    expected_loss = -1.0 * expected_loss
 
     self.assertTrue(jnp.allclose(loss, expected_loss, atol=1e-6))
 

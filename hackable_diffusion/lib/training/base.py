@@ -34,19 +34,6 @@ Schedule = schedules.Schedule
 ################################################################################
 
 
-class WeightFn(Protocol):
-  """A schedule-dependent loss-weight term."""
-
-  def __call__(
-      self,
-      schedule: Schedule,
-      preds: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      targets: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    pass
-
-
 class DiffusionLoss(Protocol):
 
   def __call__(

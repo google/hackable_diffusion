@@ -163,7 +163,7 @@ class PredictionConverterTest(parameterized.TestCase):
 
     converted_pred = converter(pred, **kwargs)  # pytype: disable=wrong-keyword-args
     converted_target = converter(target, **kwargs)  # pytype: disable=wrong-keyword-args
-    scaled_loss = gaussian_loss.compute_continuous_diffusion_loss(
+    scaled_loss = gaussian_loss._compute_continuous_diffusion_loss(
         preds={start_type: pred},
         targets={start_type: target},
         time=time,
@@ -172,7 +172,7 @@ class PredictionConverterTest(parameterized.TestCase):
         prediction_type=start_type,
         # start_type != target_type trigger scaling
     )
-    converted_loss = gaussian_loss.compute_continuous_diffusion_loss(
+    converted_loss = gaussian_loss._compute_continuous_diffusion_loss(
         preds={target_type: converted_pred},
         targets={target_type: converted_target},
         time=time,
@@ -188,26 +188,18 @@ class PredictionConverterTest(parameterized.TestCase):
         f' {jnp.max(jnp.abs(scaled_loss - converted_loss))}',
     )
 
-  @parameterized.named_parameters(
-      ('with_convert_to_logsnr', True, None),
-      ('with_weight_fn', False, lambda schedule, preds, targets, time: 1.0),
-  )
-  def test_raises_error_if_schedule_is_none_but_required(
-      self, convert_to_logsnr_schedule, weight_fn
-  ):
+  def test_raises_error_if_schedule_is_none_but_required(self):
     """Tests that an error is raised if schedule is None but required."""
     with self.assertRaisesRegex(
         ValueError,
-        'Schedule must be provided if convert_to_logsnr_schedule or weight_fn'
-        ' is not None.',
+        'Schedule must be provided if convert_to_logsnr_schedule is True.',
     ):
-      gaussian_loss.compute_continuous_diffusion_loss(
+      gaussian_loss._compute_continuous_diffusion_loss(
           preds=self.preds,
           targets=self.targets,
           time=self.time,
           schedule=None,
-          convert_to_logsnr_schedule=convert_to_logsnr_schedule,
-          weight_fn=weight_fn,
+          convert_to_logsnr_schedule=True,
       )
 
 

@@ -47,7 +47,7 @@ GaussianSchedule = schedules.GaussianSchedule
 
 
 @kt.typechecked
-def compute_continuous_diffusion_loss(
+def _compute_continuous_diffusion_loss(
     preds: TargetInfo,
     targets: TargetInfo,
     time: TimeArray,  # pyrefly: ignore[not-a-type]
@@ -56,7 +56,6 @@ def compute_continuous_diffusion_loss(
     loss_type: GaussianPredictionType | None = None,
     prediction_type: GaussianPredictionType | None = None,
     convert_to_logsnr_schedule: bool = True,
-    weight_fn: base.WeightFn | None = None,
 ) -> LossOutput:  # pyrefly: ignore[not-a-type]
   """Compute the continuous diffusion loss.
 
@@ -69,18 +68,6 @@ def compute_continuous_diffusion_loss(
   The weight terms is the product of the following three terms:
   1. A conversion term that transforms the loss to a new prediction type.
   2. A schedule-dependent term that converts the loss to logsnr scale.
-  3. An additional weight term that takes the time as argument.
-  All three terms are optional and can be left out.
-
-  The first conversion term is only applied if `loss_type` is not None and
-  `prediction_type` is not `loss_type`. It can be interpreted as computing
-
-  Loss = (preds[loss_type] - targets[loss_type]) ** 2 * weight
-
-  with the weight term being now only the product of 2) and 3). The term 2) is
-  only applied if `convert_to_logsnr_schedule` is True. The term 3) is only
-  applied if `weight_fn` is not None.
-
   We refer to SiD2Loss for a specific implementation of the loss function with
   a Sigmoid weight function.
 
@@ -101,8 +88,6 @@ def compute_continuous_diffusion_loss(
       (Raises a ValueError if preds contains multiple prediction types).
     convert_to_logsnr_schedule: Whether to multiply the loss by -1/logsnr_der to
       make it independent of the time parametrization of the schedule.
-    weight_fn: A an optional additional weight term. Has to be a function that
-      takes the time as argument and returns a weight.
 
   Returns:
     The batched loss, i.e., a tensor of shape [B,] where B is the batch size. To
@@ -111,11 +96,10 @@ def compute_continuous_diffusion_loss(
     scalar and cannot be used for post-hoc spatial masking.
   """
 
-  if convert_to_logsnr_schedule or weight_fn:
+  if convert_to_logsnr_schedule:
     if schedule is None:
       raise ValueError(
-          "Schedule must be provided if convert_to_logsnr_schedule or weight_fn"
-          " is not None."
+          "Schedule must be provided if convert_to_logsnr_schedule is True."
       )
 
   # Auto-detect prediction type if not specified.
@@ -155,12 +139,6 @@ def compute_continuous_diffusion_loss(
     logsnr_der = jax_helpers.egrad(schedule.logsnr)(time)
     weight = -weight * logsnr_der
 
-  # Maybe multiply by other weight terms
-  if schedule is not None and weight_fn is not None:
-    weight = weight * weight_fn(
-        schedule=schedule, preds=preds, targets=targets, time=time
-    )
-
   weighted_loss = weight * l2
   weighted_loss = jax_helpers.flatten_non_batch_dims(weighted_loss)
   # We use mean as opposed to sum to make the loss dimension-agnostic.
@@ -187,7 +165,7 @@ class NoWeightGaussianLoss(base.DiffusionLoss):
       targets: TargetInfo,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> LossOutput:  # pyrefly: ignore[not-a-type]
-    return compute_continuous_diffusion_loss(
+    return _compute_continuous_diffusion_loss(
         # arrays
         preds=preds,
         targets=targets,
@@ -195,7 +173,6 @@ class NoWeightGaussianLoss(base.DiffusionLoss):
         # fixed arguments
         loss_type=None,
         convert_to_logsnr_schedule=False,
-        weight_fn=None,
         schedule=None,
         prediction_type=self.prediction_type,
     )
@@ -216,35 +193,13 @@ class SiD2Loss(base.DiffusionLoss):
       targets: TargetInfo,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> LossOutput:  # pyrefly: ignore[not-a-type]
-    def _weight_fn(
-        schedule: GaussianSchedule,
-        preds: TargetInfo,
-        targets: TargetInfo,
-        time: TimeArray,  # pyrefly: ignore[not-a-type]
-    ) -> TimeArray:  # pyrefly: ignore[not-a-type]
-      """Weight function for the sigmoid loss.
+    weight = jax.nn.sigmoid(self.schedule.logsnr(time) - self.bias) * jnp.exp(
+        self.bias
+    )
+    # Flatten to (B,) to multiply with loss
+    weight = weight.reshape((weight.shape[0],))
 
-      The weight function is defined for the `x0` prediction type, see
-      https://arxiv.org/abs/2410.19324, Equation (4), i.e., the weight is given
-      by
-
-        w_t = sigmoid(logsnr(t) - bias) * exp(bias)
-
-      Args:
-        schedule: The GaussianSchedule to use for the loss.
-        preds: Unused.
-        targets: Unused.
-        time: The time array to use for the loss.
-
-      Returns:
-        The weight function.
-      """
-      del preds, targets  # Unused
-      return jax.nn.sigmoid(schedule.logsnr(time) - self.bias) * jnp.exp(
-          self.bias
-      )
-
-    return compute_continuous_diffusion_loss(
+    loss = _compute_continuous_diffusion_loss(
         # arrays
         preds=preds,
         targets=targets,
@@ -252,11 +207,11 @@ class SiD2Loss(base.DiffusionLoss):
         # fixed arguments
         loss_type="x0",
         convert_to_logsnr_schedule=True,
-        weight_fn=_weight_fn,  # pyrefly: ignore[bad-argument-type]
         # forward arguments
         schedule=self.schedule,
         prediction_type=self.prediction_type,
     )
+    return loss * weight
 
 
 ################################################################################
