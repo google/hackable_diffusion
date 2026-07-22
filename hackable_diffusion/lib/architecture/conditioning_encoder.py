@@ -368,7 +368,8 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
   During training, the embeddings of conditioning signals can be dropped by
   setting `conditioning_dropout_rate` > 0. This would set the embeddings to
   zero. It is normally used for classifier-free guidance
-  (https://arxiv.org/abs/2207.12598).
+  (https://arxiv.org/abs/2207.12598). The conditioning encoder also returns the
+  boolean mask indicating which conditioning signals are dropped.
 
   Usage:
     ```python
@@ -385,6 +386,14 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
             time='adaptive_norm',
         ),
     )
+
+    conditioning = {'label_foo': ..., 'label_bar': ...}
+
+    out = process_conditioning(time, conditioning, is_training=True)
+
+    ###
+    out == {'adaptive_norm': ..., 'cross_attention': ..., 'conditioning_mask':
+    ...}
     ```
 
 
@@ -417,6 +426,12 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
     embedders_names_with_time = self.embedders_names | {'time'}
 
     cond_rule_names = set(self.conditioning_rules.keys())
+
+    if 'conditioning_mask' in cond_rule_names:
+      raise ValueError(
+          "'conditioning_mask' is a reserved key and cannot be used in"
+          ' `conditioning_rules`. It is automatically added to the output.'
+      )
 
     if embedders_names_with_time != cond_rule_names:
       raise ValueError(
@@ -486,6 +501,8 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
             mask, (batch_size,) + (1,) * len(emb_shape)
         )
         cond_embs[name] = jnp.where(broadcast_mask, emb, jnp.zeros_like(emb))
+    else:
+      mask = jnp.ones((batch_size,), dtype=jnp.bool)
 
     # Merge time and conditionings
     cond_embs['time'] = t_emb
@@ -498,5 +515,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
         )
       else:
         out[conditioning_mechanism] = cond_embs[name]
+
+    out['conditioning_mask'] = mask
 
     return out

@@ -35,6 +35,15 @@ ConcatEmbeddings = conditioning_encoder.ConcatEmbeddings
 
 class EncodeConditioningTest(parameterized.TestCase):
 
+  def setUp(self):
+    super().setUp()
+    self.batch_size = 4
+    self.num_features = 32
+    self.num_classes = 10
+    self.embedding_dim = 5
+    self.conditioning_dropout_rate = 0.1
+    self.rng = jax.random.PRNGKey(0)
+
   @parameterized.named_parameters(
       (
           'test1',
@@ -56,17 +65,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests basic functionality with different merging and conditioning."""
-    batch_size = 4
-    num_features = 32
-    num_classes = 10
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
     )
     label_encoder = conditioning_encoder.LabelEmbedder(
-        num_classes=num_classes, num_features=num_features
+        num_classes=self.num_classes, num_features=self.num_features
     )
     conditioning_encoders = {'label': label_encoder}
     conditioning_rules = {
@@ -79,28 +84,31 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
-    c = {'label': jnp.arange(batch_size)}
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=is_training)['params']
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size)}
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
     # Jit the apply function
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     output = jitted_apply(
-        {'params': params}, t, c, is_training=is_training, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
     )
 
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
     if isinstance(merge_embeddings_fn, SumEmbeddings):
-      expected_shape = (batch_size, num_features)
+      expected_shape = (self.batch_size, self.num_features)
     elif isinstance(merge_embeddings_fn, ConcatEmbeddings):
-      expected_shape = (batch_size, 2 * num_features)
+      expected_shape = (self.batch_size, 2 * self.num_features)
     else:
       raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
@@ -127,16 +135,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests basic functionality with different merging and conditioning."""
-    batch_size = 4
-    num_features = 32
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
     )
     label_encoder = conditioning_encoder.MLPEmbedder(
-        num_features=num_features,
+        num_features=self.num_features,
         hidden_sizes=[16, 8],
         conditioning_keys=['label'],
     )
@@ -151,28 +156,31 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
-    c = {'label': jnp.arange(batch_size, dtype=jnp.float32)}
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=is_training)['params']
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size, dtype=jnp.float32)}
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
     # Jit the apply function
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     output = jitted_apply(
-        {'params': params}, t, c, is_training=is_training, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
     )
 
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
     if isinstance(merge_embeddings_fn, SumEmbeddings):
-      expected_shape = (batch_size, num_features)
+      expected_shape = (self.batch_size, self.num_features)
     elif isinstance(merge_embeddings_fn, ConcatEmbeddings):
-      expected_shape = (batch_size, 2 * num_features)
+      expected_shape = (self.batch_size, 2 * self.num_features)
     else:
       raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
@@ -199,16 +207,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests basic functionality with different merging and conditioning."""
-    batch_size = 4
-    num_features = 32
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
     )
     multi_label_encoder = conditioning_encoder.MLPEmbedder(
-        num_features=num_features,
+        num_features=self.num_features,
         hidden_sizes=[16, 8],
         conditioning_keys=['label1', 'label2'],
     )
@@ -223,31 +228,34 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
+    t = jnp.ones((self.batch_size,))
     c = {
-        'label1': jnp.arange(batch_size, dtype=jnp.float32),
-        'label2': jnp.arange(batch_size, dtype=jnp.float32) + 1,
+        'label1': jnp.arange(self.batch_size, dtype=jnp.float32),
+        'label2': jnp.arange(self.batch_size, dtype=jnp.float32) + 1,
     }
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=is_training)['params']
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
     # Jit the apply function
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     output = jitted_apply(
-        {'params': params}, t, c, is_training=is_training, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
     )
 
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
     if isinstance(merge_embeddings_fn, SumEmbeddings):
-      expected_shape = (batch_size, num_features)
+      expected_shape = (self.batch_size, self.num_features)
     elif isinstance(merge_embeddings_fn, ConcatEmbeddings):
-      expected_shape = (batch_size, 2 * num_features)
+      expected_shape = (self.batch_size, 2 * self.num_features)
     else:
       raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
@@ -274,16 +282,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests basic functionality with different merging and conditioning."""
-    batch_size = 4
-    num_features = 32
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
     )
     label_encoder = conditioning_encoder.MLPEmbedder(
-        num_features=num_features,
+        num_features=self.num_features,
         hidden_sizes=[16, 8],
         conditioning_keys=['missing_key'],
     )
@@ -298,12 +303,11 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
-    c = {'label': jnp.arange(batch_size, dtype=jnp.float32)}
-    rng = jax.random.PRNGKey(0)
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size, dtype=jnp.float32)}
     with self.assertRaises(
         ValueError,
         msg=(
@@ -311,72 +315,15 @@ class EncodeConditioningTest(parameterized.TestCase):
             " keys: ['label']"
         ),
     ):
-      _ = encoder.init(rng, t, c, is_training=is_training)['params']
+      _ = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
   def test_field_selector_embedder(self):
     """Tests FieldSelector with CROSS_ATTENTION."""
-    batch_size = 4
-    num_features = 32
-    image_shape = (64, 64, 3)
-    conditioning_dropout_rate = 0.0
-    time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
-        activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
-    )
-    image_selector = conditioning_encoder.FieldSelector(
-        field_name='image',
-        data_spec=image_shape,
-    )
-    conditioning_encoders = {'image': image_selector}
-    conditioning_rules = {
-        'time': 'adaptive_norm',
-        'image': 'cross_attention',
-    }
-    merge_embeddings_fn = ConcatEmbeddings()
-
-    encoder = conditioning_encoder.ConditioningEncoder(
-        time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
-        merge_embeddings_fn=merge_embeddings_fn,
-        conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
-    )
-
-    t = jnp.ones((batch_size,))
-    c = {'image': jnp.ones((batch_size,) + image_shape)}
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=False)['params']
-
-    jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
-    output = jitted_apply(
-        {'params': params}, t, c, is_training=False, rngs={'dropout': rng}
-    )
-
-    self.assertIn('cross_attention', output)
-    self.assertEqual(
-        output['cross_attention'].shape,
-        (batch_size,) + image_shape,
-    )
-    self.assertTrue(
-        jnp.all(output['cross_attention'] == c['image'])
-    )
-
-    self.assertIn('adaptive_norm', output)
-    self.assertEqual(
-        output['adaptive_norm'].shape,
-        (batch_size, num_features),
-    )
-
-  def test_field_selector_embedder_fails_on_missing_key(self):
-    """Tests FieldSelector raises ValueError on missing key."""
-    batch_size = 4
-    num_features = 32
     image_shape = (64, 64, 3)
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
     )
     image_selector = conditioning_encoder.FieldSelector(
         field_name='image',
@@ -397,15 +344,69 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_dropout_rate=0.0,
     )
 
-    t = jnp.ones((batch_size,))
-    c = {'wrong_key': jnp.ones((batch_size,) + image_shape)}
-    rng = jax.random.PRNGKey(0)
+    t = jnp.ones((self.batch_size,))
+    c = {'image': jnp.ones((self.batch_size,) + image_shape)}
+    params = encoder.init(self.rng, t, c, is_training=False)['params']
+
+    jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
+    output = jitted_apply(
+        {'params': params},
+        t,
+        c,
+        is_training=False,
+        rngs={'dropout': self.rng},
+    )
+
+    self.assertIn('cross_attention', output)
+    self.assertEqual(
+        output['cross_attention'].shape,
+        (self.batch_size,) + image_shape,
+    )
+    self.assertTrue(
+        jnp.all(output['cross_attention'] == c['image'])
+    )
+
+    self.assertIn('adaptive_norm', output)
+    self.assertEqual(
+        output['adaptive_norm'].shape,
+        (self.batch_size, self.num_features),
+    )
+
+  def test_field_selector_embedder_fails_on_missing_key(self):
+    """Tests FieldSelector raises ValueError on missing key."""
+    image_shape = (64, 64, 3)
+    time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
+    )
+    image_selector = conditioning_encoder.FieldSelector(
+        field_name='image',
+        data_spec=image_shape,
+    )
+    conditioning_encoders = {'image': image_selector}
+    conditioning_rules = {
+        'time': 'adaptive_norm',
+        'image': 'cross_attention',
+    }
+    merge_embeddings_fn = ConcatEmbeddings()
+
+    encoder = conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        merge_embeddings_fn=merge_embeddings_fn,
+        conditioning_rules=conditioning_rules,
+        conditioning_dropout_rate=0.0,
+    )
+
+    t = jnp.ones((self.batch_size,))
+    c = {'wrong_key': jnp.ones((self.batch_size,) + image_shape)}
     with self.assertRaisesRegex(
         ValueError,
         'Conditioning key image not found in conditioning. Available keys:'
         " \\['wrong_key'\\]",
     ):
-      encoder.init(rng, t, c, is_training=False)
+      encoder.init(self.rng, t, c, is_training=False)
 
   @parameterized.named_parameters(
       (
@@ -426,15 +427,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests encoders with different feature dims when concatenation is used."""
-    batch_size = 4
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
+        embedding_dim=self.embedding_dim,
         num_features=time_encode_num_features,
     )
     label_encoder = conditioning_encoder.LabelEmbedder(
-        num_classes=10, num_features=label_encode_num_features
+        num_classes=self.num_classes, num_features=label_encode_num_features
     )
     conditioning_encoders = {'label': label_encoder}
     conditioning_rules = {
@@ -447,26 +446,29 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
-    c = {'label': jnp.arange(batch_size)}
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=is_training)['params']
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size)}
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
     # Jit the apply function
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     output = jitted_apply(
-        {'params': params}, t, c, is_training=is_training, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
     )
 
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
     expected_shape = (
-        batch_size,
+        self.batch_size,
         time_encode_num_features + label_encode_num_features,
     )
     self.assertEqual(conditional_embedding.shape, expected_shape)
@@ -501,15 +503,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests the unconditional case where one of the conditionings is None."""
-    batch_size = 4
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
+        embedding_dim=self.embedding_dim,
         num_features=time_encode_num_features,
     )
     label1_encoder = conditioning_encoder.LabelEmbedder(
-        num_classes=10,
+        num_classes=self.num_classes,
         num_features=label1_encode_num_features,
         conditioning_key='label1',
     )
@@ -534,29 +534,32 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
+    t = jnp.ones((self.batch_size,))
     c = {
-        'label1': jnp.arange(batch_size),
-        'label2': jnp.arange(batch_size) + 1,
+        'label1': jnp.arange(self.batch_size),
+        'label2': jnp.arange(self.batch_size) + 1,
     }
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=is_training)['params']
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
     # Jit the apply function
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     output = jitted_apply(
-        {'params': params}, t, c, is_training=is_training, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
     )
 
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
     expected_shape = (
-        batch_size,
+        self.batch_size,
         time_encode_num_features
         + label1_encode_num_features
         + label2_encode_num_features,
@@ -593,15 +596,13 @@ class EncodeConditioningTest(parameterized.TestCase):
       is_training,
   ):
     """Tests the unconditional case where one of the conditionings is None."""
-    batch_size = 4
-    conditioning_dropout_rate = 0.1
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
+        embedding_dim=self.embedding_dim,
         num_features=time_encode_num_features,
     )
     label1_encoder = conditioning_encoder.LabelEmbedder(
-        num_classes=10, num_features=label1_encode_num_features
+        num_classes=self.num_classes, num_features=label1_encode_num_features
     )
     label2_encoder = conditioning_encoder.LabelEmbedder(
         num_classes=8, num_features=label2_encode_num_features
@@ -622,26 +623,29 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
-        conditioning_dropout_rate=conditioning_dropout_rate,
+        conditioning_dropout_rate=self.conditioning_dropout_rate,
     )
 
-    t = jnp.ones((batch_size,))
+    t = jnp.ones((self.batch_size,))
     c = None
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=is_training)['params']
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
 
     # Jit the apply function
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     output = jitted_apply(
-        {'params': params}, t, c, is_training=is_training, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
     )
 
     self.assertIn(conditioning_mechanism, output)
     conditional_embedding = output[conditioning_mechanism]
 
     expected_shape = (
-        batch_size,
+        self.batch_size,
         time_encode_num_features
         + label1_encode_num_features
         + label2_encode_num_features,
@@ -650,16 +654,14 @@ class EncodeConditioningTest(parameterized.TestCase):
 
   def test_dropout(self):
     """Tests that dropout is correctly applied based on `is_training`."""
-    batch_size = 4
-    num_features = 32
     time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',
-        embedding_dim=5,
-        num_features=num_features,
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
     )
     conditioning_encoders = {
         'label': conditioning_encoder.LabelEmbedder(
-            num_classes=10, num_features=num_features
+            num_classes=self.num_classes, num_features=self.num_features
         )
     }
 
@@ -674,15 +676,18 @@ class EncodeConditioningTest(parameterized.TestCase):
         conditioning_dropout_rate=1.0,  # Drop all conditioning
     )
 
-    t = jnp.ones((batch_size,))
-    c = {'label': jnp.arange(batch_size)}
-    rng = jax.random.PRNGKey(0)
-    params = encoder.init(rng, t, c, is_training=True)['params']
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size)}
+    params = encoder.init(self.rng, t, c, is_training=True)['params']
     jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
 
     # With is_training=True, the label embedding should be all zeros.
     output_train = jitted_apply(
-        {'params': params}, t, c, is_training=True, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=True,
+        rngs={'dropout': self.rng},
     )
     time_embedding_train = time_encoder.apply(
         {'params': params['time_embedder']}, t
@@ -693,11 +698,114 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     # With is_training=False, the label embedding should not be dropped.
     output_eval = jitted_apply(
-        {'params': params}, t, c, is_training=False, rngs={'dropout': rng}
+        {'params': params},
+        t,
+        c,
+        is_training=False,
+        rngs={'dropout': self.rng},
     )
     self.assertFalse(
         jnp.all(output_eval['adaptive_norm'] == time_embedding_train)
     )
+
+  def _make_mask_test_encoder(self, conditioning_dropout_rate=0.5):
+    """Creates a ConditioningEncoder for mask tests."""
+    time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
+    )
+    conditioning_encoders = {
+        'label': conditioning_encoder.LabelEmbedder(
+            num_classes=self.num_classes,
+            num_features=self.num_features,
+        )
+    }
+    return conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        merge_embeddings_fn=SumEmbeddings(),
+        conditioning_rules={
+            'time': 'adaptive_norm',
+            'label': 'adaptive_norm',
+        },
+        conditioning_dropout_rate=conditioning_dropout_rate,
+    )
+
+  def _init_and_apply_mask_test(self, encoder, is_training):
+    """Inits params and applies the encoder for mask tests."""
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size)}
+    params = encoder.init(self.rng, t, c, is_training=is_training)['params']
+    jitted_apply = jax.jit(encoder.apply, static_argnames=['is_training'])
+    return jitted_apply(
+        {'params': params},
+        t,
+        c,
+        is_training=is_training,
+        rngs={'dropout': self.rng},
+    )
+
+  def test_conditioning_mask_present_in_output(self):
+    """Tests that `conditioning_mask` is present in the output."""
+    encoder = self._make_mask_test_encoder(conditioning_dropout_rate=0.5)
+    output = self._init_and_apply_mask_test(encoder, is_training=True)
+    self.assertIn('conditioning_mask', output)
+    self.assertEqual(output['conditioning_mask'].shape, (self.batch_size,))
+
+  def test_conditioning_mask_all_ones_at_eval(self):
+    """Tests that mask is all ones when is_training=False."""
+    encoder = self._make_mask_test_encoder(conditioning_dropout_rate=0.5)
+    # At eval time, mask should be all ones regardless of dropout rate.
+    output = self._init_and_apply_mask_test(encoder, is_training=False)
+    self.assertTrue(jnp.all(output['conditioning_mask']))
+
+  def test_conditioning_mask_all_zeros_with_full_dropout(self):
+    """Tests that mask is all zeros when dropout_rate=1.0 and is_training."""
+    encoder = self._make_mask_test_encoder(conditioning_dropout_rate=1.0)
+    # With dropout_rate=1.0 and is_training=True, mask should be all zeros.
+    output = self._init_and_apply_mask_test(encoder, is_training=True)
+    self.assertFalse(jnp.any(output['conditioning_mask']))
+
+  def test_conditioning_mask_all_ones_with_zero_dropout(self):
+    """Tests that mask is all ones when dropout_rate=0.0 and is_training."""
+    encoder = self._make_mask_test_encoder(conditioning_dropout_rate=0.0)
+    # With dropout_rate=0.0, mask should be all ones even at training time.
+    output = self._init_and_apply_mask_test(encoder, is_training=True)
+    self.assertTrue(jnp.all(output['conditioning_mask']))
+
+  def test_conditioning_mask_reserved_key_raises(self):
+    """Tests that using 'conditioning_mask' in conditioning_rules raises."""
+    time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
+        activation='silu',
+        embedding_dim=self.embedding_dim,
+        num_features=self.num_features,
+    )
+    conditioning_encoders = {
+        'label': conditioning_encoder.LabelEmbedder(
+            num_classes=self.num_classes,
+            num_features=self.num_features,
+        )
+    }
+    encoder = conditioning_encoder.ConditioningEncoder(
+        time_embedder=time_encoder,
+        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        merge_embeddings_fn=SumEmbeddings(),
+        conditioning_rules={
+            'time': 'adaptive_norm',
+            'label': 'adaptive_norm',
+            'conditioning_mask': 'adaptive_norm',
+        },
+        conditioning_dropout_rate=0.0,
+    )
+
+    t = jnp.ones((self.batch_size,))
+    c = {'label': jnp.arange(self.batch_size)}
+    with self.assertRaisesRegex(
+        ValueError,
+        "'conditioning_mask' is a reserved key",
+    ):
+      encoder.init(self.rng, t, c, is_training=False)
 
 
 if __name__ == '__main__':
