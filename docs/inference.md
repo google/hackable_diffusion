@@ -31,15 +31,15 @@ The main components are:
 
 ## `InferenceFn` Protocol
 
-(`lib/inference/base.py`)
+(`lib/hd_api.py`)
 
 The `InferenceFn` is a protocol that defines a callable with the following
 signature:
 
 ```python
 def __call__(
-    self, time: TimeTree, xt: DataTree, conditioning: Conditioning | None
-) -> TargetInfoTree:
+    self, time: TimeArray, xt: DataArray, conditioning: Conditioning | None
+) -> TargetInfo:
   ...
 ```
 
@@ -47,10 +47,10 @@ def __call__(
       * `time`: The current timestep(s).
       * `xt`: The noisy data at time `t`.
       * `conditioning`: A dictionary of conditioning signals.
-  * **Output**:
-      * A `TargetInfoTree` (a dictionary or pytree of dictionaries) containing
-        the model's predictions. For a `GaussianProcess`, this would include
-        keys like `'x0'`, `'epsilon'`, `'score'`, etc.
+*   **Output**:
+    *   A `TargetInfo` dictionary containing the model's predictions. For a
+        `GaussianProcess`, this would include keys like `'x0'`, `'epsilon'`,
+        `'score'`, etc.
 
 ## Classifier-Free Guidance
 

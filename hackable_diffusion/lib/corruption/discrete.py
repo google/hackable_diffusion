@@ -20,9 +20,9 @@ import dataclasses
 import enum
 from typing import Protocol, Sequence
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import base
 from hackable_diffusion.lib.corruption import schedules
 import jax
 import jax.numpy as jnp
@@ -46,7 +46,7 @@ DataArray = hd_typing.DataArray
 TargetInfo = hd_typing.TargetInfo
 TimeArray = hd_typing.TimeArray
 
-CorruptionProcess = base.CorruptionProcess
+CorruptionProcess = hd_api.CorruptionProcess
 DiscreteSchedule = schedules.DiscreteSchedule
 
 ################################################################################

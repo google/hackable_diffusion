@@ -54,15 +54,13 @@ from typing import cast
 
 import flax.linen as nn
 from hackable_diffusion.lib import diffusion_network
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import conditioning_encoder
-from hackable_diffusion.lib.corruption import base as corruption_base
 from hackable_diffusion.lib.inference import guidance as guidance_lib
 from hackable_diffusion.lib.inference import projection as projection_lib
-from hackable_diffusion.lib.sampling import base as sampling_base
 from hackable_diffusion.lib.sampling import time_scheduling
-from hackable_diffusion.lib.training import base as loss_base
 from hackable_diffusion.lib.training import time_sampling
 import jax
 import jax.numpy as jnp
@@ -83,6 +81,12 @@ ScheduleInfoTree = hd_typing.ScheduleInfoTree
 TargetInfoTree = hd_typing.TargetInfoTree
 TimeArray = hd_typing.TimeArray
 TimeTree = hd_typing.TimeTree
+ShapeTree = hd_typing.ShapeTree
+ConditioningShape = hd_typing.ConditioningShape
+
+
+StepInfoTree = PyTree[hd_api.StepInfo]
+DiffusionStepTree = PyTree[hd_api.DiffusionStep]
 
 
 ################################################################################
@@ -91,7 +95,7 @@ TimeTree = hd_typing.TimeTree
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedProcess(corruption_base.CorruptionProcess):
+class NestedProcess(hd_api.CorruptionProcess):
   """Wrapper for a pytree of corruption processes mapped over the data.
 
   Enables using different corruption processes for different input modalities.
@@ -113,7 +117,7 @@ class NestedProcess(corruption_base.CorruptionProcess):
       data.
   """
 
-  processes: PyTree[corruption_base.CorruptionProcess]  # pyrefly: ignore[not-a-type]
+  processes: PyTree[hd_api.CorruptionProcess]  # pyrefly: ignore[not-a-type]
 
   @kt.typechecked
   def sample_from_invariant(
@@ -192,7 +196,7 @@ class NestedProcess(corruption_base.CorruptionProcess):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NestedSamplerStep(sampling_base.SamplerStep):
+class NestedSamplerStep(hd_api.SamplerStep):
   """Wrapper for a pytree of sampler steps mapped over the data.
 
   Usage Example:
@@ -209,14 +213,14 @@ class NestedSamplerStep(sampling_base.SamplerStep):
     sampler_steps: A pytree of sampler steps matching the structure of the data.
   """
 
-  sampler_steps: PyTree[sampling_base.SamplerStep]  # pyrefly: ignore[not-a-type]
+  sampler_steps: PyTree[hd_api.SamplerStep]  # pyrefly: ignore[not-a-type]
 
   @kt.typechecked
   def initialize(
       self,
       initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
-      initial_step_info: sampling_base.StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> sampling_base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      initial_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     return jax.tree.map(
         lambda stepper, init_noise, init_step_info: stepper.initialize(
             initial_noise=init_noise,
@@ -231,9 +235,9 @@ class NestedSamplerStep(sampling_base.SamplerStep):
   def update(
       self,
       prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      current_step: sampling_base.DiffusionStepTree,  # pyrefly: ignore[not-a-type]
-      next_step_info: sampling_base.StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> sampling_base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      current_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+      next_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     return jax.tree.map(
         lambda stepper, pred, current, next_info: stepper.update(
             prediction=pred,
@@ -250,9 +254,9 @@ class NestedSamplerStep(sampling_base.SamplerStep):
   def finalize(
       self,
       prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      current_step: sampling_base.DiffusionStepTree,  # pyrefly: ignore[not-a-type]
-      last_step_info: sampling_base.StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> sampling_base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      current_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+      last_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
     return jax.tree.map(
         lambda stepper, pred, current, last_info: stepper.finalize(
             prediction=pred,
@@ -300,7 +304,7 @@ class NestedTimeSchedule(time_scheduling.TimeSchedule):
       rng: PRNGKey,
       num_steps: int,
       data_spec: DataTree,  # pyrefly: ignore[not-a-type]
-  ) -> sampling_base.StepInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> StepInfoTree:  # pyrefly: ignore[not-a-type]
     def _call_schedule(rng, time_schedule, data_spec):
       return time_schedule.all_step_infos(rng, num_steps, data_spec)
 
@@ -315,7 +319,7 @@ class NestedTimeSchedule(time_scheduling.TimeSchedule):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedDiffusionLoss(loss_base.DiffusionLoss):
+class NestedDiffusionLoss(hd_api.DiffusionLoss):
   """Wrapper for a pytree of loss functions mapped over the data.
 
   Enables using different loss functions for different input modalities.
@@ -334,7 +338,7 @@ class NestedDiffusionLoss(loss_base.DiffusionLoss):
     losses: A pytree of loss functions matching the structure of the data.
   """
 
-  losses: PyTree[loss_base.DiffusionLoss]  # pyrefly: ignore[not-a-type]
+  losses: PyTree[hd_api.DiffusionLoss]  # pyrefly: ignore[not-a-type]
 
   @kt.typechecked
   def __call__(

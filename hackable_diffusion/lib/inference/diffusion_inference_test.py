@@ -14,6 +14,7 @@
 
 """Tests for the diffusion_inference module."""
 
+import chex
 from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import test_helpers
@@ -308,6 +309,33 @@ class DiffusionInferenceTest(parameterized.TestCase):
     self.assertIn('x0', output)
     self.assertIn('x0', other_output)
     self.assertFalse(jnp.allclose(output['x0'], other_output['x0']))
+
+
+class IdentityInferenceFnTest(absltest.TestCase):
+
+  def test_predict(self):
+    process = gaussian.GaussianProcess(schedule=schedules.RFSchedule())
+    identity_inference_fn = diffusion_inference.IdentityInferenceFn(
+        process=process
+    )
+
+    xt = jnp.eye(2)
+    time = jnp.array([0.5, 0.5])
+
+    chex.assert_trees_all_equal(
+        identity_inference_fn(
+            time=time,
+            xt=xt,
+            conditioning={},
+        ),
+        dict(
+            process.convert_predictions(
+                prediction={'x0': xt},
+                xt=xt,
+                time=time,
+            )
+        ),
+    )
 
 
 if __name__ == '__main__':

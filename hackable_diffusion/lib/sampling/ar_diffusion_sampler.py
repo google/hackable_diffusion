@@ -114,7 +114,7 @@ SamplerState = dict[str, Any]
 DataArray = hd_typing.DataArray
 Conditioning = hd_typing.Conditioning
 InferenceFn = inference.InferenceFn
-DiffusionStepTree = sampling.DiffusionStepTree
+DiffusionStep = sampling.DiffusionStep
 
 ################################################################################
 # MARK: ARStateHandler
@@ -149,7 +149,7 @@ class ARStateHandler(Protocol):
 
   def update_ar_state(
       self,
-      canvas_last_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+      canvas_last_step: DiffusionStep,  # pyrefly: ignore[not-a-type]
       sampler_state: SamplerState,
   ) -> SamplerState:
     ...

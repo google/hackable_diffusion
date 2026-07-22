@@ -15,17 +15,17 @@
 """Riemannian Flow Matching sampler step."""
 
 import dataclasses
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.corruption import riemannian
-from hackable_diffusion.lib.sampling import base
 import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DataTree = hd_typing.DataTree
-TargetInfoTree = hd_typing.TargetInfoTree
+DataArray = hd_typing.DataArray
+TargetInfo = hd_typing.TargetInfo
 
 ################################################################################
 # MARK: Sampler Step
@@ -33,7 +33,7 @@ TargetInfoTree = hd_typing.TargetInfoTree
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class RiemannianFlowSamplerStep(base.SamplerStep):
+class RiemannianFlowSamplerStep(hd_api.SamplerStep):
   """Euler integration on Riemannian manifold for Flow Matching."""
 
   corruption_process: riemannian.RiemannianProcess
@@ -41,10 +41,10 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
   @kt.typechecked
   def initialize(
       self,
-      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
-      initial_step_info: base.StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
-    return base.DiffusionStep(
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
+      initial_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux={},
@@ -53,10 +53,10 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
   @kt.typechecked
   def update(
       self,
-      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      current_step: base.DiffusionStep,
-      next_step_info: base.StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      prediction: TargetInfo,  # pyrefly: ignore[not-a-type]
+      current_step: hd_api.DiffusionStep,
+      next_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
     xt = current_step.xt
     t = current_step.step_info.time
     next_t = next_step_info.time
@@ -68,7 +68,7 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
     # Euclidean update x_{t+dt} = x_t + dt * v to manifolds.
     next_xt = self.corruption_process.manifold.exp(xt, dt * v)
 
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=next_xt,
         step_info=next_step_info,
         aux={},
@@ -77,8 +77,8 @@ class RiemannianFlowSamplerStep(base.SamplerStep):
   @kt.typechecked
   def finalize(
       self,
-      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      current_step: base.DiffusionStep,
-      last_step_info: base.StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> base.DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      prediction: TargetInfo,  # pyrefly: ignore[not-a-type]
+      current_step: hd_api.DiffusionStep,
+      last_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
     return current_step

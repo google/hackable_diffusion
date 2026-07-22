@@ -163,7 +163,7 @@ class PredictionConverterTest(parameterized.TestCase):
 
     converted_pred = converter(pred, **kwargs)  # pytype: disable=wrong-keyword-args
     converted_target = converter(target, **kwargs)  # pytype: disable=wrong-keyword-args
-    scaled_loss = gaussian_loss._compute_continuous_diffusion_loss(
+    scaled_loss = gaussian_loss.compute_continuous_diffusion_loss(
         preds={start_type: pred},
         targets={start_type: target},
         time=time,
@@ -172,7 +172,7 @@ class PredictionConverterTest(parameterized.TestCase):
         prediction_type=start_type,
         # start_type != target_type trigger scaling
     )
-    converted_loss = gaussian_loss._compute_continuous_diffusion_loss(
+    converted_loss = gaussian_loss.compute_continuous_diffusion_loss(
         preds={target_type: converted_pred},
         targets={target_type: converted_target},
         time=time,
@@ -194,7 +194,7 @@ class PredictionConverterTest(parameterized.TestCase):
         ValueError,
         'Schedule must be provided if convert_to_logsnr_schedule is True.',
     ):
-      gaussian_loss._compute_continuous_diffusion_loss(
+      gaussian_loss.compute_continuous_diffusion_loss(
           preds=self.preds,
           targets=self.targets,
           time=self.time,

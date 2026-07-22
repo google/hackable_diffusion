@@ -33,11 +33,11 @@ relevant representation, for instance score, velocity, etc.
 
 import dataclasses
 
-from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.sampling import base
-from hackable_diffusion.lib.sampling import time_scheduling
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
+from hackable_diffusion.lib.corruption import gaussian
+from hackable_diffusion.lib.sampling import time_scheduling
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -51,9 +51,9 @@ PRNGKey = hd_typing.PRNGKey
 DataArray = hd_typing.DataArray
 TargetInfo = hd_typing.TargetInfo
 
-DiffusionStep = base.DiffusionStep
-StepInfo = base.StepInfo
-SamplerStep = base.SamplerStep
+DiffusionStep = hd_api.DiffusionStep
+StepInfo = hd_api.StepInfo
+SamplerStep = hd_api.SamplerStep
 
 GaussianProcess = gaussian.GaussianProcess
 TimeSchedule = time_scheduling.TimeSchedule

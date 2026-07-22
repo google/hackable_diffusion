@@ -177,7 +177,7 @@ class KauldronLossWrapper(kd.losses.Loss):
 
   # Implicitly supports `weight` and `mask` as well (see `kd.losses.Loss`).
 
-  loss: hd.training.DiffusionLoss
+  loss: hd.hd_api.DiffusionLoss
 
   @typechecked
   def get_values(

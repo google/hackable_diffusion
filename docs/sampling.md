@@ -39,7 +39,7 @@ The overall flow for `N` steps is:
 
 ## Core Data Structures
 
-(`lib/sampling/base.py`)
+(`lib/hd_api.py`)
 
 Two main data structures manage the state of the sampling loop:
 

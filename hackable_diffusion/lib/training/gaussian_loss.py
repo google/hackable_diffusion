@@ -21,10 +21,10 @@ hackable_diffusion/lib/corruption/gaussian.py for an in-depth explanation.
 import dataclasses
 from typing import Literal
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import schedules
-from hackable_diffusion.lib.training import base
 import immutabledict
 import jax
 import jax.numpy as jnp
@@ -41,13 +41,14 @@ GaussianPredictionType = Literal["x0", "epsilon", "score", "velocity", "v"]
 
 GaussianSchedule = schedules.GaussianSchedule
 
+
 ################################################################################
 # MARK: General Loss function
 ################################################################################
 
 
 @kt.typechecked
-def _compute_continuous_diffusion_loss(
+def compute_continuous_diffusion_loss(
     preds: TargetInfo,
     targets: TargetInfo,
     time: TimeArray,  # pyrefly: ignore[not-a-type]
@@ -78,9 +79,8 @@ def _compute_continuous_diffusion_loss(
     time: Time array used for noise computation.
     schedule: The GaussianSchedule to use for the loss. Should be the same as
       used by the model corruption process. Can be None if the loss is not
-      schedule dependent, i.e, convert_to_logsnr_schedule is False and weight_fn
-      is None. It might be used in the weighting function or in the conversion
-      to logSNR parameterization.
+      schedule dependent, i.e., convert_to_logsnr_schedule is False. It might be
+      used in the conversion to logSNR parameterization.
     loss_type: The type of loss to compute. Can be one of {x0, epsilon, score,
       velocity, v}. If None, defaults to prediction_type.
     prediction_type: The type of prediction to compute the loss for. If None,
@@ -153,7 +153,7 @@ def _compute_continuous_diffusion_loss(
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NoWeightGaussianLoss(base.DiffusionLoss):
+class NoWeightGaussianLoss(hd_api.DiffusionLoss):
   """Loss without weight."""
 
   prediction_type: GaussianPredictionType | None = None
@@ -165,7 +165,7 @@ class NoWeightGaussianLoss(base.DiffusionLoss):
       targets: TargetInfo,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> LossOutput:  # pyrefly: ignore[not-a-type]
-    return _compute_continuous_diffusion_loss(
+    return compute_continuous_diffusion_loss(
         # arrays
         preds=preds,
         targets=targets,
@@ -179,7 +179,7 @@ class NoWeightGaussianLoss(base.DiffusionLoss):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class SiD2Loss(base.DiffusionLoss):
+class SiD2Loss(hd_api.DiffusionLoss):
   """Sigmoid loss as in https://arxiv.org/abs/2410.19324, Equation (4)."""
 
   bias: float = 0.0
@@ -199,7 +199,7 @@ class SiD2Loss(base.DiffusionLoss):
     # Flatten to (B,) to multiply with loss
     weight = weight.reshape((weight.shape[0],))
 
-    loss = _compute_continuous_diffusion_loss(
+    loss = compute_continuous_diffusion_loss(
         # arrays
         preds=preds,
         targets=targets,

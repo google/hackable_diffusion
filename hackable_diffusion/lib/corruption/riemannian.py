@@ -17,10 +17,10 @@
 import dataclasses
 from typing import Any
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import base
+from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib.corruption import schedules
 import kauldron.ktyping as kt
 
@@ -31,7 +31,7 @@ TargetInfo = hd_typing.TargetInfo
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class RiemannianProcess(base.CorruptionProcess):
+class RiemannianProcess(hd_api.CorruptionProcess):
   """Riemannian Flow Matching corruption process.
 
   This is based on https://arxiv.org/abs/2302.03660.

@@ -28,7 +28,7 @@ The main components are:
 
 ## `CorruptionProcess` Protocol
 
-(`lib/corruption/base.py`)
+(`lib/hd_api.py`)
 
 The `CorruptionProcess` is a protocol (an interface) that all corruption
 processes must implement. It defines the following key methods:

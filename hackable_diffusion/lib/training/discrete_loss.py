@@ -15,10 +15,10 @@
 """Losses for discrete diffusion."""
 
 import dataclasses
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import schedules
-from hackable_diffusion.lib.training import base
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 import optax
@@ -115,7 +115,7 @@ def _compute_discrete_diffusion_loss(
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NoWeightDiscreteLoss(base.DiffusionLoss):
+class NoWeightDiscreteLoss(hd_api.DiffusionLoss):
   """Discrete loss without weight."""
 
   use_mask: bool = False
@@ -141,7 +141,7 @@ class NoWeightDiscreteLoss(base.DiffusionLoss):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class MD4Loss(base.DiffusionLoss):
+class MD4Loss(hd_api.DiffusionLoss):
   """MD4 loss as in https://arxiv.org/abs/2406.04329, Eq 5."""
 
   schedule: DiscreteSchedule

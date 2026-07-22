@@ -64,7 +64,7 @@ TimeTree = hd_typing.TimeTree
 class TimeSampler(Protocol):
   """Time sampler protocol operating on arrays or on pytrees."""
 
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
+  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     """Returns a time array or a pytree of time arrays.
 
     The assumption is that data_spec is either an array or a pytree. We

@@ -25,7 +25,7 @@ The main components are:
 
 ## `DiffusionLoss` Protocol
 
-(`lib/training/base.py`)
+(`lib/hd_api.py`)
 
 This protocol defines the basic interface for a diffusion loss. It's a callable
 that takes the model's predictions, the ground truth targets, and the time, and
@@ -34,10 +34,10 @@ returns a batch-wise loss.
 ```python
 def __call__(
     self,
-    preds: TargetInfoTree,
-    targets: TargetInfoTree,
-    time: TimeTree,
-) -> LossOutputTree:
+    preds: TargetInfo,
+    targets: TargetInfo,
+    time: TimeArray,
+) -> LossOutput:
   ...
 ```
 

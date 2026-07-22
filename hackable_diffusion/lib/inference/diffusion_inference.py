@@ -15,8 +15,9 @@
 """Inference class for diffusion models."""
 
 import dataclasses
+
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.inference import base
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import projection
 import kauldron.ktyping as kt
@@ -30,7 +31,34 @@ DataTree = hd_typing.DataTree
 TimeTree = hd_typing.TimeTree
 TargetInfoTree = hd_typing.TargetInfoTree
 
-InferenceFn = base.InferenceFn
+InferenceFn = hd_api.InferenceFn
+
+################################################################################
+# MARK: IdentityInferenceFn
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class IdentityInferenceFn(InferenceFn):
+  """Identity inference function that predicts x0 = xt."""
+
+  process: hd_api.CorruptionProcess
+
+  @kt.typechecked
+  def __call__(
+      self,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning | None,
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+    """Returns the model outputs."""
+    del conditioning  # unused
+    return self.process.convert_predictions(
+        prediction={"x0": xt},
+        xt=xt,
+        time=time,
+    )
+
 
 ################################################################################
 # MARK: GuidedDiffusionInferenceFn

@@ -17,7 +17,7 @@
 import dataclasses
 from typing import Any, Protocol
 
-from hackable_diffusion.lib.sampling import base
+from hackable_diffusion.lib import hd_api
 import jax
 import jax.numpy as jnp
 from kauldron.ktyping import Bool
@@ -26,7 +26,7 @@ from kauldron.ktyping import Bool
 # MARK: Type Aliases
 ################################################################################
 
-DiffusionStep = base.DiffusionStep
+DiffusionStep = hd_api.DiffusionStep
 
 
 ################################################################################

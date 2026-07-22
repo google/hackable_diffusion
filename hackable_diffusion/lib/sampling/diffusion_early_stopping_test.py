@@ -17,7 +17,7 @@
 import dataclasses
 
 import chex
-from hackable_diffusion.lib.sampling import base
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib.sampling import diffusion_early_stopping
 import jax
 import jax.numpy as jnp
@@ -32,7 +32,7 @@ from absl.testing import parameterized
 
 def _make_step_info():
   """Creates a dummy StepInfo for testing."""
-  return base.StepInfo(
+  return hd_api.StepInfo(
       step=jnp.int32(0),
       time=jnp.float32(0.5),
       rng=jax.random.PRNGKey(0),
@@ -42,9 +42,9 @@ def _make_step_info():
 def _make_diffusion_step(
     xt: jax.Array,
     aux: dict | None = None,
-) -> base.DiffusionStep:
+) -> hd_api.DiffusionStep:
   """Creates a DiffusionStep with a dummy StepInfo."""
-  return base.DiffusionStep(
+  return hd_api.DiffusionStep(
       xt=xt,
       step_info=_make_step_info(),
       aux=aux if aux is not None else {},
@@ -94,7 +94,7 @@ class DiffusionEntropyEarlyStopFnTest(parameterized.TestCase):
       self,
       logits: jax.Array,
       logits_key: str = 'logits',
-  ) -> base.DiffusionStep:
+  ) -> hd_api.DiffusionStep:
     """Helper: creates a DiffusionStep with logits in aux."""
     batch_size = logits.shape[0]
     return _make_diffusion_step(

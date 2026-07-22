@@ -16,8 +16,8 @@
 
 import dataclasses
 from typing import Protocol
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.corruption import base as corruption_base
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -64,7 +64,7 @@ def _to_x0(
     preds: TargetInfo,
     xt: DataArray,  # pyrefly: ignore[not-a-type]
     time: TimeArray,  # pyrefly: ignore[not-a-type]
-    process: corruption_base.CorruptionProcess,
+    process: hd_api.CorruptionProcess,
 ) -> tuple[str, TargetInfo]:
   """Converts the preds to x0 prediction.
 
@@ -98,7 +98,7 @@ def _from_x0(
     preds: TargetInfo,
     xt: DataArray,  # pyrefly: ignore[not-a-type]
     time: TimeArray,  # pyrefly: ignore[not-a-type]
-    process: corruption_base.CorruptionProcess,
+    process: hd_api.CorruptionProcess,
     prediction_type: str,
 ) -> TargetInfo:
   """Converts the x0 prediction to prediction type.
@@ -160,7 +160,7 @@ class StaticThresholdProjectionFn(ProjectionFn):
 
   min_value: float = -1.0
   max_value: float = 1.0
-  process: corruption_base.CorruptionProcess
+  process: hd_api.CorruptionProcess
 
   def __post_init__(self):
     if self.min_value > self.max_value:
@@ -199,7 +199,7 @@ class DynamicThresholdProjectionFn(ProjectionFn):
   """
 
   percentile: float = 95.0
-  process: corruption_base.CorruptionProcess
+  process: hd_api.CorruptionProcess
 
   def __post_init__(self):
     if self.percentile < 0.0 or self.percentile > 100.0:

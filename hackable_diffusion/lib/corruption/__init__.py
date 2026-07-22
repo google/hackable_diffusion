@@ -15,7 +15,6 @@
 """API for corruption processes."""
 
 # pylint: disable=g-importing-member
-from hackable_diffusion.lib.corruption.base import CorruptionProcess
 from hackable_diffusion.lib.corruption.discrete import CategoricalProcess
 from hackable_diffusion.lib.corruption.discrete import IdentityPostCorruptionFn
 from hackable_diffusion.lib.corruption.discrete import PostCorruptionFn
@@ -43,5 +42,6 @@ from hackable_diffusion.lib.corruption.simplicial import SimplicialPostCorruptio
 from hackable_diffusion.lib.corruption.simplicial import SimplicialProcess
 from hackable_diffusion.lib.corruption.simplicial import SimplicialSchedule
 from hackable_diffusion.lib.corruption.simplicial import SymmetricSimplicialPostCorruptionFn
+from hackable_diffusion.lib.hd_api import CorruptionProcess
 
 # pylint: enable=g-importing-member

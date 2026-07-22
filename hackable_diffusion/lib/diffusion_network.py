@@ -50,6 +50,7 @@ ConditioningShape = hd_typing.ConditioningShape
 Shape = hd_typing.Shape
 ShapeTree = hd_typing.ShapeTree
 
+
 ################################################################################
 # MARK: Rescalers
 ################################################################################
@@ -79,11 +80,11 @@ class ConditionalBackbone(Protocol):
 
   def __call__(
       self,
-      x: DataTree,  # pyrefly: ignore[not-a-type]
+      x: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> DataTree:  # pyrefly: ignore[not-a-type]
+  ) -> DataArray:  # pyrefly: ignore[not-a-type]
     ...
 
 
@@ -92,11 +93,11 @@ class BaseDiffusionNetwork(Protocol):
 
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     ...
 
 

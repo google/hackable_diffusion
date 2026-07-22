@@ -15,9 +15,9 @@
 """Tests for discrete step sampler."""
 
 import chex
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import schedules
-from hackable_diffusion.lib.sampling import base as sampling_base
 from hackable_diffusion.lib.sampling import discrete_step_sampler
 import jax
 import jax.numpy as jnp
@@ -29,8 +29,8 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-DiffusionStep = sampling_base.DiffusionStep
-StepInfo = sampling_base.StepInfo
+DiffusionStep = hd_api.DiffusionStep
+StepInfo = hd_api.StepInfo
 CategoricalProcess = discrete.CategoricalProcess
 UnMaskingStep = discrete_step_sampler.UnMaskingStep
 

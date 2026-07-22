@@ -19,6 +19,7 @@ from unittest import mock
 import chex
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib import multimodal
@@ -27,7 +28,6 @@ from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import projection
-from hackable_diffusion.lib.sampling import base
 from hackable_diffusion.lib.sampling import discrete_step_sampler
 from hackable_diffusion.lib.sampling import gaussian_step_sampler
 from hackable_diffusion.lib.sampling import time_scheduling
@@ -206,13 +206,13 @@ class NestedSamplerStepTest(parameterized.TestCase):
         },
     }
     self.step_info = {
-        'data_continuous': base.StepInfo(
+        'data_continuous': hd_api.StepInfo(
             time=jnp.array((0.5,)),
             step=jnp.array(0),
             rng=jax.random.PRNGKey(0),
         ),
         'modality': {
-            'data_discrete': base.StepInfo(
+            'data_discrete': hd_api.StepInfo(
                 time=jnp.array((0.5,)),
                 step=jnp.array(0),
                 rng=jax.random.PRNGKey(0),
@@ -220,13 +220,13 @@ class NestedSamplerStepTest(parameterized.TestCase):
         },
     }
     self.next_step_info = {
-        'data_continuous': base.StepInfo(
+        'data_continuous': hd_api.StepInfo(
             time=jnp.array((0.7,)),
             step=jnp.array(1),
             rng=jax.random.PRNGKey(1),
         ),
         'modality': {
-            'data_discrete': base.StepInfo(
+            'data_discrete': hd_api.StepInfo(
                 time=jnp.array((0.7,)),
                 step=jnp.array(1),
                 rng=jax.random.PRNGKey(1),
@@ -234,13 +234,13 @@ class NestedSamplerStepTest(parameterized.TestCase):
         },
     }
     self.diffusion_step = {
-        'data_continuous': base.DiffusionStep(
+        'data_continuous': hd_api.DiffusionStep(
             xt=self.xt['data_continuous'],
             step_info=self.step_info['data_continuous'],
             aux=dict(),
         ),
         'modality': {
-            'data_discrete': base.DiffusionStep(
+            'data_discrete': hd_api.DiffusionStep(
                 xt=self.xt['modality']['data_discrete'],
                 step_info=self.step_info['modality']['data_discrete'],
                 aux={

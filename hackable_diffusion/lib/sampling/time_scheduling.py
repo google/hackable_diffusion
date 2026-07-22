@@ -26,9 +26,9 @@ the diffusion literature.
 import dataclasses
 from typing import Protocol
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.sampling import base as sampling_base
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -42,8 +42,7 @@ PyTree = hd_typing.PyTree
 DataArray = hd_typing.DataArray
 DataTree = hd_typing.DataTree
 
-StepInfoTree = sampling_base.StepInfoTree
-StepInfo = sampling_base.StepInfo
+StepInfo = hd_api.StepInfo
 
 ################################################################################
 # MARK: Protocols
@@ -57,8 +56,8 @@ class TimeSchedule(Protocol):
       self,
       rng: PRNGKey,
       num_steps: int,
-      data_spec: DataTree,  # pyrefly: ignore[not-a-type]
-  ) -> StepInfoTree:  # pyrefly: ignore[not-a-type]
+      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
+  ) -> StepInfo:  # pyrefly: ignore[not-a-type]
     """Returns all the step infos for a given number of steps.
 
     We refer to sampling.py for the more details on the use of all the step

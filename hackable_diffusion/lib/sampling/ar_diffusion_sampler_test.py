@@ -17,8 +17,8 @@
 import dataclasses
 from typing import Any
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib.sampling import ar_diffusion_sampler
-from hackable_diffusion.lib.sampling import base as sampling_base
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -147,12 +147,12 @@ class MockCanvasSampler:
   update_conditioning_fn: None = None
 
   def __call__(self, inference_fn, rng, initial_noise, conditioning=None):
-    step_info = sampling_base.StepInfo(
+    step_info = hd_api.StepInfo(
         step=jnp.int32(0),
         time=jnp.float32(0.0),
         rng=rng,
     )
-    last_step = sampling_base.DiffusionStep(
+    last_step = hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=step_info,
         aux=None,

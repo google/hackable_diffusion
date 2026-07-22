@@ -15,7 +15,6 @@
 """API for diffusion losses."""
 
 # pylint: disable=g-importing-member
-from hackable_diffusion.lib.training.base import DiffusionLoss
 from hackable_diffusion.lib.training.discrete_loss import MD4Loss
 from hackable_diffusion.lib.training.discrete_loss import NoWeightDiscreteLoss
 from hackable_diffusion.lib.training.gaussian_loss import NoWeightGaussianLoss

@@ -22,14 +22,14 @@ It defines a sampling loop that orchestrates three key components:
 
 import dataclasses
 from typing import Protocol
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.inference import base as inference_base
-from hackable_diffusion.lib.sampling import base
 from hackable_diffusion.lib.sampling import diffusion_early_stopping
 from hackable_diffusion.lib.sampling import time_scheduling
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
+
 
 ################################################################################
 # MARK: Type Aliases
@@ -43,14 +43,12 @@ DataTree = hd_typing.DataTree
 DataArray = hd_typing.DataArray
 TimeTree = hd_typing.TimeTree
 
-DiffusionStepTree = base.DiffusionStepTree
-DiffusionStep = base.DiffusionStep
-SamplerStep = base.SamplerStep
-StepInfoTree = base.StepInfoTree
+DiffusionStep = hd_api.DiffusionStep
+StepInfo = hd_api.StepInfo
+SamplerStep = hd_api.SamplerStep
 
-InferenceFn = inference_base.InferenceFn
+InferenceFn = hd_api.InferenceFn
 TimeSchedule = time_scheduling.TimeSchedule
-UpdateConditioningFn = base.UpdateConditioningFn
 DiffusionEarlyStoppingFn = diffusion_early_stopping.DiffusionEarlyStoppingFn
 
 ################################################################################
@@ -58,16 +56,28 @@ DiffusionEarlyStoppingFn = diffusion_early_stopping.DiffusionEarlyStoppingFn
 ################################################################################
 
 
-class SampleFn(Protocol):
-  """A protocol for a sampling function."""
+class UpdateConditioningFn(Protocol):
+  """Protocol for updating conditioning during the sampling loop.
+
+  This allows injecting step-dependent information back into the conditioning
+  dict between sampling steps (e.g. self-conditioning logits from the
+  previous prediction).
+  """
 
   def __call__(
       self,
-      inference_fn: InferenceFn,
-      rng: PRNGKey,
-      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:  # pyrefly: ignore[not-a-type]
+      step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+  ) -> Conditioning:
+    """Update conditioning based on the current diffusion step.
+
+    Args:
+      conditioning: The current conditioning dict.
+      step_carry: The current diffusion step state.
+
+    Returns:
+      The updated conditioning dict.
+    """
     ...
 
 
@@ -102,11 +112,11 @@ def _concat_pytree(
 
 def _is_diffusion_leaf(x: PyTree) -> bool:  # pyrefly: ignore[not-a-type]
   """Returns True if the leaf is a DiffusionStep."""
-  return isinstance(x, base.DiffusionStep)
+  return isinstance(x, hd_api.DiffusionStep)
 
 
 def _get_input_inference_fn(
-    step_carry: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+    step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
 ) -> tuple[DataTree, TimeTree]:  # pyrefly: ignore[not-a-type]
   """Returns the input to the inference function for a given step."""
   xt = jax.tree.map(
@@ -128,10 +138,10 @@ def _index_pytree(pytree: PyTree, idx: int) -> PyTree:  # pyrefly: ignore[not-a-
 
 
 def _freeze_done_elements(
-    new_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
-    old_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
+    new_step: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+    old_step: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
     done: jax.Array,
-) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+) -> PyTree[DiffusionStep]:  # pyrefly: ignore[not-a-type]
   """Keeps old values for batch elements that are already done.
 
   For each leaf array with a leading batch dimension, elements where
@@ -140,12 +150,12 @@ def _freeze_done_elements(
   are passed through from ``new_step`` unchanged.
 
   Args:
-    new_step: The freshly computed DiffusionStepTree.
-    old_step: The previous DiffusionStepTree (carry from last iteration).
+    new_step: The freshly computed PyTree[DiffusionStep].
+    old_step: The previous PyTree[DiffusionStep] (carry from last iteration).
     done: Bool array of shape ``[batch_size]``.
 
   Returns:
-    A DiffusionStepTree where done elements are frozen.
+    A PyTree[DiffusionStep] where done elements are frozen.
   """
   batch_size = done.shape[0]
 
@@ -165,7 +175,7 @@ def _freeze_done_elements(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class DiffusionSampler(SampleFn):
+class DiffusionSampler(hd_api.SampleFn):
   """Returns a sampling function.
 
   Attributes:
@@ -193,7 +203,7 @@ class DiffusionSampler(SampleFn):
       rng: PRNGKey,
       initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None = None,
-  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:  # pyrefly: ignore[not-a-type]
+  ) -> tuple[PyTree[DiffusionStep], PyTree[DiffusionStep] | None]:  # pyrefly: ignore[not-a-type]
     """Performs a full reverse diffusion sampling loop for a single sample.
 
     This function orchestrates the denoising process, starting from an initial
@@ -207,8 +217,8 @@ class DiffusionSampler(SampleFn):
 
     Returns:
       A tuple containing:
-        - The final `DiffusionStepTree` of the sampling process.
-        - A `DiffusionStepTree` PyTree containing the full trajectory of all
+        - The final `PyTree[DiffusionStep]` of the sampling process.
+        - A `PyTree[DiffusionStep]` PyTree containing the full trajectory of all
         steps, or None if `store_trajectory` is False.
     """
     if self.num_steps < 2:
@@ -229,7 +239,7 @@ class DiffusionSampler(SampleFn):
         first_step_info,
     )
 
-    def _step(step_carry: DiffusionStepTree, next_step_info: StepInfoTree):  # pyrefly: ignore[not-a-type]
+    def _step(step_carry: PyTree[DiffusionStep], next_step_info: PyTree[StepInfo]):  # pyrefly: ignore[not-a-type]
       xt, time = _get_input_inference_fn(step_carry)
       updated_conditioning = conditioning
       if self.update_conditioning_fn is not None:
@@ -287,7 +297,7 @@ class DiffusionSampler(SampleFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class DiffusionSamplerWithEarlyStopping(SampleFn):
+class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
   """Samples via reverse diffusion using ``jax.lax.while_loop``.
 
   This sampler replaces ``jax.lax.scan`` with ``jax.lax.while_loop`` which

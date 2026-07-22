@@ -18,7 +18,7 @@ import dataclasses
 from typing import Callable
 
 import chex
-from hackable_diffusion.lib.sampling import base
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib.sampling import diffusion_early_stopping
 from hackable_diffusion.lib.sampling import sampling
 from hackable_diffusion.lib.sampling import time_scheduling
@@ -33,7 +33,7 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-SamplerStep = base.SamplerStep
+SamplerStep = hd_api.SamplerStep
 
 ################################################################################
 # MARK: Helper Functions
@@ -50,21 +50,21 @@ invert = lambda x: 1.0 - x
 class DummyStep(SamplerStep):
 
   def initialize(self, initial_noise, initial_step_info):
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(),
     )
 
   def update(self, prediction, current_step, next_step_info):
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=shift_right(prediction['x0']),
         step_info=next_step_info,
         aux=dict(),
     )
 
   def finalize(self, prediction, current_step, next_step_info):
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=invert(prediction['x0']),
         step_info=next_step_info,
         aux=dict(),
@@ -83,7 +83,7 @@ class DummyStepWithLogits(SamplerStep):
   logits_fn: Callable[..., jax.Array]
 
   def initialize(self, initial_noise, initial_step_info):
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux={'logits': self.logits_fn(initial_noise)},
@@ -91,7 +91,7 @@ class DummyStepWithLogits(SamplerStep):
 
   def update(self, prediction, current_step, next_step_info):
     new_xt = shift_right(prediction['x0'])
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux={'logits': self.logits_fn(new_xt)},
@@ -99,7 +99,7 @@ class DummyStepWithLogits(SamplerStep):
 
   def finalize(self, prediction, current_step, next_step_info):
     new_xt = invert(prediction['x0'])
-    return base.DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux={'logits': self.logits_fn(new_xt)},
@@ -894,7 +894,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
     class StepWithCustomKey(SamplerStep):
 
       def initialize(self, initial_noise, initial_step_info):
-        return base.DiffusionStep(
+        return hd_api.DiffusionStep(
             xt=initial_noise,
             step_info=initial_step_info,
             aux={'my_logits': confident_logits(initial_noise)},
@@ -902,7 +902,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
 
       def update(self, prediction, current_step, next_step_info):
         new_xt = shift_right(prediction['x0'])
-        return base.DiffusionStep(
+        return hd_api.DiffusionStep(
             xt=new_xt,
             step_info=next_step_info,
             aux={'my_logits': confident_logits(new_xt)},
@@ -910,7 +910,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
 
       def finalize(self, prediction, current_step, next_step_info):
         new_xt = invert(prediction['x0'])
-        return base.DiffusionStep(
+        return hd_api.DiffusionStep(
             xt=new_xt,
             step_info=next_step_info,
             aux={'my_logits': confident_logits(new_xt)},
@@ -947,7 +947,7 @@ class FreezeDoneElementsTest(parameterized.TestCase):
   """Tests for _freeze_done_elements."""
 
   def _make_step_info(self):
-    return base.StepInfo(
+    return hd_api.StepInfo(
         step=jnp.int32(0),
         time=jnp.float32(0.5),
         rng=jax.random.PRNGKey(0),
@@ -957,10 +957,10 @@ class FreezeDoneElementsTest(parameterized.TestCase):
     """When no elements are done, new_step passes through unchanged."""
     new_xt = jnp.array([[1.0, 2.0], [3.0, 4.0]])
     old_xt = jnp.array([[5.0, 6.0], [7.0, 8.0]])
-    new_step = base.DiffusionStep(
+    new_step = hd_api.DiffusionStep(
         xt=new_xt, step_info=self._make_step_info(), aux={}
     )
-    old_step = base.DiffusionStep(
+    old_step = hd_api.DiffusionStep(
         xt=old_xt, step_info=self._make_step_info(), aux={}
     )
     done = jnp.array([False, False])
@@ -971,10 +971,10 @@ class FreezeDoneElementsTest(parameterized.TestCase):
     """When all elements are done, old_step values are kept."""
     new_xt = jnp.array([[1.0, 2.0], [3.0, 4.0]])
     old_xt = jnp.array([[5.0, 6.0], [7.0, 8.0]])
-    new_step = base.DiffusionStep(
+    new_step = hd_api.DiffusionStep(
         xt=new_xt, step_info=self._make_step_info(), aux={}
     )
-    old_step = base.DiffusionStep(
+    old_step = hd_api.DiffusionStep(
         xt=old_xt, step_info=self._make_step_info(), aux={}
     )
     done = jnp.array([True, True])
@@ -985,10 +985,10 @@ class FreezeDoneElementsTest(parameterized.TestCase):
     """Only done elements are frozen; active elements use new values."""
     new_xt = jnp.array([[1.0, 2.0], [3.0, 4.0]])
     old_xt = jnp.array([[5.0, 6.0], [7.0, 8.0]])
-    new_step = base.DiffusionStep(
+    new_step = hd_api.DiffusionStep(
         xt=new_xt, step_info=self._make_step_info(), aux={}
     )
-    old_step = base.DiffusionStep(
+    old_step = hd_api.DiffusionStep(
         xt=old_xt, step_info=self._make_step_info(), aux={}
     )
     done = jnp.array([True, False])
@@ -998,18 +998,18 @@ class FreezeDoneElementsTest(parameterized.TestCase):
 
   def test_scalar_leaves_pass_through(self):
     """Scalar/non-batch leaves should pass through from new_step."""
-    new_step = base.DiffusionStep(
+    new_step = hd_api.DiffusionStep(
         xt=jnp.array([[1.0, 2.0]]),
-        step_info=base.StepInfo(
+        step_info=hd_api.StepInfo(
             step=jnp.int32(10),
             time=jnp.float32(0.5),
             rng=jax.random.PRNGKey(1),
         ),
         aux={},
     )
-    old_step = base.DiffusionStep(
+    old_step = hd_api.DiffusionStep(
         xt=jnp.array([[5.0, 6.0]]),
-        step_info=base.StepInfo(
+        step_info=hd_api.StepInfo(
             step=jnp.int32(5),
             time=jnp.float32(0.9),
             rng=jax.random.PRNGKey(0),

@@ -144,9 +144,9 @@ from __future__ import annotations
 
 import dataclasses
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import base
 from hackable_diffusion.lib.corruption import schedules
 import immutabledict
 import jax
@@ -165,7 +165,7 @@ TimeArray = hd_typing.TimeArray
 TargetInfo = hd_typing.TargetInfo
 
 GaussianSchedule = schedules.GaussianSchedule
-CorruptionProcess = base.CorruptionProcess
+CorruptionProcess = hd_api.CorruptionProcess
 
 ################################################################################
 # MARK: GaussianProcess

@@ -19,9 +19,8 @@ from typing import Protocol
 from flax import nnx
 import flax.linen as nn
 from flax.nnx import bridge
-
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
-from hackable_diffusion.lib.inference import base
 import jax
 import kauldron.ktyping as kt
 
@@ -36,7 +35,7 @@ DataTree = hd_typing.DataTree
 TargetInfoTree = hd_typing.TargetInfoTree
 TimeTree = hd_typing.TimeTree
 
-InferenceFn = base.InferenceFn
+InferenceFn = hd_api.InferenceFn
 
 
 ################################################################################
