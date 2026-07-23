@@ -101,8 +101,8 @@ class Unet(nn.Module):
   attention_rope_positions_fn: RoPEPositionsFn
 
   # normalization
-  uncond_norm_strategy: normalization.UnconditionalNormStrategy
-  cond_norm_strategy: normalization.ConditionalNormStrategy
+  uncond_norm_strategy: normalization.NormStrategy
+  cond_norm_strategy: normalization.NormStrategy
 
   # other
   activation: str

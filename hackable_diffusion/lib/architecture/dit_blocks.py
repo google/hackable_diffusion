@@ -134,7 +134,7 @@ class DiTBlock(nn.Module):
   """
 
   hidden_size: int
-  norm_strategy: normalization.ConditionalNormStrategy
+  norm_strategy: normalization.NormStrategy
   attention_heads_spec: attention.AttentionHeadsSpec
   use_gates: bool = True
   ffn_type: mlp_blocks.FFNType = 'swiglu'
@@ -263,9 +263,7 @@ class DiTBlockFlux(DiTBlock):
   zero-init output projections in attention and FFN to ensure identity-at-init.
   """
 
-  norm_strategy: normalization.ConditionalNormStrategy = dataclasses.field(
-      init=False
-  )
+  norm_strategy: normalization.NormStrategy = dataclasses.field(init=False)
   use_gates: bool = dataclasses.field(init=False, default=False)
   zero_init_output: bool = dataclasses.field(init=False, default=True)
   attention_normalize_qk: bool = dataclasses.field(init=False, default=True)
@@ -285,9 +283,7 @@ class DiTBlockSD3(DiTBlock):
   adaptive conditioning and zero-init gates on residual branches.
   """
 
-  norm_strategy: normalization.ConditionalNormStrategy = dataclasses.field(
-      init=False
-  )
+  norm_strategy: normalization.NormStrategy = dataclasses.field(init=False)
   use_gates: bool = dataclasses.field(init=False, default=True)
   zero_init_output: bool = dataclasses.field(init=False, default=False)
   attention_normalize_qk: bool = dataclasses.field(init=False, default=True)
@@ -307,9 +303,7 @@ class DiTBlockAdaLNZero(DiTBlock):
   shift adaptive conditioning and zero-init gates on residual branches.
   """
 
-  norm_strategy: normalization.ConditionalNormStrategy = dataclasses.field(
-      init=False
-  )
+  norm_strategy: normalization.NormStrategy = dataclasses.field(init=False)
   use_gates: bool = dataclasses.field(init=False, default=True)
   zero_init_output: bool = dataclasses.field(init=False, default=False)
   attention_normalize_qk: bool = dataclasses.field(init=False, default=False)

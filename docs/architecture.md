@@ -52,8 +52,7 @@ provided in `conditioning_encoder.py`:
     to have the same shape.
   * `ConcatEmbeddings()`: Embeddings are concatenated along the last axis.
 
-The type alias `MergeEmbeddingsFn = Union[SumEmbeddings, ConcatEmbeddings]` is
-available for type annotations.
+The Protocol `MergeEmbeddingsFn` is available for type annotations.
 
 ### Resampling and Skip Connections
 
@@ -165,17 +164,17 @@ notebook demonstrates its usage.
 
 (`lib/diffusion_network.py`)
 
-The **`DiffusionNetwork`** class is the primary entry point for constructing a
-complete diffusion model. It composes a backbone (e.g., `Unet` or `DiT`) with a
-`ConditioningEncoder` into a single Flax module that conforms to the
-`BaseDiffusionNetwork` protocol.
+The **`StandardDiffusionNetwork`** class is the primary entry point for
+constructing a complete diffusion model. It composes a backbone (e.g., `Unet` or
+`DiT`) with a `StandardConditioningEncoder` into a single Flax module that
+conforms to the `DiffusionNetwork` protocol.
 
-  * **`DiffusionNetwork`**: Single-modal model. Takes `(time, xt,
+*   **`StandardDiffusionNetwork`**: Single-modal model. Takes `(time, xt,
     conditioning)` and internally runs the conditioning encoder, applies any
     input/time rescaling, and calls the backbone.
-  * **`MultiModalDiffusionNetwork`**: Generalizes `DiffusionNetwork` to
-    multi-modal PyTree data, allowing different prediction types and data
-    dtypes per leaf.
+*   **`MultiModalDiffusionNetwork`**: Generalizes `StandardDiffusionNetwork` to
+    multi-modal PyTree data, allowing different prediction types and data dtypes
+    per leaf.
   * **`SelfConditioningDiffusionNetwork`**: Adds self-conditioning, where the
     model receives its own previous prediction as an additional input.
 
@@ -263,7 +262,7 @@ It supports modern features like:
 The conditioning system is designed to handle multiple sources of conditioning
 and route them to different parts of the model.
 
-### `ConditioningEncoder`
+### `StandardConditioningEncoder`
 
 (`lib/architecture/conditioning_encoder.py`)
 
@@ -295,7 +294,7 @@ both adaptive normalization and cross-attention.
 import jax
 import jax.numpy as jnp
 from hackable_diffusion.lib.architecture.conditioning_encoder import (
-    ConditioningEncoder, SinusoidalTimeEmbedder, LabelEmbedder,
+    StandardConditioningEncoder, SinusoidalTimeEmbedder, LabelEmbedder,
     SumEmbeddings)
 
 key = jax.random.PRNGKey(0)
@@ -311,8 +310,8 @@ label_embedder_xattn = LabelEmbedder(
     num_classes=10, num_features=512, conditioning_key='label')
 
 
-# 2. Instantiate the ConditioningEncoder
-conditioning_encoder = ConditioningEncoder(
+# 2. Instantiate the StandardConditioningEncoder
+conditioning_encoder = StandardConditioningEncoder(
     time_embedder=time_embedder,
     conditioning_embedders={
         'label_adanorm': label_embedder_adanorm,

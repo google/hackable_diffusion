@@ -22,7 +22,7 @@ These modules do not cover all possible usecases, but rather provide a reference
 """
 
 import dataclasses
-from typing import Protocol, Sequence, Union
+from typing import Protocol, Sequence
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.architecture import mlp_blocks
@@ -40,48 +40,18 @@ Float = hd_typing.Float
 Num = hd_typing.Num
 
 ################################################################################
-# MARK: Base Classes
+# MARK: Time Embedders
 ################################################################################
 
 
-class BaseTimeEmbedder(Protocol):
+class TimeEmbedder(Protocol):
   """Protocol for a time embedder."""
 
   def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
     ...
 
 
-class BaseEmbedder(Protocol):
-  """Protocol for a conditioning embedder."""
-
-  @property
-  def output_shape(self) -> tuple[int, ...]:
-    ...
-
-  def __call__(
-      self, conditioning: hd_typing.Conditioning
-  ) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
-    ...
-
-
-class BaseConditioningEncoder(Protocol):
-  """Protocol for a conditioning encoder."""
-
-  def __call__(
-      self,
-      time: hd_typing.TimeArray,  # pyrefly: ignore[not-a-type]
-      conditioning: hd_typing.Conditioning | None,
-      is_training: bool,
-  ) -> hd_typing.ConditioningEmbeddings:
-    ...
-
-
-################################################################################
-# MARK: Time Embedders
-################################################################################
-
-
-class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class SinusoidalTimeEmbedder(nn.Module, TimeEmbedder):
   """Sinusoidal time embedder.
 
   This module encodes the time step `t` into a dense embedding.
@@ -133,7 +103,7 @@ class SinusoidalTimeEmbedder(nn.Module, BaseTimeEmbedder):
     return t_emb
 
 
-class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class ZeroTimeEmbedder(nn.Module, TimeEmbedder):
   """Time embedder that returns zeros.
 
   This allows to train models without time conditioning.
@@ -149,7 +119,7 @@ class ZeroTimeEmbedder(nn.Module, BaseTimeEmbedder):
     return jnp.zeros((time.shape[0], self.num_features))
 
 
-class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
+class IdentityTimeEmbedder(nn.Module, TimeEmbedder):
   """Time embedder that returns time without any transformation."""
 
   @kt.typechecked
@@ -162,7 +132,20 @@ class IdentityTimeEmbedder(nn.Module, BaseTimeEmbedder):
 ################################################################################
 
 
-class LabelEmbedder(nn.Module, BaseEmbedder):
+class ConditioningEmbedder(Protocol):
+  """Protocol for a conditioning embedder."""
+
+  @property
+  def output_shape(self) -> tuple[int, ...]:
+    ...
+
+  def __call__(
+      self, conditioning: hd_typing.Conditioning
+  ) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+    ...
+
+
+class LabelEmbedder(nn.Module, ConditioningEmbedder):
   """Embedder for integer labels.
 
   Attributes:
@@ -203,7 +186,7 @@ class LabelEmbedder(nn.Module, BaseEmbedder):
     )(integer_inputs)
 
 
-class LinearEmbedder(nn.Module, BaseEmbedder):
+class LinearEmbedder(nn.Module, ConditioningEmbedder):
   """Linear embedding.
 
   This module encodes an input into a dense embedding by applying a linear
@@ -249,7 +232,7 @@ class LinearEmbedder(nn.Module, BaseEmbedder):
     )(inputs)
 
 
-class MLPEmbedder(nn.Module, BaseEmbedder):
+class MLPEmbedder(nn.Module, ConditioningEmbedder):
   """MLP embedding.
 
   This module encodes an input into a dense embedding by applying a MLP.
@@ -303,7 +286,7 @@ class MLPEmbedder(nn.Module, BaseEmbedder):
     return mlp_module(all_inputs, is_training=False)
 
 
-class FieldSelector(nn.Module, BaseEmbedder):
+class FieldSelector(nn.Module, ConditioningEmbedder):
   """Identity embedder.
 
   This module returns one input without any transformation.
@@ -334,8 +317,27 @@ class FieldSelector(nn.Module, BaseEmbedder):
 
 
 ################################################################################
-# MARK: Process and Combine Time and Conditioning Signals
+# MARK: Conditioning Encoder
 ################################################################################
+
+
+class ConditioningEncoder(Protocol):
+  """Protocol for a conditioning encoder."""
+
+  def __call__(
+      self,
+      time: hd_typing.TimeArray,  # pyrefly: ignore[not-a-type]
+      conditioning: hd_typing.Conditioning | None,
+      is_training: bool,
+  ) -> hd_typing.ConditioningEmbeddings:
+    ...
+
+
+class MergeEmbeddingsFn(Protocol):
+  """Protocol for merging two embeddings."""
+
+  def __call__(self, x: jax.Array, y: jax.Array) -> jax.Array:
+    ...
 
 
 @dataclasses.dataclass(frozen=True)
@@ -354,10 +356,7 @@ class ConcatEmbeddings:
     return jnp.concatenate([x, y], axis=-1)
 
 
-MergeEmbeddingsFn = Union[SumEmbeddings, ConcatEmbeddings]
-
-
-class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
+class StandardConditioningEncoder(nn.Module, ConditioningEncoder):
   """Encodes and combines time and conditioning signals for a diffusion model.
 
   This module orchestrates the transformation of raw time and a dictionary
@@ -373,7 +372,7 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
 
   Usage:
     ```python
-    process_conditioning = ConditioningEncoder(
+    process_conditioning = StandardConditioningEncoder(
         time_embedder=SinusoidalTimeEmbedder(...),
         conditioning_embedders=dict(
             label_foo=LabelEmbedder(...),
@@ -414,8 +413,8 @@ class ConditioningEncoder(nn.Module, BaseConditioningEncoder):
       signals.
   """
 
-  time_embedder: BaseTimeEmbedder
-  conditioning_embedders: dict[str, BaseEmbedder]
+  time_embedder: TimeEmbedder
+  conditioning_embedders: dict[str, ConditioningEmbedder]
   merge_embeddings_fn: MergeEmbeddingsFn
   conditioning_rules: hd_typing.ConditioningEmbeddings
   conditioning_dropout_rate: float = 0.0

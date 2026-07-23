@@ -88,7 +88,7 @@ class ConditionalBackbone(Protocol):
     ...
 
 
-class BaseDiffusionNetwork(Protocol):
+class DiffusionNetwork(Protocol):
   """Base diffusion network."""
 
   def __call__(
@@ -101,7 +101,7 @@ class BaseDiffusionNetwork(Protocol):
     ...
 
 
-class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
+class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
   """Diffusion network.
 
   This class is responsible for orchestrating the different components of the
@@ -132,7 +132,7 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   """
 
   backbone_network: ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder
   prediction_type: str
   data_dtype: DType = jnp.float32
   input_rescaler: InputRescaler | None = None
@@ -207,7 +207,7 @@ class DiffusionNetwork(nn.Module, BaseDiffusionNetwork):
 ################################################################################
 
 
-class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
+class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
   """DiffusionNetwork with self-conditioning on predicted logits.
 
   Implements self-conditioning from the discrete diffusion literature
@@ -246,7 +246,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   """
 
   backbone_network: ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder
   prediction_type: str
   process: discrete.CategoricalProcess | simplicial.SimplicialProcess
   self_cond_prob: float = 0.5
@@ -370,7 +370,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
 ################################################################################
 
 
-class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
+class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
   """Multi-modal diffusion network.
 
   This DiffusionNetwork is a generalization of the DiffusionNetwork to
@@ -397,7 +397,7 @@ class MultiModalDiffusionNetwork(nn.Module, BaseDiffusionNetwork):
   """
 
   backbone_network: ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder
   prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
   data_dtype: PyTree[DType]  # pyrefly: ignore[not-a-type]
   input_rescaler: PyTree[InputRescaler | None] | None = None  # pyrefly: ignore[not-a-type]

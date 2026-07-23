@@ -56,14 +56,14 @@ Float = hd_typing.Float
 Int = hd_typing.Int
 
 
-BaseProjector = discrete.BaseProjector
+TokenProjector = discrete.TokenProjector
 
 ################################################################################
 # MARK: Probability Embedder
 ################################################################################
 
 
-class BaseLogitEmbedder(Protocol):
+class LogitEmbedder(Protocol):
   """Protocol for probability embedders."""
 
   embedding_dim: int
@@ -74,7 +74,7 @@ class BaseLogitEmbedder(Protocol):
     ...
 
 
-class DenseEmbedder(nn.Module, BaseLogitEmbedder):
+class DenseLogitEmbedder(nn.Module, LogitEmbedder):
   """Probability embedder that uses a dense layer.
 
   Attributes:
@@ -142,8 +142,8 @@ class ConditionalSimplicialBackbone(nn.Module):
   """
 
   base_backbone: 'diffusion_network.ConditionalBackbone'
-  logit_embedder: BaseLogitEmbedder
-  logit_projector: BaseProjector
+  logit_embedder: LogitEmbedder
+  logit_projector: TokenProjector
 
   def __post_init__(self):
     super().__post_init__()

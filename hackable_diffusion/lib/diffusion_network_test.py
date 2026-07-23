@@ -117,7 +117,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
         embedding_dim=16,
         num_features=32,
     )
-    self.cond_encoder = conditioning_encoder.ConditioningEncoder(
+    self.cond_encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=self.time_encoder,
         conditioning_embedders={
             'label_foo': conditioning_encoder.LabelEmbedder(
@@ -190,7 +190,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
   ):
     """Tests DiffusionNetwork output shape."""
 
-    network = diffusion_network.DiffusionNetwork(
+    network = diffusion_network.StandardDiffusionNetwork(
         backbone_network=self.backbone,
         conditioning_encoder=self.cond_encoder,
         prediction_type='x0',
@@ -225,7 +225,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
 
     discrete_backbone = discrete.ConditionalDiscreteBackbone(
         base_backbone=self.backbone,
-        token_embedder=discrete.TokenEmbedder(
+        token_embedder=discrete.DenseTokenEmbedder(
             process_num_categories=process_num_categories,
             embedding_dim=16,
             adapt_to_image_like_data=True,
@@ -237,7 +237,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
         ),
     )
 
-    layer = diffusion_network.DiffusionNetwork(
+    layer = diffusion_network.StandardDiffusionNetwork(
         backbone_network=discrete_backbone,
         conditioning_encoder=self.cond_encoder,
         prediction_type='logits',
@@ -323,7 +323,7 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
         embedding_dim=16,
         num_features=32,
     )
-    self.cond_encoder = conditioning_encoder.ConditioningEncoder(
+    self.cond_encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=self.time_encoder,
         conditioning_embedders={
             'label': conditioning_encoder.LabelEmbedder(
@@ -603,7 +603,7 @@ class MultiModalDiffusionNetworkTest(parameterized.TestCase):
       raise ValueError(f'Unknown input type {input_type}')
 
     time_encoder = multimodal.NestedTimeEmbedder(time_embedders=time_embedders)
-    cond_encoder = conditioning_encoder.ConditioningEncoder(
+    cond_encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders={
             'label_foo': conditioning_encoder.LabelEmbedder(
@@ -686,7 +686,7 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
         'data_2': {'data_3': time_encoder_2},
     }
     time_encoder = multimodal.NestedTimeEmbedder(time_embedders=time_embedders)
-    self.nested_cond_encoder = conditioning_encoder.ConditioningEncoder(
+    self.nested_cond_encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders={
             'label_foo': conditioning_encoder.LabelEmbedder(

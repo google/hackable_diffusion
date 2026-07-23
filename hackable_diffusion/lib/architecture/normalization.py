@@ -24,7 +24,7 @@ so we insert singleton spatial dims to broadcast over spatial axes.
 """
 
 import dataclasses
-from typing import Union
+from typing import Protocol
 
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
@@ -124,8 +124,15 @@ class _NormalizationLayer(nn.Module):
 ################################################################################
 
 
+class NormStrategy(Protocol):
+  """Protocol for both conditional and unconditional normalization strategies."""
+
+  def build_layer(self, name: str | None = None) -> nn.Module:
+    ...
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class RMSNormStrategy:
+class RMSNormStrategy(NormStrategy):
   """Unconditional RMS Normalization strategy."""
 
   epsilon: float = 1e-5
@@ -145,7 +152,7 @@ class RMSNormStrategy:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class ConditionalRMSNormStrategy:
+class ConditionalRMSNormStrategy(NormStrategy):
   """Conditional RMS Normalization strategy."""
 
   epsilon: float = 1e-5
@@ -167,7 +174,7 @@ class ConditionalRMSNormStrategy:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class LayerNormStrategy:
+class LayerNormStrategy(NormStrategy):
   """Unconditional Layer Normalization strategy."""
 
   epsilon: float = 1e-5
@@ -191,7 +198,7 @@ class LayerNormStrategy:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class ConditionalLayerNormStrategy:
+class ConditionalLayerNormStrategy(NormStrategy):
   """Conditional Layer Normalization strategy."""
 
   epsilon: float = 1e-5
@@ -216,7 +223,7 @@ class ConditionalLayerNormStrategy:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class GroupNormStrategy:
+class GroupNormStrategy(NormStrategy):
   """Unconditional Group Normalization strategy."""
 
   num_groups: int
@@ -241,7 +248,7 @@ class GroupNormStrategy:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class ConditionalGroupNormStrategy:
+class ConditionalGroupNormStrategy(NormStrategy):
   """Conditional Group Normalization strategy."""
 
   num_groups: int
@@ -264,20 +271,3 @@ class ConditionalGroupNormStrategy:
         ),
         name=name or "ConditionalGroupNorm",
     )
-
-
-################################################################################
-# MARK: Strategy Type Unions
-################################################################################
-
-UnconditionalNormStrategy = Union[
-    RMSNormStrategy, LayerNormStrategy, GroupNormStrategy
-]
-
-ConditionalNormStrategy = Union[
-    ConditionalRMSNormStrategy,
-    ConditionalLayerNormStrategy,
-    ConditionalGroupNormStrategy,
-]
-
-NormStrategy = Union[UnconditionalNormStrategy, ConditionalNormStrategy]

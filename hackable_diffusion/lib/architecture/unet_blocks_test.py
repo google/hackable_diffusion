@@ -37,7 +37,7 @@ ResampleType = Literal['down', 'up'] | None
 
 def _get_norm_strategy(
     normalization_type: str,
-) -> tuple[normalization.NormStrategy, normalization.ConditionalNormStrategy]:
+) -> tuple[normalization.NormStrategy, normalization.NormStrategy]:
   if normalization_type == 'default_group_norm':
     uncond = normalization.GroupNormStrategy(num_groups=4)
     cond = normalization.ConditionalGroupNormStrategy(

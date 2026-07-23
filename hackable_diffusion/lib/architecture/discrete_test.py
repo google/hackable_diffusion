@@ -36,7 +36,6 @@ from absl.testing import parameterized
 ################################################################################
 
 
-
 ################################################################################
 # MARK: Tests
 ################################################################################
@@ -96,7 +95,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
         skip_connection_fn=unet_blocks.UnnormalizedAddSkip(),
     )
 
-  # TokenEmbedder tests
+  # DenseTokenEmbedder tests
   @parameterized.parameters(
       itertools.product(
           # embedding_dim
@@ -110,8 +109,8 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
       embedding_dim: int,
       process_num_categories: int,
   ):
-    """Tests the output shape of the TokenEmbedder."""
-    token_embedder = discrete.TokenEmbedder(
+    """Tests the output shape of the DenseTokenEmbedder."""
+    token_embedder = discrete.DenseTokenEmbedder(
         process_num_categories=process_num_categories,
         embedding_dim=embedding_dim,
     )
@@ -150,7 +149,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
       num_categories: int,
   ):
     """Tests the output shape of the MLP."""
-    token_embedder = discrete.TokenEmbedder(
+    token_embedder = discrete.DenseTokenEmbedder(
         process_num_categories=process_num_categories,
         embedding_dim=embedding_dim,
         adapt_to_image_like_data=True,
@@ -204,7 +203,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
       adapt_to_image_like_data: bool,
   ):
     """Tests the output shape of the MLP."""
-    token_embedder = discrete.TokenEmbedder(
+    token_embedder = discrete.DenseTokenEmbedder(
         process_num_categories=process_num_categories,
         embedding_dim=embedding_dim,
         adapt_to_image_like_data=adapt_to_image_like_data,
@@ -249,7 +248,7 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
     num_categories = 16
     adapt_to_image_like_data = True
 
-    token_embedder = discrete.TokenEmbedder(
+    token_embedder = discrete.DenseTokenEmbedder(
         process_num_categories=process_num_categories,
         embedding_dim=embedder_embedding_dim,
         adapt_to_image_like_data=adapt_to_image_like_data,

@@ -15,11 +15,10 @@
 """Sequence embeddings."""
 
 import dataclasses
-from typing import Sequence, Union
+from typing import Protocol, Sequence
 
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
-
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -33,7 +32,6 @@ import numpy as np
 Float = hd_typing.Float
 Int = hd_typing.Int
 Num = hd_typing.Num
-
 
 
 ################################################################################
@@ -115,8 +113,17 @@ class RandomFourierSequenceEmbedding(nn.Module):
 ################################################################################
 
 
+class RoPEPositionsFn(Protocol):
+  """Protocol for RoPE position functions."""
+
+  def __call__(
+      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
+  ) -> Sequence[Int["*batch sequence"]]:  # pyrefly: ignore[not-a-type]
+    ...
+
+
 @dataclasses.dataclass(frozen=True)
-class LinearRoPEPositions:
+class LinearRoPEPositions(RoPEPositionsFn):
   """Computes 1D linear positions for Rotary Position Embeddings (RoPE)."""
 
   @kt.typechecked
@@ -133,7 +140,7 @@ class LinearRoPEPositions:
 
 
 @dataclasses.dataclass(frozen=True)
-class SquareRoPEPositions:
+class SquareRoPEPositions(RoPEPositionsFn):
   """Computes 2D square grid positions for Rotary Position Embeddings (RoPE)."""
 
   @kt.typechecked
@@ -161,9 +168,6 @@ class SquareRoPEPositions:
     # [*b, t]
 
     return (position_x, position_y)
-
-
-RoPEPositionsFn = Union[LinearRoPEPositions, SquareRoPEPositions]
 
 
 ################################################################################

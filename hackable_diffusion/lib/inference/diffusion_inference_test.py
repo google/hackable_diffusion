@@ -131,7 +131,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
         embedding_dim=16,
         num_features=32,
     )
-    self.cond_encoder = conditioning_encoder.ConditioningEncoder(
+    self.cond_encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=self.time_encoder,
         conditioning_embedders=CONDITIONING_ENCODER,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
@@ -154,7 +154,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
   ):
     """Tests DiffusionNetwork create_inference_fn."""
 
-    layer = diffusion_network.DiffusionNetwork(
+    layer = diffusion_network.StandardDiffusionNetwork(
         backbone_network=self.backbone,
         conditioning_encoder=self.cond_encoder,
         prediction_type='x0',
@@ -203,7 +203,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
       input_rescaler: The input rescaler to use for the diffusion model.
     """
 
-    layer = diffusion_network.DiffusionNetwork(
+    layer = diffusion_network.StandardDiffusionNetwork(
         backbone_network=self.backbone,
         conditioning_encoder=self.cond_encoder,
         prediction_type='x0',
@@ -268,7 +268,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
       input_rescaler: The input rescaler to use for the diffusion model.
     """
 
-    layer = diffusion_network.DiffusionNetwork(
+    layer = diffusion_network.StandardDiffusionNetwork(
         backbone_network=self.backbone,
         conditioning_encoder=self.cond_encoder,
         prediction_type='x0',

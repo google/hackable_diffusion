@@ -61,7 +61,7 @@ def get_config():
       num_features=cfg.ref.aux.cond_embedding_dim,
       conditioning_key="label",
   )
-  conditioning_encoder = hd.architecture.ConditioningEncoder(
+  conditioning_encoder = hd.architecture.StandardConditioningEncoder(
       time_embedder=time_encoder,
       conditioning_embedders={
           "label": label_encoder,
@@ -111,7 +111,7 @@ def get_config():
       time_sampler=hd.training.time_sampling.UniformTimeSampler(
           span=hd.jax_helpers.SafeSpan(safety_epsilon=1e-4)
       ),
-      network=hd.diffusion_network.DiffusionNetwork(
+      network=hd.diffusion_network.StandardDiffusionNetwork(
           prediction_type="velocity",
           backbone_network=backbone_network,
           conditioning_encoder=conditioning_encoder,

@@ -58,7 +58,7 @@ around the key concepts of diffusion models.
 This module contains the building blocks for neural networks. It provides
 flexible backbones like a conditional `Unet` and `MLP`, as well as a powerful
 system for encoding and injecting conditioning signals via
-`ConditioningEncoder`.
+`StandardConditioningEncoder`.
 
 ### [Corruption Processes](./corruption.md)
 

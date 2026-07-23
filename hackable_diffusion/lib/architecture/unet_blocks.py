@@ -16,7 +16,7 @@
 
 import dataclasses
 import functools
-from typing import Callable, Union
+from typing import Callable, Protocol
 import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.architecture import attention
@@ -38,8 +38,8 @@ RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
 
 
-BaseInput = Float["batch height width input_channels"]
-BaseOutput = Float["batch height width output_channels"]
+SpatialInput = Float["batch height width input_channels"]
+SpatialOutput = Float["batch height width output_channels"]
 UpsampleOutput = Float["batch height*2 width*2 output_channels"]
 DownsampleOutput = Float["batch height/2 width/2 output_channels"]
 
@@ -61,8 +61,37 @@ Conv1x1 = functools.partial(nn.Conv, kernel_size=(1, 1), padding="SAME")
 ################################################################################
 
 
+class SkipConnectionFn(Protocol):
+  """Protocol for skip connection functions."""
+
+  def __call__(
+      self,
+      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+      skip: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
+    ...
+
+
+class DownsampleFn(Protocol):
+  """Protocol for downsample functions."""
+
+  def __call__(
+      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
+    ...
+
+
+class UpsampleFn(Protocol):
+  """Protocol for upsample functions."""
+
+  def __call__(
+      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
+  ) -> Float["batch height*2 width*2 channels"]:  # pyrefly: ignore[not-a-type]
+    ...
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class UnnormalizedAddSkip:
+class UnnormalizedAddSkip(SkipConnectionFn):
   """Unnormalized addition skip connection (x + skip)."""
 
   @kt.typechecked
@@ -75,7 +104,7 @@ class UnnormalizedAddSkip:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NormalizedAddSkip:
+class NormalizedAddSkip(SkipConnectionFn):
   """Normalized addition skip connection ((x + skip) / sqrt(2))."""
 
   @kt.typechecked
@@ -88,7 +117,7 @@ class NormalizedAddSkip:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class MaxPoolDownsample:
+class MaxPoolDownsample(DownsampleFn):
   """Max pooling downsample function."""
 
   window_shape: tuple[int, int] = (2, 2)
@@ -102,7 +131,7 @@ class MaxPoolDownsample:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class AvgPoolDownsample:
+class AvgPoolDownsample(DownsampleFn):
   """Average pooling downsample function."""
 
   window_shape: tuple[int, int] = (2, 2)
@@ -116,7 +145,7 @@ class AvgPoolDownsample:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class ImageResizeUpsample:
+class ImageResizeUpsample(UpsampleFn):
   """Image resizing upsample function."""
 
   resize_method: str
@@ -129,11 +158,6 @@ class ImageResizeUpsample:
         (x.shape[0], 2 * x.shape[1], 2 * x.shape[2], x.shape[3]),
         method=self.resize_method,
     )
-
-
-SkipConnectionFn = Union[UnnormalizedAddSkip, NormalizedAddSkip]
-DownsampleFn = Union[MaxPoolDownsample, AvgPoolDownsample]
-UpsampleFn = Union[ImageResizeUpsample]
 
 
 ################################################################################
@@ -156,7 +180,7 @@ class InputConvBlock(nn.Module):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, x: BaseInput) -> BaseOutput:  # pyrefly: ignore[not-a-type]
+  def __call__(self, x: SpatialInput) -> SpatialOutput:  # pyrefly: ignore[not-a-type]
     x = Conv3x3(
         padding="SAME",
         features=self.num_output_channels,
@@ -195,7 +219,7 @@ class OutputConvBlock(nn.Module):
 
   @nn.compact
   @kt.typechecked
-  def __call__(self, x: BaseInput) -> BaseOutput:  # pyrefly: ignore[not-a-type]
+  def __call__(self, x: SpatialInput) -> SpatialOutput:  # pyrefly: ignore[not-a-type]
     """Projects the output tensor."""
 
     x = self.norm(x)
@@ -229,7 +253,7 @@ class ConvResidualBlock(nn.Module):
   """
 
   uncond_norm_strategy: normalization.NormStrategy
-  cond_norm_strategy: normalization.ConditionalNormStrategy
+  cond_norm_strategy: normalization.NormStrategy
   output_channels: int
   activation_fn: ActivationFn
   skip_connection_fn: SkipConnectionFn
@@ -250,10 +274,10 @@ class ConvResidualBlock(nn.Module):
   @kt.typechecked
   def __call__(
       self,
-      x: BaseInput,  # pyrefly: ignore[not-a-type]
+      x: SpatialInput,  # pyrefly: ignore[not-a-type]
       adaptive_norm_emb: Float["batch emb_dim"],  # pyrefly: ignore[not-a-type]
       is_training: bool,
-  ) -> BaseOutput | UpsampleOutput | DownsampleOutput:
+  ) -> SpatialOutput | UpsampleOutput | DownsampleOutput:
     input_channels = x.shape[-1]
     skip = x
     x = self.norm(x)

@@ -29,7 +29,7 @@ ConcatEmbeddings = conditioning_encoder.ConcatEmbeddings
 
 
 ################################################################################
-# MARK: Tests
+# MARK: Conditioning Encoder
 ################################################################################
 
 
@@ -79,7 +79,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -151,7 +151,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -223,7 +223,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -298,7 +298,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -336,7 +336,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     }
     merge_embeddings_fn = ConcatEmbeddings()
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -391,7 +391,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     }
     merge_embeddings_fn = ConcatEmbeddings()
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -441,7 +441,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -529,7 +529,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label_bar': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -618,7 +618,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         'label2': conditioning_mechanism,
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=merge_embeddings_fn,
@@ -665,7 +665,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         )
     }
 
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=SumEmbeddings(),
@@ -721,7 +721,7 @@ class EncodeConditioningTest(parameterized.TestCase):
             num_features=self.num_features,
         )
     }
-    return conditioning_encoder.ConditioningEncoder(
+    return conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=SumEmbeddings(),
@@ -787,7 +787,7 @@ class EncodeConditioningTest(parameterized.TestCase):
             num_features=self.num_features,
         )
     }
-    encoder = conditioning_encoder.ConditioningEncoder(
+    encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
         conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
         merge_embeddings_fn=SumEmbeddings(),

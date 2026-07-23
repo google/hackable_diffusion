@@ -31,12 +31,12 @@ DType = hd_typing.DType
 Float = hd_typing.Float
 Int = hd_typing.Int
 
-################################################################################
+
 # MARK: Token Embedder
 ################################################################################
 
 
-class BaseTokenEmbedder(Protocol):
+class TokenEmbedder(Protocol):
   """Protocol for token embedders."""
 
   embedding_dim: int
@@ -47,7 +47,7 @@ class BaseTokenEmbedder(Protocol):
     ...
 
 
-class TokenEmbedder(nn.Module, BaseTokenEmbedder):
+class DenseTokenEmbedder(nn.Module, TokenEmbedder):
   """Token embedder that uses a dense layer.
 
   Attributes:
@@ -116,7 +116,7 @@ class TokenEmbedder(nn.Module, BaseTokenEmbedder):
 ################################################################################
 
 
-class BaseProjector(Protocol):
+class TokenProjector(Protocol):
   """Protocol for projectors."""
 
   embedding_dim: int
@@ -127,7 +127,7 @@ class BaseProjector(Protocol):
     ...
 
 
-class DenseProjector(nn.Module, BaseProjector):
+class DenseProjector(nn.Module, TokenProjector):
   """Projector that uses a dense layer.
 
   Attributes:
@@ -192,8 +192,8 @@ class ConditionalDiscreteBackbone(nn.Module):
   """
 
   base_backbone: 'diffusion_network.ConditionalBackbone'
-  token_embedder: BaseTokenEmbedder
-  token_projector: BaseProjector
+  token_embedder: TokenEmbedder
+  token_projector: TokenProjector
 
   def __post_init__(self):
     super().__post_init__()

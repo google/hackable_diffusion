@@ -56,8 +56,8 @@ class Config:
   # attention
   self_attention_bool: tuple[bool, ...] = (False, True)
   cross_attention_bool: tuple[bool, ...] = (False, True)
-  attention_heads_spec: attention.AttentionHeadsSpec = attention.AttentionHeadsSpec(
-      head_dim=16
+  attention_heads_spec: attention.AttentionHeadsSpec = (
+      attention.AttentionHeadsSpec(head_dim=16)
   )
   attention_normalize_qk: bool = True
   attention_use_rope: bool = False
@@ -67,7 +67,7 @@ class Config:
   uncond_norm_strategy: normalization.NormStrategy = (
       normalization.GroupNormStrategy(num_groups=4)
   )
-  cond_norm_strategy: normalization.ConditionalNormStrategy = (
+  cond_norm_strategy: normalization.NormStrategy = (
       normalization.ConditionalGroupNormStrategy(
           num_groups=4,
           use_shift=True,

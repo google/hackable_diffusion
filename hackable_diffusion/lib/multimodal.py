@@ -365,7 +365,7 @@ class NestedDiffusionLoss(hd_api.DiffusionLoss):
 ################################################################################
 
 
-class NestedTimeEmbedder(nn.Module, conditioning_encoder.BaseTimeEmbedder):
+class NestedTimeEmbedder(nn.Module, conditioning_encoder.TimeEmbedder):
   """Wrapper for a pytree of time embedders mapped over the time tree.
 
   Per-modality time embeddings are summed to produce a single embedding.
@@ -389,7 +389,7 @@ class NestedTimeEmbedder(nn.Module, conditioning_encoder.BaseTimeEmbedder):
       data.
   """
 
-  time_embedders: PyTree[conditioning_encoder.BaseTimeEmbedder]  # pyrefly: ignore[not-a-type]
+  time_embedders: PyTree[conditioning_encoder.TimeEmbedder]  # pyrefly: ignore[not-a-type]
 
   @nn.compact
   @kt.typechecked
@@ -579,7 +579,7 @@ class JointNestedTimeSampler(time_sampling.TimeSampler):
 
 
 class NestedSelfConditioningDiffusionNetwork(
-    nn.Module, diffusion_network.BaseDiffusionNetwork
+    nn.Module, diffusion_network.DiffusionNetwork
 ):
   """Multi-modal DiffusionNetwork with self-conditioning on predicted logits.
 
@@ -602,7 +602,7 @@ class NestedSelfConditioningDiffusionNetwork(
   """
 
   backbone_network: diffusion_network.ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.BaseConditioningEncoder
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder
   prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
   processes: NestedProcess
   self_cond_prob: float = 0.5
