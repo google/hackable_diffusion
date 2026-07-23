@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import dataclasses
-import enum
 from typing import Protocol, Sequence
 
 from hackable_diffusion.lib import hd_api
@@ -48,22 +47,7 @@ TimeArray = hd_typing.TimeArray
 
 CorruptionProcess = hd_api.CorruptionProcess
 DiscreteSchedule = schedules.DiscreteSchedule
-
-################################################################################
-# MARK: Enums
-################################################################################
-
-
-class SamplingPrecisionMode(enum.StrEnum):
-  """Sampling precision mode.
-
-  See
-  https://docs.jax.dev/en/latest/_autosummary/jax.random.choice.html#jax.random.choice
-  for more details about how `mode` is used in random samplers.
-  """
-
-  HIGH = 'high'
-  LOW = 'low'
+PrecisionMode = jax_helpers.PrecisionMode
 
 
 ################################################################################
@@ -155,10 +139,11 @@ class CategoricalProcess(CorruptionProcess):
       It projects the labels on a new space. For instance in the case of the
       adjacency graph, we use a symmetric projection function, so that the noisy
       labels are also symmetric.
-    mode: The mode to use in `jax.random.choice` and `jax.random.bernoulli`. Can
-      be set to "high" or "low" for how many bits to use in the Gumbel sampler.
-      See https://jax.readthedocs.io/en/latest/jax.random.html#jax.random.choice
-      for more information.
+    precision_mode: The precision mode to use in `jax.random.choice` and
+      `jax.random.bernoulli`. Can be set to "high" or "low" for how many bits to
+      use in the Gumbel sampler. See
+      https://jax.readthedocs.io/en/latest/jax.random.html#jax.random.choice for
+        more information.
   """
 
   schedule: DiscreteSchedule
@@ -166,7 +151,7 @@ class CategoricalProcess(CorruptionProcess):
   num_categories: int
   unused_token: int = UNUSED_TOKEN
   post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn()
-  mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH
+  precision_mode: PrecisionMode = PrecisionMode.HIGH
 
   def __post_init__(self):
     if (
@@ -224,7 +209,7 @@ class CategoricalProcess(CorruptionProcess):
         a=self.process_num_categories,
         p=self.invariant_probs_vec,
         shape=data_spec.shape,
-        mode=self.mode,
+        mode=self.precision_mode,
     )
 
   @kt.typechecked
@@ -280,7 +265,7 @@ class CategoricalProcess(CorruptionProcess):
     # corrupted and False if it is corrupted.
     mask_key, noise_key = jax.random.split(key)
     is_not_corrupted = jax.random.bernoulli(
-        mask_key, p=alpha_bcast, mode=self.mode
+        mask_key, p=alpha_bcast, mode=self.precision_mode
     )
 
     # compute noise vector
@@ -346,7 +331,7 @@ class CategoricalProcess(CorruptionProcess):
       num_categories: int,
       unused_token: int = UNUSED_TOKEN,
       post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn(),
-      mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH,
+      precision_mode: PrecisionMode = PrecisionMode.HIGH,
   ) -> CategoricalProcess:
     """Create a CategoricalProcess from a schedule and invariant probs."""
     if num_categories < 1:
@@ -361,7 +346,7 @@ class CategoricalProcess(CorruptionProcess):
         num_categories=num_categories,
         unused_token=unused_token,
         post_corruption_fn=post_corruption_fn,
-        mode=mode,
+        precision_mode=precision_mode,
     )
 
   @classmethod
@@ -371,7 +356,7 @@ class CategoricalProcess(CorruptionProcess):
       num_categories: int,
       unused_token: int = UNUSED_TOKEN,
       post_corruption_fn: PostCorruptionFn = IdentityPostCorruptionFn(),
-      mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH,
+      precision_mode: PrecisionMode = PrecisionMode.HIGH,
   ) -> CategoricalProcess:
     """Create a CategoricalProcess from a schedule and invariant probs."""
     if num_categories < 1:
@@ -385,8 +370,9 @@ class CategoricalProcess(CorruptionProcess):
         num_categories=num_categories,
         unused_token=unused_token,
         post_corruption_fn=post_corruption_fn,
-        mode=mode,
+        precision_mode=precision_mode,
     )
+
 
 ################################################################################
 # MARK: Helper Functions

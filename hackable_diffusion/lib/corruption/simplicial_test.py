@@ -157,26 +157,28 @@ class SimplicialProcessTest(parameterized.TestCase):
       raise ValueError(f'Unknown process type: {process_type}')
 
   @parameterized.named_parameters(
-      ('masking_high', 'masking', simplicial.SamplingPrecisionMode.HIGH),
-      ('masking_low', 'masking', simplicial.SamplingPrecisionMode.LOW),
-      ('uniform_high', 'uniform', simplicial.SamplingPrecisionMode.HIGH),
-      ('uniform_low', 'uniform', simplicial.SamplingPrecisionMode.LOW),
+      ('masking_high', 'masking', simplicial.PrecisionMode.HIGH),
+      ('masking_low', 'masking', simplicial.PrecisionMode.LOW),
+      ('uniform_high', 'uniform', simplicial.PrecisionMode.HIGH),
+      ('uniform_low', 'uniform', simplicial.PrecisionMode.LOW),
   )
-  def test_corrupt_at_t1_with_mode(self, process_type, mode):
+  def test_corrupt_at_t1_with_precision_mode(
+      self, process_type, precision_mode
+  ):
     # At t=1, alpha=0, so xt should be pure noise.
     if process_type == 'masking':
       process = simplicial.SimplicialProcess(
           schedule=self.schedule,
           invariant_probs=[0.0] * self.num_categories + [1.0],
           num_categories=self.num_categories,
-          mode=mode,
+          precision_mode=precision_mode,
       )
     elif process_type == 'uniform':
       process = simplicial.SimplicialProcess(
           schedule=self.schedule,
           invariant_probs=[1.0 / self.num_categories] * self.num_categories,
           num_categories=self.num_categories,
-          mode=mode,
+          precision_mode=precision_mode,
       )
     else:
       raise ValueError(f'Unknown process type: {process_type}')

@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import dataclasses
-import enum
 from typing import Protocol, Sequence
 
 from hackable_diffusion.lib import fast_random
@@ -48,23 +47,8 @@ TargetInfo = hd_typing.TargetInfo
 TimeArray = hd_typing.TimeArray
 
 CorruptionProcess = hd_api.CorruptionProcess
+PrecisionMode = jax_helpers.PrecisionMode
 SimplicialSchedule = schedules.SimplicialSchedule
-
-################################################################################
-# MARK: Enums
-################################################################################
-
-
-class SamplingPrecisionMode(enum.StrEnum):
-  """Sampling precision mode.
-
-  See
-  https://docs.jax.dev/en/latest/_autosummary/jax.random.choice.html#jax.random.choice
-  for more details about how `mode` is used in random samplers.
-  """
-
-  HIGH = 'high'
-  LOW = 'low'
 
 
 ################################################################################
@@ -186,10 +170,11 @@ class SimplicialProcess(CorruptionProcess):
       the same as process_num_categories).
     temperature: The temperature parameter of the Dirichlet distribution. This
       parameter controls the sharpness of the distribution.
-    mode: The mode to use in `jax.random.choice` and `jax.random.bernoulli`. Can
-      be set to "high" or "low" for how many bits to use in the Gumbel sampler.
-      See https://jax.readthedocs.io/en/latest/jax.random.html#jax.random.choice
-      for more information.
+    precision_mode: The precision mode to use in `jax.random.categorical` and
+      other JAX random samplers. Can be set to "high" or "low" for how many bits
+      to use in the Gumbel sampler. See
+      https://jax.readthedocs.io/en/latest/jax.random.html#jax.random.choice for
+        more information.
     safety_epsilon: A small constant added to the denominator of the h-function
       to avoid division by zero.
     post_corruption_fn: A projection applied to the corrupted log-prob array
@@ -203,7 +188,7 @@ class SimplicialProcess(CorruptionProcess):
   num_categories: int
   unused_token: int = UNUSED_TOKEN
   temperature: float = 1.0
-  mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH
+  precision_mode: PrecisionMode = PrecisionMode.HIGH
   safety_epsilon: float = 1e-6
   post_corruption_fn: SimplicialPostCorruptionFn = (
       IdentitySimplicialPostCorruptionFn()
@@ -366,7 +351,7 @@ class SimplicialProcess(CorruptionProcess):
       num_categories: int,
       unused_token: int = UNUSED_TOKEN,
       temperature: float = 1.0,
-      mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH,
+      precision_mode: PrecisionMode = PrecisionMode.HIGH,
       safety_epsilon: float = 1e-6,
       post_corruption_fn: SimplicialPostCorruptionFn = IdentitySimplicialPostCorruptionFn(),
   ) -> SimplicialProcess:
@@ -383,7 +368,7 @@ class SimplicialProcess(CorruptionProcess):
         num_categories=num_categories,
         unused_token=unused_token,
         temperature=temperature,
-        mode=mode,
+        precision_mode=precision_mode,
         safety_epsilon=safety_epsilon,
         post_corruption_fn=post_corruption_fn,
     )
@@ -395,7 +380,7 @@ class SimplicialProcess(CorruptionProcess):
       num_categories: int,
       unused_token: int = UNUSED_TOKEN,
       temperature: float = 1.0,
-      mode: SamplingPrecisionMode = SamplingPrecisionMode.HIGH,
+      precision_mode: PrecisionMode = PrecisionMode.HIGH,
       safety_epsilon: float = 1e-6,
       post_corruption_fn: SimplicialPostCorruptionFn = IdentitySimplicialPostCorruptionFn(),
   ) -> SimplicialProcess:
@@ -411,7 +396,7 @@ class SimplicialProcess(CorruptionProcess):
         num_categories=num_categories,
         unused_token=unused_token,
         temperature=temperature,
-        mode=mode,
+        precision_mode=precision_mode,
         safety_epsilon=safety_epsilon,
         post_corruption_fn=post_corruption_fn,
     )

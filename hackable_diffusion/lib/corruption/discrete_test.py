@@ -139,26 +139,28 @@ class CategoricalProcessTest(parameterized.TestCase):
       raise ValueError(f'Unknown process type: {process_type}')
 
   @parameterized.named_parameters(
-      ('masking_high', 'masking', discrete.SamplingPrecisionMode.HIGH),
-      ('masking_low', 'masking', discrete.SamplingPrecisionMode.LOW),
-      ('uniform_high', 'uniform', discrete.SamplingPrecisionMode.HIGH),
-      ('uniform_low', 'uniform', discrete.SamplingPrecisionMode.LOW),
+      ('masking_high', 'masking', discrete.PrecisionMode.HIGH),
+      ('masking_low', 'masking', discrete.PrecisionMode.LOW),
+      ('uniform_high', 'uniform', discrete.PrecisionMode.HIGH),
+      ('uniform_low', 'uniform', discrete.PrecisionMode.LOW),
   )
-  def test_corrupt_at_t1_with_mode(self, process_type, mode):
+  def test_corrupt_at_t1_with_precision_mode(
+      self, process_type, precision_mode
+  ):
     # At t=1, alpha=0, so xt should be pure noise.
     if process_type == 'masking':
       process = discrete.CategoricalProcess(
           schedule=self.schedule,
           invariant_probs=[0.0] * self.num_categories + [1.0],
           num_categories=self.num_categories,
-          mode=mode,
+          precision_mode=precision_mode,
       )
     elif process_type == 'uniform':
       process = discrete.CategoricalProcess(
           schedule=self.schedule,
           invariant_probs=[1.0 / self.num_categories] * self.num_categories,
           num_categories=self.num_categories,
-          mode=mode,
+          precision_mode=precision_mode,
       )
     else:
       raise ValueError(f'Unknown process type: {process_type}')

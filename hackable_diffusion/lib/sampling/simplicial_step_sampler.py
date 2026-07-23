@@ -167,7 +167,11 @@ class SimplicialDDIMStep(SamplerStep):
 
     # Sample hard token
     key, sample_key = jax.random.split(key)
-    sample_idx = jax.random.categorical(key=sample_key, logits=logits)
+    sample_idx = jax.random.categorical(
+        key=sample_key,
+        logits=logits,
+        mode=self.corruption_process.precision_mode,
+    )
     num_cats = self.corruption_process.process_num_categories
     one_hot_mask = jax.nn.one_hot(sample_idx, num_cats, dtype=log_xt.dtype)
     log_sample_oh = jnp.where(one_hot_mask > 0.5, 0.0, -1e30)

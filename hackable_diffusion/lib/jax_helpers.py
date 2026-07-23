@@ -15,6 +15,7 @@
 """Utility functions."""
 
 import dataclasses
+import enum
 import functools
 import logging
 from types import FunctionType  # pylint: disable=g-importing-member
@@ -41,6 +42,23 @@ DataTree = hd_typing.DataTree
 ShapeTree = hd_typing.ShapeTree
 DType = hd_typing.DType
 DTypeTree = hd_typing.DTypeTree
+
+################################################################################
+# MARK: Enums
+################################################################################
+
+
+class PrecisionMode(enum.StrEnum):
+  """Precision mode for JAX random samplers.
+
+  See
+  https://docs.jax.dev/en/latest/_autosummary/jax.random.choice.html#jax.random.choice
+  for more details about how `mode` is used in random samplers.
+  """
+
+  HIGH = "high"
+  LOW = "low"
+
 
 ################################################################################
 # MARK: SafeSpan
