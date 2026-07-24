@@ -16,6 +16,7 @@
 
 import dataclasses
 from typing import Protocol
+from hackable_diffusion.lib import corruption
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 import jax
@@ -101,6 +102,10 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
           "Lower bound must be strictly smaller than the upper bound."
       )
 
+  def _interval_mask(self, time: TimeTree) -> jax.Array:
+    """Returns a boolean mask indicating whether time/metric is within bounds."""
+    return jnp.logical_and(time >= self.lower, time <= self.upper)
+
   @kt.typechecked
   def __call__(
       self,
@@ -114,9 +119,8 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
     del conditioning  # unused
     time = jax_helpers.bcast_right(time, xt.ndim)
 
-    is_in_interval = jnp.logical_and(time >= self.lower, time <= self.upper)
     local_guidance = jnp.where(
-        is_in_interval,
+        self._interval_mask(time),
         self.guidance,
         0.0,
     )
@@ -126,3 +130,15 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
         cond_outputs,
         uncond_outputs,
     )
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class LogSnrLimitedIntervalGuidanceFn(LimitedIntervalGuidanceFn):
+  """Limited interval guidance function based on logsnr."""
+
+  noise_schedule: corruption.GaussianSchedule
+
+  def _interval_mask(self, time: TimeTree) -> jax.Array:
+    """Returns a boolean mask indicating whether time/metric is within bounds."""
+    logsnr = self.noise_schedule.logsnr(time)
+    return jnp.logical_and(logsnr >= self.lower, logsnr <= self.upper)

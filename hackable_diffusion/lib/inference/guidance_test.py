@@ -14,13 +14,13 @@
 
 """Tests for guidance functions."""
 
+from hackable_diffusion.lib import corruption
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.inference import guidance
 import jax.numpy as jnp
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
 
 ################################################################################
 # MARK: Tests
@@ -38,6 +38,12 @@ class GuidanceTest(parameterized.TestCase):
     self.conditioning = {}  # Not used by these guidance functions
     self.cond_outputs = {'pred': jnp.ones_like(self.xt) * 2.0}
     self.uncond_outputs = {'pred': jnp.ones_like(self.xt) * 1.0}
+
+    self.guidance_val = 3.0
+    self.lower_logsnr = -9.0
+    self.upper_logsnr = 9.0
+    self.lower_time = 0.25
+    self.upper_time = 0.75
 
     # nested versions of the above
     self.nested_xt = {
@@ -61,8 +67,7 @@ class GuidanceTest(parameterized.TestCase):
 
   def test_scalar_guidance_fn(self):
     """Tests the ScalarGuidanceFn."""
-    guidance_val = 3.0
-    guidance_fn = guidance.ScalarGuidanceFn(guidance=guidance_val)
+    guidance_fn = guidance.ScalarGuidanceFn(guidance=self.guidance_val)
     time = jnp.array([0.5, 0.5])  # Not used, but required by protocol
 
     result = guidance_fn(
@@ -75,9 +80,6 @@ class GuidanceTest(parameterized.TestCase):
 
   def test_limited_interval_guidance_fn_fails_on_invalid_interval(self):
     """Tests the LimitedIntervalGuidanceFn with a batch of times."""
-    guidance_val = 3.0
-    lower = 0.75
-    upper = 0.25
     # First time is outside the interval, second is inside.
     time = jnp.array([0.1, 0.5])
     time = jax_helpers.bcast_right(time, self.xt.ndim)
@@ -86,9 +88,9 @@ class GuidanceTest(parameterized.TestCase):
         'Lower bound must be strictly smaller than the upper bound.',
     ):
       guidance_fn = guidance.LimitedIntervalGuidanceFn(
-          guidance=guidance_val,
-          lower=lower,
-          upper=upper,
+          guidance=self.guidance_val,
+          lower=self.upper_time,
+          upper=self.lower_time,
       )
       guidance_fn(
           self.xt,
@@ -100,13 +102,10 @@ class GuidanceTest(parameterized.TestCase):
 
   def test_limited_interval_guidance_fn(self):
     """Tests the LimitedIntervalGuidanceFn with a batch of times."""
-    guidance_val = 3.0
-    lower = 0.25
-    upper = 0.75
     guidance_fn = guidance.LimitedIntervalGuidanceFn(
-        guidance=guidance_val,
-        lower=lower,
-        upper=upper,
+        guidance=self.guidance_val,
+        lower=self.lower_time,
+        upper=self.upper_time,
     )
     # First time is outside the interval, second is inside.
     time = jnp.array([0.1, 0.5])
@@ -123,6 +122,33 @@ class GuidanceTest(parameterized.TestCase):
     expected_output = jnp.stack([
         jnp.ones(self.data_shape) * 2.0,
         jnp.ones(self.data_shape) * 5.0,
+    ])
+    self.assertTrue(jnp.allclose(result['pred'], expected_output))
+
+  def test_limited_logsnr_interval_guidance_fn(self):
+    """Tests the LimitedIntervalGuidanceFn with a batch of times."""
+    guidance_fn = guidance.LogSnrLimitedIntervalGuidanceFn(
+        noise_schedule=corruption.RFSchedule(),
+        guidance=self.guidance_val,
+        lower=self.lower_logsnr,
+        upper=self.upper_logsnr,
+    )
+    # First time is outside the interval, second is inside.
+    time = jnp.array([0.1, 0.99])
+    time = jax_helpers.bcast_right(time, self.xt.ndim)
+
+    result = guidance_fn(
+        self.xt, self.conditioning, time, self.cond_outputs, self.uncond_outputs
+    )
+
+    # For time=0.1, logsnr is ~4.4, so it's inside the interval, guidance is 3.0
+    # Expected: 2.0 * (1 + 3) - 1.0 * 3 = 5.0
+    # For time=0.99, logsnr is ~-9.19, so it's outside the interval,
+    # guidance is 0.
+    # Expected: 2.0 * (1 + 0) - 1.0 * 0 = 2.0
+    expected_output = jnp.stack([
+        jnp.ones(self.data_shape) * 5.0,
+        jnp.ones(self.data_shape) * 2.0,
     ])
     self.assertTrue(jnp.allclose(result['pred'], expected_output))
 
