@@ -122,6 +122,11 @@ class DiffusionEntropyEarlyStopFn(DiffusionEarlyStoppingFn):
       previous_step: DiffusionStep,
   ) -> Bool['B']:  # pyrefly: ignore[not-a-type]
     del step, previous_step
+    xt = current_step.xt
+    if len(xt.shape) != 3:
+      raise ValueError(
+          f'xt must have shape (batch_size, seq_len, 1) but got {xt.shape}'
+      )
     aux = current_step.aux
     logits = aux[self.logits_key]
     log_probs = jax.nn.log_softmax(logits)
@@ -164,15 +169,17 @@ class DiffusionTokenStabilityEarlyStopFn(DiffusionEarlyStoppingFn):
   ) -> Bool['B']:  # pyrefly: ignore[not-a-type]
     del step
     prev_tokens = previous_step.xt
-    assert len(prev_tokens.shape) == 3, (
-        'prev_tokens must have shape (batch_size, seq_len, 1) but got'
-        f' {prev_tokens.shape}'
-    )
+    if len(prev_tokens.shape) != 3:
+      raise ValueError(
+          'prev_tokens must have shape (batch_size, seq_len, 1) but got'
+          f' {prev_tokens.shape}'
+      )
     batch_size, seq_len = prev_tokens.shape[:2]
-    assert prev_tokens.shape == (batch_size, seq_len, 1), (
-        'prev_tokens must have shape (batch_size, seq_len, 1) but got'
-        ' {prev_tokens.shape}'
-    )
+    if prev_tokens.shape != (batch_size, seq_len, 1):
+      raise ValueError(
+          'prev_tokens must have shape (batch_size, seq_len, 1) but got'
+          f' {prev_tokens.shape}'
+      )
     logits = current_step.aux[self.logits_key]
     most_likely_tokens = jnp.argmax(logits, axis=-1)
     prev_tokens = jnp.reshape(prev_tokens, (batch_size, seq_len))

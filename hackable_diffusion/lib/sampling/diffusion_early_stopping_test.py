@@ -96,9 +96,9 @@ class DiffusionEntropyEarlyStopFnTest(parameterized.TestCase):
       logits_key: str = 'logits',
   ) -> hd_api.DiffusionStep:
     """Helper: creates a DiffusionStep with logits in aux."""
-    batch_size = logits.shape[0]
+    batch_size, seq_len = logits.shape[:2]
     return _make_diffusion_step(
-        xt=jnp.ones((batch_size, 4)),
+        xt=jnp.ones((batch_size, seq_len, 1)),
         aux={logits_key: logits},
     )
 
@@ -248,21 +248,41 @@ class DiffusionEntropyEarlyStopFnTest(parameterized.TestCase):
     )
     chex.assert_trees_all_equal(result_a, result_b)
 
+  def test_raises_value_error_for_invalid_xt_shape(self):
+    """Should raise ValueError if xt length of shape is not 3."""
+    fn = diffusion_early_stopping.DiffusionEntropyEarlyStopFn()
+    step = _make_diffusion_step(
+        xt=jnp.ones((2, 4)), aux={'logits': jnp.zeros((2, 4, 3))}
+    )
+    with self.assertRaisesRegex(
+        ValueError, r'xt must have shape \(batch_size, seq_len, 1\) but got'
+    ):
+      fn.should_stop(
+          step=jnp.int32(0),
+          current_step=step,
+          previous_step=step,
+      )
+
 
 class DiffusionTokenStabilityEarlyStopFnTest(parameterized.TestCase):
   """Tests for DiffusionTokenStabilityEarlyStopFn."""
 
+  def setUp(self):
+    super().setUp()
+    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
+    self.prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
+
   def test_stable_tokens_stop(self):
     """When argmax(logits) matches previous_step.xt, should stop."""
-    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
-    prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
     logits = jnp.full((2, 3, 4), -100.0)
     for b in range(2):
       for l in range(3):
-        logits = logits.at[b, l, prev_tokens[b, l]].set(100.0)
+        logits = logits.at[b, l, self.prev_tokens[b, l]].set(100.0)
 
-    previous_step = _make_diffusion_step(xt=prev_tokens)
-    current_step = _make_diffusion_step(xt=prev_tokens, aux={'logits': logits})
+    previous_step = _make_diffusion_step(xt=self.prev_tokens)
+    current_step = _make_diffusion_step(
+        xt=self.prev_tokens, aux={'logits': logits}
+    )
 
     fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
     result = fn.should_stop(
@@ -275,12 +295,12 @@ class DiffusionTokenStabilityEarlyStopFnTest(parameterized.TestCase):
 
   def test_unstable_tokens_continue(self):
     """When argmax(logits) differs from previous_step.xt, should not stop."""
-    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
-    prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
     logits = jnp.full((2, 3, 4), -100.0).at[:, :, 3].set(100.0)
 
-    previous_step = _make_diffusion_step(xt=prev_tokens)
-    current_step = _make_diffusion_step(xt=prev_tokens, aux={'logits': logits})
+    previous_step = _make_diffusion_step(xt=self.prev_tokens)
+    current_step = _make_diffusion_step(
+        xt=self.prev_tokens, aux={'logits': logits}
+    )
 
     fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
     result = fn.should_stop(
@@ -293,15 +313,15 @@ class DiffusionTokenStabilityEarlyStopFnTest(parameterized.TestCase):
 
   def test_per_batch_mixed_stability(self):
     """Batch element 0 is stable, batch element 1 is unstable."""
-    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
-    prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
     logits = jnp.full((2, 3, 4), -100.0)
     for l in range(3):
-      logits = logits.at[0, l, prev_tokens[0, l]].set(100.0)
+      logits = logits.at[0, l, self.prev_tokens[0, l]].set(100.0)
     logits = logits.at[1, :, 0].set(100.0)
 
-    previous_step = _make_diffusion_step(xt=prev_tokens)
-    current_step = _make_diffusion_step(xt=prev_tokens, aux={'logits': logits})
+    previous_step = _make_diffusion_step(xt=self.prev_tokens)
+    current_step = _make_diffusion_step(
+        xt=self.prev_tokens, aux={'logits': logits}
+    )
 
     fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
     result = fn.should_stop(
@@ -315,15 +335,14 @@ class DiffusionTokenStabilityEarlyStopFnTest(parameterized.TestCase):
 
   def test_custom_logits_key(self):
     """Should read logits from custom logits_key in aux."""
-    prev_tokens = jnp.array([[0, 1, 2]])
-    prev_tokens = jnp.reshape(prev_tokens, (1, 3, 1))
-    logits = jnp.full((1, 3, 4), -100.0)
-    for l in range(3):
-      logits = logits.at[0, l, prev_tokens[0, l]].set(100.0)
+    logits = jnp.full((2, 3, 4), -100.0)
+    for b in range(2):
+      for l in range(3):
+        logits = logits.at[b, l, self.prev_tokens[b, l]].set(100.0)
 
-    previous_step = _make_diffusion_step(xt=prev_tokens)
+    previous_step = _make_diffusion_step(xt=self.prev_tokens)
     current_step = _make_diffusion_step(
-        xt=prev_tokens, aux={'my_logits': logits}
+        xt=self.prev_tokens, aux={'my_logits': logits}
     )
 
     fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn(
@@ -334,7 +353,38 @@ class DiffusionTokenStabilityEarlyStopFnTest(parameterized.TestCase):
         current_step=current_step,
         previous_step=previous_step,
     )
-    self.assertTrue(result[0])
+    self.assertTrue(jnp.all(result))
+
+  def test_raises_value_error_for_invalid_prev_tokens_shape(self):
+    """Should raise ValueError if prev_tokens shape is not (batch_size, seq_len, 1)."""
+    fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
+
+    # Case 1: 2D prev_tokens shape (2, 4)
+    prev_step_2d = _make_diffusion_step(xt=jnp.ones((2, 4)))
+    current_step = _make_diffusion_step(
+        xt=jnp.ones((2, 4, 1)), aux={'logits': jnp.zeros((2, 4, 3))}
+    )
+    with self.assertRaisesRegex(
+        ValueError,
+        r'prev_tokens must have shape \(batch_size, seq_len, 1\) but got',
+    ):
+      fn.should_stop(
+          step=jnp.int32(0),
+          current_step=current_step,
+          previous_step=prev_step_2d,
+      )
+
+    # Case 2: 3D prev_tokens shape with trailing dim != 1 (2, 4, 2)
+    prev_step_bad_dim = _make_diffusion_step(xt=jnp.ones((2, 4, 2)))
+    with self.assertRaisesRegex(
+        ValueError,
+        r'prev_tokens must have shape \(batch_size, seq_len, 1\) but got',
+    ):
+      fn.should_stop(
+          step=jnp.int32(0),
+          current_step=current_step,
+          previous_step=prev_step_bad_dim,
+      )
 
 
 class DiffusionChainedEarlyStopFnTest(parameterized.TestCase):
@@ -381,7 +431,7 @@ class DiffusionChainedEarlyStopFnTest(parameterized.TestCase):
     )
 
     logits = jnp.zeros((2, 3, 4))
-    step = _make_diffusion_step(xt=jnp.ones((2, 4)), aux={'logits': logits})
+    step = _make_diffusion_step(xt=jnp.ones((2, 3, 1)), aux={'logits': logits})
 
     result = chained.should_stop(
         step=jnp.int32(0), current_step=step, previous_step=step
