@@ -24,7 +24,7 @@ from typing import Literal
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import schedules
+from hackable_diffusion.lib.corruption import gaussian
 import immutabledict
 import jax
 import jax.numpy as jnp
@@ -39,7 +39,7 @@ TargetInfo = hd_typing.TargetInfo
 TimeArray = hd_typing.TimeArray
 GaussianPredictionType = Literal["x0", "epsilon", "score", "velocity", "v"]
 
-GaussianSchedule = schedules.GaussianSchedule
+GaussianSchedule = gaussian.GaussianSchedule
 
 
 ################################################################################

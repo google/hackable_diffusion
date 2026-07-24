@@ -25,7 +25,6 @@ from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib import multimodal
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import projection
 from hackable_diffusion.lib.sampling import discrete_step_sampler
@@ -49,7 +48,11 @@ def _create_leaf_process(data_array, time_array, target_info_name):
   process.corrupt.return_value = (data_array + 5.0, target_info)
   process.sample_from_invariant.return_value = data_array - 1.0
   process.convert_predictions.return_value = target_info
-  process.get_schedule_info.return_value = {'time': time_array - 7.0}
+
+  mock_schedule = mock.MagicMock()
+  mock_schedule.evaluate.return_value = {'time': time_array - 7.0}
+  process.schedule = mock_schedule
+
   return process
 
 
@@ -111,7 +114,7 @@ class NestedProcessTest(parameterized.TestCase):
     convert_predictions_out = nested_process.convert_predictions(
         target_info, xt, time_tree
     )
-    schedule_info = nested_process.get_schedule_info(time_tree)
+    schedule_info = nested_process.schedule.evaluate(time_tree)
 
     expected_invariant_out = {
         'a': {
@@ -160,10 +163,10 @@ class NestedSamplerStepTest(parameterized.TestCase):
     self.stochasticity_level = 1.0
     self.num_categories = 256
 
-    schedule_continuous = schedules.RFSchedule()
+    schedule_continuous = gaussian.RFSchedule()
     process_continuous = gaussian.GaussianProcess(schedule=schedule_continuous)
 
-    schedule_discrete = schedules.CosineDiscreteSchedule()
+    schedule_discrete = discrete.CosineDiscreteSchedule()
     process_discrete = discrete.CategoricalProcess.masking_process(
         schedule=schedule_discrete, num_categories=self.num_categories
     )
@@ -415,7 +418,7 @@ class NestedProjectionFnTest(parameterized.TestCase):
     batch_size = 2
     data_shape = (4, 4, 3)
     other_data_shape = (4, 8, 9)
-    process = gaussian.GaussianProcess(schedule=schedules.RFSchedule())
+    process = gaussian.GaussianProcess(schedule=gaussian.RFSchedule())
 
     nested_xt = {
         'data_continuous_1': jnp.ones((batch_size, *data_shape)),

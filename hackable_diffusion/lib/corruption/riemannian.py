@@ -15,13 +15,13 @@
 """Riemannian Flow Matching corruption process."""
 
 import dataclasses
-from typing import Any
+from typing import Protocol
 
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib import manifolds
-from hackable_diffusion.lib.corruption import schedules
+import jax.numpy as jnp
 import kauldron.ktyping as kt
 
 PRNGKey = hd_typing.PRNGKey
@@ -30,8 +30,61 @@ TimeArray = hd_typing.TimeArray
 TargetInfo = hd_typing.TargetInfo
 
 
+################################################################################
+# MARK: Riemannian Schedules
+################################################################################
+
+
+class RiemannianSchedule(hd_api.CorruptionSchedule, Protocol):
+  """Protocol for Riemannian schedules.
+
+  Controls the geodesic interpolation via alpha(t):
+    x_t = geodesic(x_1, x_0, alpha(t))
+    v_t = alpha'(t) * velocity(x_1, x_0, alpha(t))
+
+  Subclasses must implement `alpha`.
+  """
+
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """The geodesic interpolation parameter at time t."""
+    ...
+
+  def alpha_dot(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Time derivative of alpha. Defaults to autodiff."""
+    return jax_helpers.egrad(self.alpha)(time)
+
+  @kt.typechecked
+  def evaluate(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
+    return {
+        'time': time,
+        'alpha': self.alpha(time),
+        'alpha_dot': self.alpha_dot(time),
+    }
+
+
+class LinearRiemannianSchedule(RiemannianSchedule):
+  """Linear Riemannian schedule: alpha(t) = 1.0 - t.
+
+  This is the standard flow matching schedule where the geodesic interpolation
+  parameter equals time directly.
+  Note that contrary to the original Riemannian Flow Matching, we assume that at
+  time t=0, the process is close to the data distribution, and at time t=1,
+  the process is close to the target distribution.
+  Hence, we use alpha(t) = 1.0 - t, and alpha_dot(t) = -1.0, instead of
+  alpha(t) = t, and alpha_dot(t) = 1.0.
+  """
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return 1.0 - time
+
+  @kt.typechecked
+  def alpha_dot(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return -jnp.ones_like(time)
+
+
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class RiemannianProcess(hd_api.CorruptionProcess):
+class RiemannianProcess:
   """Riemannian Flow Matching corruption process.
 
   This is based on https://arxiv.org/abs/2302.03660.
@@ -42,7 +95,7 @@ class RiemannianProcess(hd_api.CorruptionProcess):
   """
 
   manifold: manifolds.Manifold
-  schedule: schedules.RiemannianSchedule
+  schedule: RiemannianSchedule
 
   @kt.typechecked
   def sample_from_invariant(
@@ -93,7 +146,3 @@ class RiemannianProcess(hd_api.CorruptionProcess):
     raise NotImplementedError(
         'Only velocity prediction is supported for RFM currently.'
     )
-
-  @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, Any]:  # pyrefly: ignore[not-a-type]
-    return self.schedule.evaluate(time)

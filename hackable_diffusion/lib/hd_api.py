@@ -12,7 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Foundational Contracts for Hackable Diffusion (Tier 1 Protocols)."""
+"""Foundational Contracts for Hackable Diffusion (Tier 1 Protocols).
+
+This file defines the core interfaces and data structures that constitute the
+Hackable Diffusion API. It acts as "Tier 1" layer, establishing the high-level
+contracts between different components of the diffusion system.
+
+In scope ("Tier 1" api):
+
+- High-level Interfaces between components for core diffusion concepts
+   (e.g., `CorruptionProcess`, `InferenceFn`, `SamplerStep`, `DiffusionLoss`).
+- Data Structures used to pass information between components
+   (e.g., `StepInfo`, `DiffusionStep`, ...).
+
+Off scope ("Tier 2" api):
+
+- Polymorphic behavior / implementations
+    (e.g., specific schedules, specific model architectures, ...).
+- Complex logic, internal helper functions, or algorithms.
+
+Focusing this layer on high-level contracts ensures that core pipelines remain
+agnostic to specific modeling choices, data types or neural architectures.
+"""
 
 from __future__ import annotations
 
@@ -44,8 +65,21 @@ Conditioning = hd_typing.Conditioning
 ###############################################################################
 
 
+class CorruptionSchedule(Protocol):
+  """Protocol for corruption schedules."""
+
+  def evaluate(
+      self, time: TimeArray  # pyrefly: ignore[not-a-type]
+  ) -> dict[ScheduleKey, TimeArray]:  # pyrefly: ignore[not-a-type]
+    """Evaluate the schedule for a given time. Return a dictionary of info."""
+
+
 class CorruptionProcess(Protocol):
   """Base class for all corruption processes (continuous and discrete)."""
+
+  @property
+  def schedule(self) -> CorruptionSchedule:
+    ...
 
   def corrupt(
       self,
@@ -69,9 +103,6 @@ class CorruptionProcess(Protocol):
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
     """Convert the prediction to the target type."""
-
-  def get_schedule_info(self, time: TimeArray) -> dict[ScheduleKey, TimeArray]:  # pyrefly: ignore[not-a-type]
-    """Get the schedule info for the given time."""
 
 
 ###############################################################################

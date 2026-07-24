@@ -16,7 +16,6 @@
 
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.inference import projection
 import jax.numpy as jnp
 
@@ -40,7 +39,7 @@ class ProjectionTest(parameterized.TestCase):
     self.xt = jnp.ones((self.batch_size, *self.data_shape)) * 0.5
     self.time = jax_helpers.bcast_right(jnp.array([0.5, 0.5]), self.xt.ndim)
     self.conditioning = {}  # Not currently used by projections.
-    self.process = gaussian.GaussianProcess(schedule=schedules.RFSchedule())
+    self.process = gaussian.GaussianProcess(schedule=gaussian.RFSchedule())
     # create some fake outputs for testing
     x0 = jnp.arange(3) + 1.0  # [1.0, 2.0, 3.0]
     x0 *= jnp.ones_like(self.xt)

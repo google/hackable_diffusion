@@ -18,7 +18,6 @@ from absl.testing import absltest
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib.corruption import riemannian
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.sampling import riemannian_sampling
 import jax
 import jax.numpy as jnp
@@ -28,7 +27,7 @@ import numpy as np
 def _make_sampler(manifold):
   process = riemannian.RiemannianProcess(
       manifold=manifold,
-      schedule=schedules.LinearRiemannianSchedule(),
+      schedule=riemannian.LinearRiemannianSchedule(),
   )
   return riemannian_sampling.RiemannianFlowSamplerStep(
       corruption_process=process,

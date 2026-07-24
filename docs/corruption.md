@@ -41,8 +41,8 @@ processes must implement. It defines the following key methods:
 *   `convert_predictions(prediction, xt, time)`: Takes a model's prediction
     (e.g., predicted epsilon) and converts it into all other possible target
     parameterizations (e.g., predicted `x0`, score, etc.).
-*   `get_schedule_info(time)`: Returns parameters of the schedule at a given
-    time.
+*   `schedule`: The `CorruptionSchedule` associated with this process, defining
+    noise parameters over time.
 
 ### `NestedProcess`
 
@@ -55,10 +55,9 @@ For example, you can use a `GaussianProcess` on an image and a
 
 ## Schedules
 
-(`lib/corruption/schedules.py`)
-
 Schedules define how the corruption parameters change over the continuous time
-interval `[0, 1]`.
+interval `[0, 1]`. They are defined in the same file as their corresponding
+corruption process (e.g., `lib/corruption/gaussian.py` for Gaussian schedules).
 
 ### `GaussianSchedule`
 
@@ -125,7 +124,7 @@ x0-prediction) without any code change in the sampler.
 import jax
 import jax.numpy as jnp
 from hackable_diffusion.lib.corruption.gaussian import GaussianProcess
-from hackable_diffusion.lib.corruption.schedules import CosineSchedule
+from hackable_diffusion.lib.corruption.gaussian import CosineSchedule
 
 key = jax.random.PRNGKey(0)
 
@@ -201,7 +200,7 @@ computed on all but unused tokens.
 import jax
 import jax.numpy as jnp
 from hackable_diffusion.lib.corruption.discrete import CategoricalProcess
-from hackable_diffusion.lib.corruption.schedules import LinearDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import LinearDiscreteSchedule
 
 key = jax.random.PRNGKey(0)
 num_classes = 10 #
@@ -371,7 +370,7 @@ import jax
 import jax.numpy as jnp
 from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib.corruption.riemannian import RiemannianProcess
-from hackable_diffusion.lib.corruption.schedules import LinearRiemannianSchedule
+from hackable_diffusion.lib.corruption.riemannian import LinearRiemannianSchedule
 
 key = jax.random.PRNGKey(0)
 
@@ -477,7 +476,7 @@ Key attributes of `SimplicialProcess`:
 
 ```python
 from hackable_diffusion.lib.corruption.simplicial import SimplicialProcess
-from hackable_diffusion.lib.corruption.schedules import CosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import CosineDiscreteSchedule
 
 schedule = CosineDiscreteSchedule()
 
@@ -502,7 +501,7 @@ process = SimplicialProcess.masking_process(
 import jax
 import jax.numpy as jnp
 from hackable_diffusion.lib.corruption.simplicial import SimplicialProcess
-from hackable_diffusion.lib.corruption.schedules import CosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import CosineDiscreteSchedule
 
 key = jax.random.PRNGKey(0)
 num_categories = 5
@@ -564,7 +563,7 @@ from hackable_diffusion.lib.corruption.simplicial import (
     SimplicialProcess,
     SymmetricSimplicialPostCorruptionFn,
 )
-from hackable_diffusion.lib.corruption.schedules import CosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import CosineDiscreteSchedule
 
 # For graph diffusion with symmetric adjacency matrices
 process = SimplicialProcess.uniform_process(

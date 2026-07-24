@@ -37,7 +37,6 @@ from hackable_diffusion.lib import fast_random
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.corruption import simplicial
 import jax
 import jax.numpy as jnp
@@ -58,7 +57,7 @@ StepInfo = hd_api.StepInfo
 SamplerStep = hd_api.SamplerStep
 
 SimplicialProcess = simplicial.SimplicialProcess
-SimplicialSchedule = schedules.SimplicialSchedule
+SimplicialSchedule = simplicial.SimplicialSchedule
 
 
 ################################################################################

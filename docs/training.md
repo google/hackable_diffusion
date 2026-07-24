@@ -96,7 +96,7 @@ weighting. This has been shown to improve training stability and performance.
 ```python
 import jax.numpy as jnp
 from hackable_diffusion.lib.training.gaussian_loss import SiD2Loss
-from hackable_diffusion.lib.corruption.schedules import CosineSchedule
+from hackable_diffusion.lib.corruption.gaussian import CosineSchedule
 
 # 1. Instantiate the loss. It requires the noise schedule.
 schedule = CosineSchedule()

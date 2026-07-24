@@ -20,7 +20,6 @@ import chex
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.sampling import gaussian_step_sampler
 from hackable_diffusion.lib.sampling import time_scheduling
 import jax
@@ -150,7 +149,7 @@ class SdeStepTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = gaussian.GaussianProcess(schedule=self.schedule)
     self.initial_noise = jnp.expand_dims(jnp.eye(4), axis=0)
 
@@ -372,7 +371,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
   def setUp(self):
     super().setUp()
 
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = gaussian.GaussianProcess(schedule=self.schedule)
     self.initial_noise = jnp.expand_dims(jnp.eye(4), axis=0)
 
@@ -505,7 +504,7 @@ class DDIMStepTest(parameterized.TestCase):
   def setUp(self):
     super().setUp()
 
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = gaussian.GaussianProcess(schedule=self.schedule)
     self.initial_noise = jnp.expand_dims(jnp.eye(4), axis=0)
 
@@ -727,7 +726,7 @@ class VelocityStepTest(parameterized.TestCase):
   def setUp(self):
     super().setUp()
 
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = gaussian.GaussianProcess(schedule=self.schedule)
     self.initial_noise = jnp.expand_dims(jnp.eye(4), axis=0)
 
@@ -950,7 +949,7 @@ class HeunStepTest(absltest.TestCase):
   def setUp(self):
     super().setUp()
 
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = gaussian.GaussianProcess(schedule=self.schedule)
     self.initial_noise = jnp.expand_dims(jnp.eye(4), axis=0)
     self.time_schedule = time_scheduling.UniformTimeSchedule()

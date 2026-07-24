@@ -16,7 +16,7 @@
 
 import chex
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import schedules
+from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.training import discrete_loss
 import jax
 import jax.numpy as jnp
@@ -45,7 +45,7 @@ class DiscreteLossTest(parameterized.TestCase):
     self.time = jax_helpers.bcast_right(time, x0.ndim)
     self.preds = {'logits': logits}
     self.targets = {'x0': x0}
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
 
   def test_diffusion_cross_entropy_loss_computation(self):
     """Tests base diffusion cross entropy loss computation."""

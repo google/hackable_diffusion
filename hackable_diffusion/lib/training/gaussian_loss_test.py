@@ -18,7 +18,6 @@ import itertools
 
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import gaussian as gaussian_corrupt
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.training import gaussian_loss
 import jax
 import jax.numpy as jnp
@@ -57,7 +56,7 @@ class GaussianLossTest(parameterized.TestCase):
         )
     }
     self.time = jnp.ones((self.bsz, 1, 1, 1)) * 0.5
-    self.schedule = schedules.CosineSchedule()
+    self.schedule = gaussian_corrupt.CosineSchedule()
 
   @parameterized.named_parameters(
       ('no_weight', gaussian_loss.NoWeightGaussianLoss, {}, 1e-6),
@@ -137,7 +136,7 @@ class PredictionConverterTest(parameterized.TestCase):
     shape = (11, 7, 5, 3)  # Example dimensions
     time = jnp.linspace(0.05, 0.95, shape[0]).reshape((-1, 1, 1, 1))
 
-    schedule = schedules.CosineSchedule()
+    schedule = gaussian_corrupt.CosineSchedule()
 
     # Generate random data for target, xt and pred
     key_target, key_xt, key_pred = jax.random.split(jax.random.PRNGKey(42), 3)

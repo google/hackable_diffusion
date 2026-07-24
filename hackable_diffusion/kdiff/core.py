@@ -154,7 +154,7 @@ class Diffusion(nn.Module, kw_only=True):
         prediction=output, xt=xt, time=time
     )
     # Get the noise info for summaries.
-    noise_info = self.corruption_process.get_schedule_info(time)
+    noise_info = self.corruption_process.schedule.evaluate(time)
     # Compile a dictionary of all the outputs that may be useful.
     return {
         "output": outputs,

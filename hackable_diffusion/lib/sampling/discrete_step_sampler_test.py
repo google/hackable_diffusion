@@ -17,7 +17,6 @@
 import chex
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib.corruption import discrete
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.sampling import discrete_step_sampler
 import jax
 import jax.numpy as jnp
@@ -44,7 +43,7 @@ class RemaskingFnTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
     self.s = jnp.array([0.1, 0.2])
     self.t = jnp.array([0.5, 0.6])
 
@@ -111,7 +110,7 @@ class CorruptedMaskFnTest(absltest.TestCase):
   def setUp(self):
     super().setUp()
     self.xt = jnp.array([[[0], [1], [4]]])  # shape (1, 3, 1)
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
     self.process = CategoricalProcess.masking_process(
         schedule=self.schedule, num_categories=4
     )  # mask_value is 4
@@ -134,7 +133,7 @@ class UnMaskingStepTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
     self.num_categories = 4
     self.process = CategoricalProcess.masking_process(
         schedule=self.schedule, num_categories=self.num_categories
@@ -444,7 +443,7 @@ class DiscreteDDIMStepTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
     self.num_categories = 4
     self.process = CategoricalProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories
@@ -721,7 +720,7 @@ class IntegratedDiscreteDDIMStepTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
     self.num_categories = 4
     self.process = CategoricalProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories
@@ -1035,7 +1034,7 @@ class DiscreteFlowMatchingStepTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
     self.num_categories = 4
     self.process = CategoricalProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories

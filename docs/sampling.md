@@ -218,7 +218,7 @@ from hackable_diffusion.lib.sampling.simplicial_step_sampler import (
 from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
 from hackable_diffusion.lib.sampling.time_scheduling import UniformTimeSchedule
 from hackable_diffusion.lib.corruption.simplicial import SimplicialProcess
-from hackable_diffusion.lib.corruption.schedules import CosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import CosineDiscreteSchedule
 
 # 1. Define the corruption process (must match training)
 corruption_process = SimplicialProcess.uniform_process(
@@ -272,7 +272,7 @@ from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
 from hackable_diffusion.lib.sampling.time_scheduling import EDMTimeSchedule
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import DDIMStep
 from hackable_diffusion.lib.corruption.gaussian import GaussianProcess
-from hackable_diffusion.lib.corruption.schedules import CosineSchedule
+from hackable_diffusion.lib.corruption.gaussian import CosineSchedule
 
 # Assume `inference_fn` is already created (see Inference Function doc).
 # def inference_fn(xt, time, conditioning): ...
@@ -333,14 +333,14 @@ Riemannian-specific components.
 ```python
 from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib.corruption.riemannian import RiemannianProcess
-from hackable_diffusion.lib.corruption.schedules import LinearRiemannianSchedule
+from hackable_diffusion.lib.corruption.riemannian import LinearRiemannianSchedule
 from hackable_diffusion.lib.sampling.riemannian_sampling import RiemannianFlowSamplerStep
 from hackable_diffusion.lib.sampling.time_scheduling import UniformTimeSchedule
 
 # 1. Define manifold and process
 manifold = manifolds.Sphere()
 process = RiemannianProcess(
-    
+
     manifold=manifold,
     schedule=LinearRiemannianSchedule(),
 , schedule=LinearRiemannianSchedule()

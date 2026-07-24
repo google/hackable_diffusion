@@ -27,8 +27,8 @@ for simplicial processes, mirroring the discrete case.
 """
 
 import chex
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.corruption import simplicial
+
 import jax
 import jax.numpy as jnp
 
@@ -45,7 +45,8 @@ class SimplicialProcessTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = simplicial.LinearSimplicialSchedule()
+
     self.num_categories = 5
     self.process = simplicial.SimplicialProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories
@@ -439,15 +440,14 @@ class SimplicialProcessTest(parameterized.TestCase):
                   f' pos {i}'
               ),
           )
-
+# ---------------------------------------------------------------------------
+  # MARK: Schedule evaluation tests
   # ---------------------------------------------------------------------------
-  # MARK: get_schedule_info tests
-  # ---------------------------------------------------------------------------
 
-  def test_get_schedule_info_returns_alpha(self):
-    """get_schedule_info should delegate to schedule.evaluate and include alpha."""
-    time = jnp.array([0.0, 0.25, 0.5, 0.75, 1.0])
-    info = self.process.get_schedule_info(time)
+  def test_schedule_evaluate_returns_alpha(self):
+    """Schedule evaluation should include alpha."""
+    time = jnp.array([0.5])
+    info = self.process.schedule.evaluate(time)
     self.assertIn('alpha', info)
     self.assertIn('time', info)
     # For linear schedule alpha(t) = 1 - t.
@@ -572,7 +572,8 @@ class SimplicialPostCorruptionTest(parameterized.TestCase):
 
     We use a (batch=1, N=3, N=3) adjacency layout.
     """
-    schedule = schedules.LinearDiscreteSchedule()
+    schedule = simplicial.LinearSimplicialSchedule()
+
     fn = simplicial.SymmetricSimplicialPostCorruptionFn()
     process = simplicial.SimplicialProcess.uniform_process(
         schedule=schedule, num_categories=4, post_corruption_fn=fn

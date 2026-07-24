@@ -15,7 +15,6 @@
 """Tests for discrete corruption processes."""
 
 from hackable_diffusion.lib.corruption import discrete
-from hackable_diffusion.lib.corruption import schedules
 import jax
 import jax.numpy as jnp
 
@@ -32,7 +31,8 @@ class CategoricalProcessTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = discrete.LinearDiscreteSchedule()
+
     self.num_categories = 5
     self.process = discrete.CategoricalProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories
@@ -370,6 +370,34 @@ class CategoricalProcessTest(parameterized.TestCase):
     process_repr = repr(process)
     self.assertNotIn('invariant_probs', process_repr)
     self.assertIn('num_categories', process_repr)
+
+
+class LinearDiscreteScheduleTest(absltest.TestCase):
+
+  def test_alpha(self):
+
+    self.assertEqual(
+        discrete.LinearDiscreteSchedule().alpha(jnp.array([0.4])), 0.6
+    )
+
+
+class CosineDiscreteScheduleTest(absltest.TestCase):
+
+  def test_alpha(self):
+
+    self.assertEqual(
+        discrete.CosineDiscreteSchedule().alpha(jnp.array([0.4])), 0.809017
+    )
+
+
+class SquareCosineDiscreteScheduleTest(absltest.TestCase):
+
+  def test_alpha(self):
+
+    self.assertEqual(
+        discrete.SquareCosineDiscreteSchedule(s=0.08).alpha(jnp.array([0.4])),
+        0.5948411,
+    )
 
 
 if __name__ == '__main__':

@@ -95,6 +95,24 @@ DiffusionStepTree = PyTree[hd_api.DiffusionStep]
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
+class NestedSchedule(hd_api.CorruptionSchedule):
+  """Wrapper for a pytree of corruption schedules.
+
+  Enables using different corruption schedules for different input modalities.
+  """
+
+  schedules: PyTree[hd_api.CorruptionSchedule]  # pyrefly: ignore[not-a-type]
+
+  def evaluate(self, time: TimeTree) -> ScheduleInfoTree:  # pyrefly: ignore[not-a-type]
+    """Evaluate the schedule for a given time. Return a dictionary of info."""
+    return jax.tree.map(
+        lambda schedule, t: schedule.evaluate(t),
+        self.schedules,
+        time,
+    )
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
 class NestedProcess(hd_api.CorruptionProcess):
   """Wrapper for a pytree of corruption processes mapped over the data.
 
@@ -118,6 +136,12 @@ class NestedProcess(hd_api.CorruptionProcess):
   """
 
   processes: PyTree[hd_api.CorruptionProcess]  # pyrefly: ignore[not-a-type]
+
+  @property
+  def schedule(self) -> hd_api.CorruptionSchedule:
+    return NestedSchedule(
+        schedules=jax.tree.map(lambda p: p.schedule, self.processes)
+    )
 
   @kt.typechecked
   def sample_from_invariant(
@@ -180,14 +204,7 @@ class NestedProcess(hd_api.CorruptionProcess):
         time,
     )
 
-  @kt.typechecked
-  def get_schedule_info(self, time: TimeTree) -> ScheduleInfoTree:  # pyrefly: ignore[not-a-type]
-    """Get the schedule info for the given time."""
-    return jax.tree.map(
-        lambda process, t: process.get_schedule_info(t),
-        self.processes,
-        time,
-    )
+
 
 
 ################################################################################

@@ -16,32 +16,37 @@
 
 # pylint: disable=g-importing-member
 from hackable_diffusion.lib.corruption.discrete import CategoricalProcess
+from hackable_diffusion.lib.corruption.discrete import CosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import DiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import GeometricDiscreteSchedule
 from hackable_diffusion.lib.corruption.discrete import IdentityPostCorruptionFn
+from hackable_diffusion.lib.corruption.discrete import LinearDiscreteSchedule
+from hackable_diffusion.lib.corruption.discrete import PolynomialDiscreteSchedule
 from hackable_diffusion.lib.corruption.discrete import PostCorruptionFn
+from hackable_diffusion.lib.corruption.discrete import SquareCosineDiscreteSchedule
 from hackable_diffusion.lib.corruption.discrete import SymmetricPostCorruptionFn
+from hackable_diffusion.lib.corruption.gaussian import CosineSchedule
 from hackable_diffusion.lib.corruption.gaussian import GaussianProcess
+from hackable_diffusion.lib.corruption.gaussian import GaussianSchedule
+from hackable_diffusion.lib.corruption.gaussian import GeometricSchedule
+from hackable_diffusion.lib.corruption.gaussian import InverseCosineSchedule
+from hackable_diffusion.lib.corruption.gaussian import LinearDiffusionSchedule
+from hackable_diffusion.lib.corruption.gaussian import RFSchedule
+from hackable_diffusion.lib.corruption.gaussian import ShiftedSchedule
+from hackable_diffusion.lib.corruption.riemannian import LinearRiemannianSchedule
 from hackable_diffusion.lib.corruption.riemannian import RiemannianProcess
-from hackable_diffusion.lib.corruption.schedules import CosineDiscreteSchedule
-from hackable_diffusion.lib.corruption.schedules import CosineSchedule
-from hackable_diffusion.lib.corruption.schedules import DiscreteSchedule
-from hackable_diffusion.lib.corruption.schedules import GaussianSchedule
-from hackable_diffusion.lib.corruption.schedules import GeometricDiscreteSchedule
-from hackable_diffusion.lib.corruption.schedules import GeometricSchedule
-from hackable_diffusion.lib.corruption.schedules import InverseCosineSchedule
-from hackable_diffusion.lib.corruption.schedules import LinearDiffusionSchedule
-from hackable_diffusion.lib.corruption.schedules import LinearDiscreteSchedule
-from hackable_diffusion.lib.corruption.schedules import LinearRiemannianSchedule
-from hackable_diffusion.lib.corruption.schedules import PolynomialDiscreteSchedule
-from hackable_diffusion.lib.corruption.schedules import RFSchedule
-from hackable_diffusion.lib.corruption.schedules import RiemannianSchedule
-from hackable_diffusion.lib.corruption.schedules import Schedule
-from hackable_diffusion.lib.corruption.schedules import ShiftedSchedule
-from hackable_diffusion.lib.corruption.schedules import SquareCosineDiscreteSchedule
+from hackable_diffusion.lib.corruption.riemannian import RiemannianSchedule
+from hackable_diffusion.lib.corruption.simplicial import CosineSimplicialSchedule
+from hackable_diffusion.lib.corruption.simplicial import GeometricSimplicialSchedule
 from hackable_diffusion.lib.corruption.simplicial import IdentitySimplicialPostCorruptionFn
+from hackable_diffusion.lib.corruption.simplicial import LinearSimplicialSchedule
+from hackable_diffusion.lib.corruption.simplicial import PolynomialSimplicialSchedule
 from hackable_diffusion.lib.corruption.simplicial import SimplicialPostCorruptionFn
 from hackable_diffusion.lib.corruption.simplicial import SimplicialProcess
 from hackable_diffusion.lib.corruption.simplicial import SimplicialSchedule
+from hackable_diffusion.lib.corruption.simplicial import SquareCosineSimplicialSchedule
 from hackable_diffusion.lib.corruption.simplicial import SymmetricSimplicialPostCorruptionFn
 from hackable_diffusion.lib.hd_api import CorruptionProcess
+from hackable_diffusion.lib.hd_api import CorruptionSchedule as Schedule
 
 # pylint: enable=g-importing-member

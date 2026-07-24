@@ -15,9 +15,9 @@
 """Tests for Riemannian Flow Matching corruption process."""
 
 from absl.testing import absltest
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib.corruption import riemannian
-from hackable_diffusion.lib.corruption import schedules
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -26,7 +26,7 @@ import numpy as np
 def _make_process(manifold):
   return riemannian.RiemannianProcess(
       manifold=manifold,
-      schedule=schedules.LinearRiemannianSchedule(),
+      schedule=riemannian.LinearRiemannianSchedule(),
   )
 
 
@@ -106,6 +106,61 @@ class SO3CorruptionTest(absltest.TestCase):
     # Velocity should be in the tangent space: x^T v is skew-symmetric.
     vel = target_info['velocity']
     self.assertEqual(vel.shape, (batch_size, 3, 3))
+
+
+class LinearRiemannianScheduleTest(absltest.TestCase):
+
+  def test_alpha_boundary_values(self):
+    schedule = riemannian.LinearRiemannianSchedule()
+    # At t=0, alpha(0) = 1.0 (data).
+    self.assertAlmostEqual(
+        schedule.alpha(jnp.array([0.0])).item(), 1.0, places=6
+    )
+    # At t=1, alpha(1) = 0.0 (noise / base distribution).
+    self.assertAlmostEqual(
+        schedule.alpha(jnp.array([1.0])).item(), 0.0, places=6
+    )
+
+  def test_alpha_intermediate(self):
+    schedule = riemannian.LinearRiemannianSchedule()
+    self.assertAlmostEqual(
+        schedule.alpha(jnp.array([0.4])).item(), 0.6, places=6
+    )
+
+  def test_alpha_dot(self):
+    schedule = riemannian.LinearRiemannianSchedule()
+    t = jnp.linspace(0.01, 0.99, 50)
+    alpha_dot = schedule.alpha_dot(t)
+    # For linear schedule, alpha_dot(t) = -1.0 for all t.
+    self.assertTrue(jnp.allclose(alpha_dot, -jnp.ones_like(t), atol=1e-6))
+
+  def test_alpha_dot_matches_autodiff(self):
+    schedule = riemannian.LinearRiemannianSchedule()
+    t = jnp.linspace(0.01, 0.99, 50)
+    alpha_dot = schedule.alpha_dot(t)
+    alpha_dot_auto = jax_helpers.egrad(schedule.alpha)(t)
+    self.assertTrue(
+        jnp.allclose(alpha_dot, alpha_dot_auto, atol=1e-6, rtol=1e-6),
+        'alpha_dot() does not match autodiff: Absolute difference:'
+        f' {jnp.max(jnp.abs(alpha_dot - alpha_dot_auto))}',
+    )
+
+  def test_alpha_bounds(self):
+    schedule = riemannian.LinearRiemannianSchedule()
+    t = jnp.linspace(0.0, 1.0, 100)
+    alpha = schedule.alpha(t)
+    self.assertTrue(jnp.all(alpha >= 0.0))
+    self.assertTrue(jnp.all(alpha <= 1.0))
+
+  def test_evaluate(self):
+    schedule = riemannian.LinearRiemannianSchedule()
+    t = jnp.array([0.3])
+    result = schedule.evaluate(t)
+    self.assertIn('time', result)
+    self.assertIn('alpha', result)
+    self.assertIn('alpha_dot', result)
+    self.assertAlmostEqual(result['alpha'].item(), 0.7, places=6)
+    self.assertAlmostEqual(result['alpha_dot'].item(), -1.0, places=6)
 
   def test_velocity_at_t1(self):
     """At t=1, alpha=0 so xt = x1 and velocity = -log(x1, x0)."""

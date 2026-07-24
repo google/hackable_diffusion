@@ -22,7 +22,6 @@ from typing import Protocol, Sequence
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import schedules
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -46,8 +45,89 @@ TargetInfo = hd_typing.TargetInfo
 TimeArray = hd_typing.TimeArray
 
 CorruptionProcess = hd_api.CorruptionProcess
-DiscreteSchedule = schedules.DiscreteSchedule
 PrecisionMode = jax_helpers.PrecisionMode
+
+
+################################################################################
+# MARK: Discrete Schedules
+################################################################################
+
+
+class DiscreteSchedule(hd_api.CorruptionSchedule, Protocol):
+  """Protocol for discrete schedules (just an alpha)."""
+
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """The probability of keeping the original value."""
+    ...
+
+  @kt.typechecked
+  def evaluate(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
+    return {
+        'time': time,
+        'alpha': self.alpha(time),
+    }
+
+
+class LinearDiscreteSchedule(DiscreteSchedule):
+  """Linear schedule for alpha for discrete corruption processes."""
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return 1.0 - time
+
+
+class CosineDiscreteSchedule(DiscreteSchedule):
+  """Cosine schedule for alpha for discrete corruption processes."""
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return jnp.cos(0.5 * jnp.pi * time)
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class SquareCosineDiscreteSchedule(DiscreteSchedule):
+  """Square cosine schedule for alpha for discrete corruption processes.
+
+  This is used in DiGress https://arxiv.org/abs/2209.14734. This is a discrete
+  counterpart of the cosine schedule used in the continuous version, see
+  https://arxiv.org/abs/2102.09672. Common value is s=0.008 in DiGress.
+
+  Attributes:
+    s: shift parameter.
+  """
+
+  s: float = 0.0
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    out = jnp.square(jnp.cos(0.5 * jnp.pi * (time + self.s) / (1.0 + self.s)))
+    return out / jnp.square(jnp.cos(0.5 * jnp.pi * self.s / (1.0 + self.s)))
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class GeometricDiscreteSchedule(DiscreteSchedule):
+  """Geometric schedule for alpha for discrete corruption processes.
+
+  Used for discrete diffusion by https://openreview.net/forum?id=71mqtQdKB9
+  """
+
+  beta_min: float
+  beta_max: float
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return jnp.exp(-self.beta_min ** (1 - time) * self.beta_max**time)
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class PolynomialDiscreteSchedule(DiscreteSchedule):
+  """Polynomial schedule for alpha for discrete corruption processes."""
+
+  degree: float = 1.0
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return 1 - time**self.degree
 
 
 ################################################################################
@@ -110,7 +190,7 @@ class SymmetricPostCorruptionFn(PostCorruptionFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class CategoricalProcess(CorruptionProcess):
+class CategoricalProcess:
   """Discrete noise processes that corrupt towards a categorical distribution.
 
   We are mostly using two special cases of this process:
@@ -314,11 +394,6 @@ class CategoricalProcess(CorruptionProcess):
         'x0': x0_pred,  # Int[*b 1]; Argmax of the predicted distribution.
         'logits': logits,  # Float[*b K]; Raw logits
     }
-
-  @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
-    """Get the schedule info for the given time."""
-    return self.schedule.evaluate(time)
 
   ##############################################################################
   # MARK: Factory Methods

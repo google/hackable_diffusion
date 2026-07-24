@@ -23,7 +23,7 @@ from hackable_diffusion.lib import fast_random
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
-from hackable_diffusion.lib.corruption import schedules
+from hackable_diffusion.lib.corruption import discrete
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -48,7 +48,12 @@ TimeArray = hd_typing.TimeArray
 
 CorruptionProcess = hd_api.CorruptionProcess
 PrecisionMode = jax_helpers.PrecisionMode
-SimplicialSchedule = schedules.SimplicialSchedule
+SimplicialSchedule = discrete.DiscreteSchedule
+LinearSimplicialSchedule = discrete.LinearDiscreteSchedule
+CosineSimplicialSchedule = discrete.CosineDiscreteSchedule
+SquareCosineSimplicialSchedule = discrete.SquareCosineDiscreteSchedule
+GeometricSimplicialSchedule = discrete.GeometricDiscreteSchedule
+PolynomialSimplicialSchedule = discrete.PolynomialDiscreteSchedule
 
 
 ################################################################################
@@ -130,7 +135,7 @@ class SymmetricSimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class SimplicialProcess(CorruptionProcess):
+class SimplicialProcess:
   """Simplicial noise processes that corrupt towards a Dirichlet distribution.
 
   We are mostly using two special cases of this process:
@@ -334,11 +339,6 @@ class SimplicialProcess(CorruptionProcess):
         'x0': x0_pred,  # Int[*b 1]; Argmax of the predicted distribution.
         'logits': logits,  # Float[*b K]; Raw logits
     }
-
-  @kt.typechecked
-  def get_schedule_info(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
-    """Get the schedule info for the given time."""
-    return self.schedule.evaluate(time)
 
   ##############################################################################
   # MARK: Factory Methods

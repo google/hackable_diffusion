@@ -28,7 +28,6 @@ from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.architecture import unet_blocks
 from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.inference import diffusion_inference
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import wrappers
@@ -78,11 +77,11 @@ UNET_CONFIG = {
 }
 
 LOGSNR_RESCALER = diffusion_network.LogSnrTimeRescaler(
-    schedule=schedules.RFSchedule()
+    schedule=gaussian.RFSchedule()
 )
 
 MAGNITUDE_INPUT_RESCALER = diffusion_network.MagnitudeScheduleInputRescaler(
-    schedule=schedules.RFSchedule()
+    schedule=gaussian.RFSchedule()
 )
 
 
@@ -109,7 +108,7 @@ class DiffusionNetworkTest(parameterized.TestCase):
         'label1': jnp.arange(self.batch_size),
         'label2': jnp.arange(self.batch_size),
     }
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = GaussianProcess(schedule=self.schedule)
 
     self.time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
@@ -300,8 +299,6 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
       def convert_predictions(self, prediction, xt, time):
         raise NotImplementedError()
 
-      def get_schedule_info(self, time):
-        raise NotImplementedError()
 
     self.key = jax.random.PRNGKey(0)
     self.batch_size = 2
@@ -669,7 +666,7 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
     self.batch_size = 4
     self.img_shape = (self.batch_size, 32, 32, 3)
     self.is_training = True
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
 
     time_encoder_1 = conditioning_encoder.SinusoidalTimeEmbedder(
         activation='silu',

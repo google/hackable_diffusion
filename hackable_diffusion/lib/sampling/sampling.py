@@ -47,6 +47,8 @@ DiffusionStep = hd_api.DiffusionStep
 StepInfo = hd_api.StepInfo
 SamplerStep = hd_api.SamplerStep
 
+DiffusionStepTree = PyTree[DiffusionStep]
+
 InferenceFn = hd_api.InferenceFn
 TimeSchedule = time_scheduling.TimeSchedule
 DiffusionEarlyStoppingFn = diffusion_early_stopping.DiffusionEarlyStoppingFn

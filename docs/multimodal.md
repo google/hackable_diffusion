@@ -65,10 +65,9 @@ from hackable_diffusion.lib.multimodal import (
 )
 from hackable_diffusion.lib.corruption.gaussian import GaussianProcess
 from hackable_diffusion.lib.corruption.discrete import CategoricalProcess
-from hackable_diffusion.lib.corruption.schedules import (
-    CosineSchedule,
-    LinearDiscreteSchedule,
-)
+from hackable_diffusion.lib.corruption.gaussian import CosineSchedule
+from hackable_diffusion.lib.corruption import discrete
+from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.training.gaussian_loss import SiD2Loss
 from hackable_diffusion.lib.training.discrete_loss import MD4Loss
 from hackable_diffusion.lib.training.time_sampling import UniformTimeSampler
@@ -76,9 +75,9 @@ from hackable_diffusion.lib.training.time_sampling import UniformTimeSampler
 # 1. Define per-modality corruption processes
 process = NestedProcess(
     processes={
-        "image": GaussianProcess(schedule=CosineSchedule()),
+        "image": GaussianProcess(schedule=gaussian.CosineSchedule()),
         "label": CategoricalProcess.masking_process(
-            schedule=LinearDiscreteSchedule(), num_categories=10,
+            schedule=discrete.LinearDiscreteSchedule(), num_categories=10,
         ),
     }
 )
@@ -86,8 +85,8 @@ process = NestedProcess(
 # 2. Define per-modality losses
 loss_fn = NestedDiffusionLoss(
     losses={
-        "image": SiD2Loss(schedule=CosineSchedule()),
-        "label": MD4Loss(schedule=LinearDiscreteSchedule()),
+        "image": SiD2Loss(schedule=gaussian.CosineSchedule()),
+        "label": MD4Loss(schedule=discrete.LinearDiscreteSchedule()),
     }
 )
 

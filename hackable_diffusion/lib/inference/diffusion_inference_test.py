@@ -25,7 +25,6 @@ from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.architecture import unet_blocks
 from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.inference import diffusion_inference
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import wrappers
@@ -94,11 +93,11 @@ UNET_CONFIG = {
 }
 
 LOGSNR_RESCALER = diffusion_network.LogSnrTimeRescaler(
-    schedule=schedules.RFSchedule()
+    schedule=gaussian.RFSchedule()
 )
 
 MAGNITUDE_INPUT_RESCALER = diffusion_network.MagnitudeScheduleInputRescaler(
-    schedule=schedules.RFSchedule()
+    schedule=gaussian.RFSchedule()
 )
 
 
@@ -123,7 +122,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
         'label_foo': jnp.arange(self.batch_size),
         'label_bar': jnp.arange(self.batch_size),
     }
-    self.schedule = schedules.RFSchedule()
+    self.schedule = gaussian.RFSchedule()
     self.process = GaussianProcess(schedule=self.schedule)
 
     self.time_encoder = conditioning_encoder.SinusoidalTimeEmbedder(
@@ -314,7 +313,7 @@ class DiffusionInferenceTest(parameterized.TestCase):
 class IdentityInferenceFnTest(absltest.TestCase):
 
   def test_predict(self):
-    process = gaussian.GaussianProcess(schedule=schedules.RFSchedule())
+    process = gaussian.GaussianProcess(schedule=gaussian.RFSchedule())
     identity_inference_fn = diffusion_inference.IdentityInferenceFn(
         process=process
     )

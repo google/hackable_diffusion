@@ -17,7 +17,6 @@
 import chex
 from hackable_diffusion.lib import fast_random
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib.corruption import schedules
 from hackable_diffusion.lib.corruption import simplicial
 from hackable_diffusion.lib.sampling import simplicial_step_sampler
 import jax
@@ -112,7 +111,7 @@ class SimplicialStepSamplerTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.schedule = schedules.LinearDiscreteSchedule()
+    self.schedule = simplicial.LinearSimplicialSchedule()
     self.num_categories = 4
     self.process = SimplicialProcess.uniform_process(
         schedule=self.schedule, num_categories=self.num_categories
@@ -429,7 +428,7 @@ class SimplicialStepSamplerTest(parameterized.TestCase):
     (batch=1, N=3, N=3, K) input.  After each update() the output must satisfy
     xt[b, i, j, :] == xt[b, j, i, :] for all off-diagonal (i, j).
     """
-    schedule = schedules.LinearDiscreteSchedule()
+    schedule = simplicial.LinearSimplicialSchedule()
     post_fn = simplicial.SymmetricSimplicialPostCorruptionFn()
     process = simplicial.SimplicialProcess.uniform_process(
         schedule=schedule,

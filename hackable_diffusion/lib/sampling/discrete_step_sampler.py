@@ -115,7 +115,6 @@ from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import discrete
-from hackable_diffusion.lib.corruption import schedules
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -136,7 +135,7 @@ StepInfo = hd_api.StepInfo
 SamplerStep = hd_api.SamplerStep
 
 CategoricalProcess = discrete.CategoricalProcess
-DiscreteSchedule = schedules.DiscreteSchedule
+DiscreteSchedule = discrete.DiscreteSchedule
 
 ################################################################################
 # MARK: Remasking strategy
