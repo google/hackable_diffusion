@@ -68,5 +68,38 @@ class DiffusionTest(absltest.TestCase):
     self.assertIsInstance(out["noise_info"], dict)
 
 
+class KauldronLossWrapperTest(absltest.TestCase):
+
+  def test_stop_gradient_on_targets(self):
+    def dummy_loss(preds, targets, time):
+      del time  # Unused.
+      return (preds["v"] - targets["v"]) ** 2
+
+    preds = {"v": jnp.array([1.0, 2.0])}
+    time = jnp.array([0.5, 0.5])
+    targets_val = jnp.array([3.0, 4.0])
+
+    def loss_fn(targets_val, stop_gradient):
+      wrapper = core.KauldronLossWrapper(
+          loss=dummy_loss,
+          stop_gradient_on_targets=stop_gradient,
+      )
+      return jnp.sum(
+          wrapper.get_values(
+              preds=preds,
+              targets={"v": targets_val},
+              time=time,
+          )
+      )
+
+    # When stop_gradient_on_targets is False, gradient wrt targets is non-zero.
+    grad_no_stop = jax.grad(loss_fn, argnums=0)(targets_val, False)
+    chex.assert_trees_all_close(grad_no_stop, -2.0 * (preds["v"] - targets_val))
+
+    # When stop_gradient_on_targets is True, gradient wrt targets is zero.
+    grad_stop = jax.grad(loss_fn, argnums=0)(targets_val, True)
+    chex.assert_trees_all_close(grad_stop, jnp.zeros_like(targets_val))
+
+
 if __name__ == "__main__":
   absltest.main()

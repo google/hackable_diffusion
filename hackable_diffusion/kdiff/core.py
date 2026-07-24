@@ -53,6 +53,7 @@ from typing import Optional
 import flax.linen as nn
 from hackable_diffusion import hd
 from hackable_diffusion.lib import hd_typing
+import jax
 from kauldron import kd
 
 ################################################################################
@@ -166,7 +167,16 @@ class Diffusion(nn.Module, kw_only=True):
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class KauldronLossWrapper(kd.losses.Loss):
-  """Wrapper for hackable diffusion loss functions."""
+  """Wrapper for hackable diffusion loss functions.
+
+  Args:
+    preds: Key into the context for the predictions. E.g. 'preds.output'.
+    targets: Key into the context for the targets. E.g. 'preds.target'.
+    time: Key into the context for the time array. E.g. 'preds.noise_info.time'.
+    loss: The loss function to use.
+    stop_gradient_on_targets: Whether to stop gradient on the targets. This
+      might be useful for self-distillation for example.
+  """
 
   # Basically just adds the kontext keys so that kauldron can pass the correct
   # predictions, targets and time arrays to the loss function.
@@ -179,6 +189,8 @@ class KauldronLossWrapper(kd.losses.Loss):
 
   loss: hd.hd_api.DiffusionLoss
 
+  stop_gradient_on_targets: bool = False
+
   @typechecked
   def get_values(
       self,
@@ -188,6 +200,8 @@ class KauldronLossWrapper(kd.losses.Loss):
   ) -> LossOutput:  # pyrefly: ignore[not-a-type]
     return self.loss(
         preds=preds,
-        targets=targets,
+        targets=jax.lax.stop_gradient(targets)
+        if self.stop_gradient_on_targets
+        else targets,
         time=time,
     )
