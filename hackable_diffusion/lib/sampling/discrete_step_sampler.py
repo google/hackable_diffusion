@@ -1292,3 +1292,155 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
         current_step,
         last_step_info,
     )
+
+
+################################################################################
+# MARK: Entropy-Bound Step
+################################################################################
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class EntropyBoundStep(SamplerStep):
+  """Entropy-bound denoising step.
+
+  Instead of D3PM posterior routing, this sampler uses an entropy-based
+  token selection strategy inspired by ``SampleFromPredictions`` in
+  ``gemma/diffusion/_sampler.py``.
+
+  At each step:
+
+  1. Apply temperature-scaled logits to get candidate tokens ``x_0``.
+  2. Compute per-token entropy from the (temperature-scaled) logits.
+  3. Sort tokens by entropy (ascending, lowest = most confident).
+  4. Accept the top-k tokens whose accumulated entropy is below
+     ``entropy_bound``.
+  5. Selected positions get the sampled ``x_0``; non-selected positions
+     are re-noised by sampling from the invariant distribution.
+
+  Attributes:
+    corruption_process: The corruption process to use.
+    temperature: Temperature for logits scaling.
+    entropy_bound: Confidence threshold controlling how many tokens are accepted
+      per step.  Lower values accept fewer tokens (more conservative).  Default
+      is 0.1.
+    logits_dtype: Dtype for logits computation.
+  """
+
+  corruption_process: CategoricalProcess
+  temperature: float = 1.0
+  entropy_bound: float = 0.1
+  logits_dtype: jnp.dtype = jnp.bfloat16
+
+  @kt.typechecked
+  def initialize(
+      self,
+      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
+      initial_step_info: StepInfo,
+  ) -> DiffusionStep:
+    discrete.assert_discrete_shape_is_valid(
+        initial_noise, x_name='initial_noise'
+    )
+
+    init_logits = jnp.repeat(
+        initial_noise, self.corruption_process.num_categories, axis=-1
+    )
+    init_logits = jnp.zeros_like(init_logits, dtype=self.logits_dtype)
+
+    return DiffusionStep(
+        xt=initial_noise,
+        step_info=initial_step_info,
+        aux={'logits': init_logits},
+    )
+
+  @kt.typechecked
+  def update(
+      self,
+      prediction: TargetInfo,
+      current_step: DiffusionStep,
+      next_step_info: StepInfo,
+  ) -> DiffusionStep:
+
+    current_step_info = current_step.step_info
+    xt = current_step.xt
+    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
+    unused_mask = xt == self.corruption_process.unused_token
+
+    time = current_step_info.time
+    time_bcast = jax_helpers.bcast_right(time, xt.ndim)
+    key = next_step_info.rng
+
+    # Split RNG keys.
+    _, candidate_key = jax.random.split(key, 2)
+
+    x0, x_noise, logits = _generate_candidates(
+        self.corruption_process,
+        prediction,
+        xt,
+        time_bcast,
+        candidate_key,
+        self.temperature,
+    )
+    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
+
+    # ------------------------------------------------------------------
+    # Entropy-based selection (from SampleFromPredictions).
+    # ------------------------------------------------------------------
+    # Compute per-token entropy from the temperature-scaled logits.
+    # logits shape: [B, L, V] (with trailing V expanded from [B, L, 1])
+    log_probs = jax.nn.log_softmax(logits.astype(jnp.float32))
+    probs = jnp.exp(log_probs)
+    safe_log_probs = jnp.where(probs == 0, 0.0, log_probs)
+    token_entropy = -jnp.sum(safe_log_probs * probs, axis=-1)  # [B, L]
+
+    # Sort tokens by entropy (ascending) and build selection mask.
+    sorted_index = jnp.argsort(token_entropy, axis=-1)
+    sorted_entropy = jnp.take_along_axis(token_entropy, sorted_index, axis=-1)
+    accumulated_entropy = jnp.cumsum(sorted_entropy, axis=-1)
+
+    # Accept k tokens where accumulated - sorted <= entropy_bound.
+    sorted_selection_mask = (
+        accumulated_entropy - sorted_entropy
+    ) <= self.entropy_bound
+
+    # Scatter the sorted mask back to original positions.
+    batch_size = xt.shape[0]
+    seq_len = xt.shape[1]
+    selection_mask = (
+        jnp.zeros((batch_size, seq_len), dtype=jnp.bool_)
+        .at[jnp.arange(batch_size)[:, None], sorted_index]
+        .set(sorted_selection_mask)
+    )  # [B, L]
+
+    # ------------------------------------------------------------------
+    # Build new xt: selected → x0, non-selected → x_noise.
+    # ------------------------------------------------------------------
+    # Expand selection mask to match xt shape [B, L, 1].
+    selection_mask_3d = selection_mask[..., None]  # [B, L, 1]
+    new_xt = jnp.where(selection_mask_3d, x0, x_noise)
+
+    new_xt = self.corruption_process.post_corruption_fn(new_xt)
+
+    # Replace the unused tokens with the unused_token.
+    new_xt = jnp.where(
+        unused_mask, self.corruption_process.unused_token, new_xt
+    )
+    logits = logits.astype(self.logits_dtype)
+
+    return DiffusionStep(
+        xt=new_xt,
+        step_info=next_step_info,
+        aux={'logits': logits},
+    )
+
+  @kt.typechecked
+  def finalize(
+      self,
+      prediction: TargetInfo,
+      current_step: DiffusionStep,
+      last_step_info: StepInfo,
+  ) -> DiffusionStep:
+    return self.update(
+        prediction,
+        current_step,
+        last_step_info,
+    )

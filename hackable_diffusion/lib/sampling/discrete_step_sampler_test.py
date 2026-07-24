@@ -1830,5 +1830,261 @@ class GreedyPlannerTest(absltest.TestCase):
     self.assertEqual(float(jnp.sum(out.noise[out.clean > 0])), 0.0)
 
 
+class EntropyBoundStepTest(absltest.TestCase):
+  """Tests for the EntropyBoundStep sampler."""
+
+  def setUp(self):
+    super().setUp()
+    self.schedule = discrete.LinearDiscreteSchedule()
+    self.num_categories = 4
+    self.process = CategoricalProcess.uniform_process(
+        schedule=self.schedule, num_categories=self.num_categories
+    )
+    key = jax.random.PRNGKey(0)
+    self.initial_noise = jax.random.randint(
+        key, (2, 4, 1), 0, self.process.process_num_categories
+    )
+    self.step_sampler = discrete_step_sampler.EntropyBoundStep(
+        corruption_process=self.process,
+        entropy_bound=0.1,
+    )
+
+  def _dummy_inference_fn(self, xt, conditioning, time):
+    del conditioning, time
+    logits = jnp.zeros(xt.shape[:-1] + (self.process.process_num_categories,))
+    logits = logits.at[..., 1].set(10.0)
+    return {'logits': logits}
+
+  def test_initialize(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([1.0, 1.0])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.step_sampler.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+
+    init_logits = jnp.repeat(
+        self.initial_noise, self.process.num_categories, axis=-1
+    )
+    init_logits = jnp.zeros_like(init_logits, dtype=jnp.bfloat16)
+
+    chex.assert_trees_all_equal(
+        initial_step,
+        DiffusionStep(
+            xt=self.initial_noise,
+            step_info=initial_step_info,
+            aux={'logits': init_logits},
+        ),
+    )
+
+  def test_initialize_raises_for_invalid_trailing_dimension(self):
+    initial_noise_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([1.0, 1.0])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected initial_noise to have a trailing dimension of 1'
+    ):
+      self.step_sampler.initialize(
+          initial_noise=initial_noise_bad,
+          initial_step_info=initial_step_info,
+      )
+
+  def test_update(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.step_sampler.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = self._dummy_inference_fn(
+        xt=initial_step.xt,
+        conditioning={},
+        time=initial_step.step_info.time,
+    )
+
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    next_step = self.step_sampler.update(
+        prediction=prediction,
+        current_step=initial_step,
+        next_step_info=next_step_info,
+    )
+
+    self.assertEqual(next_step.xt.shape, self.initial_noise.shape)
+    self.assertEqual(next_step.xt.dtype, self.initial_noise.dtype)
+
+  def test_entropy_selection_budget(self):
+    """Low entropy tokens are accepted (x0), high entropy tokens are renoised."""
+    logits = jnp.array([[
+        [100.0, -100.0, -100.0, -100.0],
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0],
+    ]])
+    prediction = {'logits': logits}
+
+    xt = jnp.ones((1, 4, 1), dtype=jnp.int32)
+    step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    current_step = DiffusionStep(xt=xt, step_info=step_info, aux={})
+
+    sampler = discrete_step_sampler.EntropyBoundStep(
+        corruption_process=self.process,
+        entropy_bound=0.05,
+    )
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.4])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    next_step = sampler.update(
+        prediction=prediction,
+        current_step=current_step,
+        next_step_info=next_step_info,
+    )
+
+    self.assertEqual(int(next_step.xt[0, 0, 0]), 0)
+
+  def test_large_entropy_bound_accepts_all(self):
+    """Very large entropy_bound accepts all candidate tokens x0."""
+    logits = jnp.array([[
+        [10.0, -10.0, -10.0, -10.0],
+        [-10.0, 10.0, -10.0, -10.0],
+        [-10.0, -10.0, 10.0, -10.0],
+        [-10.0, -10.0, -10.0, 10.0],
+    ]])
+    prediction = {'logits': logits}
+
+    xt = jnp.ones((1, 4, 1), dtype=jnp.int32)
+    step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    current_step = DiffusionStep(xt=xt, step_info=step_info, aux={})
+
+    sampler = discrete_step_sampler.EntropyBoundStep(
+        corruption_process=self.process,
+        entropy_bound=100.0,
+    )
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.4])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    next_step = sampler.update(
+        prediction=prediction,
+        current_step=current_step,
+        next_step_info=next_step_info,
+    )
+
+    expected = jnp.array([[[0], [1], [2], [3]]], dtype=jnp.int32)
+    chex.assert_trees_all_equal(next_step.xt, expected)
+
+  def test_update_raises_for_invalid_xt_trailing_dimension(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    xt_bad = jnp.ones((2, 4, 3), dtype=jnp.int32)
+    initial_step = DiffusionStep(
+        xt=xt_bad,
+        step_info=initial_step_info,
+        aux={
+            'logits': jnp.zeros(
+                (2, 4, 3, self.process.process_num_categories),
+                dtype=jnp.float32,
+            )
+        },
+    )
+    prediction = {
+        'logits': jnp.zeros((2, 4, 3, self.process.process_num_categories))
+    }
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'Expected xt to have a trailing dimension of 1'
+    ):
+      self.step_sampler.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
+
+  def test_update_raises_for_shape_mismatch(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.5, 0.5])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.step_sampler.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = {
+        'logits': jnp.zeros((2, 8, self.process.process_num_categories))
+    }
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    with self.assertRaises(ValueError):
+      self.step_sampler.update(
+          prediction=prediction,
+          current_step=initial_step,
+          next_step_info=next_step_info,
+      )
+
+  def test_finalize(self):
+    initial_step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.1, 0.1])[:, None, None],
+        rng=jax.random.PRNGKey(0),
+    )
+    initial_step = self.step_sampler.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=initial_step_info,
+    )
+    prediction = self._dummy_inference_fn(
+        xt=initial_step.xt,
+        conditioning={},
+        time=initial_step.step_info.time,
+    )
+
+    last_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.0, 0.0])[:, None, None],
+        rng=jax.random.PRNGKey(1),
+    )
+    final_step = self.step_sampler.finalize(
+        prediction=prediction,
+        current_step=initial_step,
+        last_step_info=last_step_info,
+    )
+
+    self.assertEqual(final_step.xt.shape, self.initial_noise.shape)
+    self.assertEqual(final_step.xt.dtype, self.initial_noise.dtype)
+
+
 if __name__ == '__main__':
   absltest.main()
