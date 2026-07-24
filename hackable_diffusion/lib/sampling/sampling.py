@@ -426,14 +426,14 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
       return (next_step, step + 1, new_done)
 
     if self.use_lax_while_loop:
-      before_last_step, steps_executed, _ = jax.lax.while_loop(
+      before_last_step, steps_executed, done = jax.lax.while_loop(
           _cond_fn, _body_fn, init_carry
       )
     else:
       carry = init_carry
       while _cond_fn(carry):
         carry = _body_fn(carry)
-      before_last_step, steps_executed, _ = carry
+      before_last_step, steps_executed, done = carry
 
     # Finalize: run the last step.
     last_step_info = _index_pytree(all_step_infos, num_intermediate_steps)
@@ -454,6 +454,9 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
         before_last_step,
         last_step_info,
     )
+
+    # Freeze already-done elements so finalize doesn't overwrite them.
+    last_step = _freeze_done_elements(last_step, before_last_step, done)
 
     # Record the actual number of steps executed in step_info.step.
     # steps_executed counts update steps; +1 accounts for finalize.

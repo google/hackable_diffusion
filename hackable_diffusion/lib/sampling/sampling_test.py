@@ -569,9 +569,8 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         rng=jax.random.PRNGKey(0),
     )
 
-    # init=identity, 1 shift_right, then finalize=invert.
-    shifted = shift_right(jnp.eye(4))
-    expected_single = invert(shifted)
+    # 1 update step (shift_right) before early stopping freezes state.
+    expected_single = shift_right(jnp.eye(4))
     expected_last = jnp.repeat(
         jnp.expand_dims(expected_single, axis=0), repeats=2, axis=0
     )
@@ -599,12 +598,9 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         rng=jax.random.PRNGKey(0),
     )
 
-    # The body executes once (step=0): shift_right is computed but then
-    # early_stop fires.  Since done was False before this iteration,
-    # the update IS applied (freeze only protects already-done elements).
-    # So: init=identity -> 1 shift_right -> finalize=invert.
-    shifted = shift_right(jnp.eye(4))
-    expected_single = invert(shifted)
+    # The body executes once (step=0): shift_right is computed, then
+    # early_stop fires and freezes the state.
+    expected_single = shift_right(jnp.eye(4))
     expected_last = jnp.repeat(
         jnp.expand_dims(expected_single, axis=0), repeats=2, axis=0
     )
@@ -664,15 +660,11 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         rng=jax.random.PRNGKey(0),
     )
 
-    # Element 0: 1 shift_right (frozen after step 0), then finalize=invert.
-    elem0_shifted = shift_right(jnp.eye(4))
-    elem0_expected = invert(elem0_shifted)
+    # Element 0: frozen after step 0 (1 shift_right).
+    elem0_expected = shift_right(jnp.eye(4))
 
-    # Element 1: 3 shift_rights (steps 0,1,2), then finalize=invert.
-    elem1_shifted = jnp.eye(4)
-    for _ in range(3):
-      elem1_shifted = shift_right(elem1_shifted)
-    elem1_expected = invert(elem1_shifted)
+    # Element 1: frozen after step 2 (3 shift_rights).
+    elem1_expected = shift_right(shift_right(shift_right(jnp.eye(4))))
 
     expected = jnp.stack([elem0_expected, elem1_expected], axis=0)
     chex.assert_trees_all_equal(last_step.xt, expected)
@@ -799,9 +791,8 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
     # Should stop after 1 update + finalize = 2 total steps.
     self.assertEqual(int(last_step.step_info.step), 2)
 
-    # Verify the output: init=eye, 1 shift_right, then finalize=invert.
-    shifted = shift_right(jnp.eye(4))
-    expected_single = invert(shifted)
+    # Stopped after 1 update step (shift_right).
+    expected_single = shift_right(jnp.eye(4))
     expected = jnp.repeat(
         jnp.expand_dims(expected_single, axis=0), repeats=2, axis=0
     )
@@ -869,9 +860,9 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
         rng=jax.random.PRNGKey(0),
     )
 
-    # Element 0: 1 shift_right (frozen after step 0), then finalize=invert.
-    elem0_expected = invert(shift_right(jnp.eye(4)))
-    # Element 1: 4 shift_rights (runs all steps), then finalize=invert.
+    # Element 0: frozen after 1 update step (shift_right).
+    elem0_expected = shift_right(jnp.eye(4))
+    # Element 1: runs all 4 update steps + finalize (invert).
     # shift_right^4 on a 4x4 matrix wraps back to identity.
     elem1_expected = invert(jnp.eye(4))
 
