@@ -249,5 +249,225 @@ class DiffusionEntropyEarlyStopFnTest(parameterized.TestCase):
     chex.assert_trees_all_equal(result_a, result_b)
 
 
+class DiffusionTokenStabilityEarlyStopFnTest(parameterized.TestCase):
+  """Tests for DiffusionTokenStabilityEarlyStopFn."""
+
+  def test_stable_tokens_stop(self):
+    """When argmax(logits) matches previous_step.xt, should stop."""
+    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
+    prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
+    logits = jnp.full((2, 3, 4), -100.0)
+    for b in range(2):
+      for l in range(3):
+        logits = logits.at[b, l, prev_tokens[b, l]].set(100.0)
+
+    previous_step = _make_diffusion_step(xt=prev_tokens)
+    current_step = _make_diffusion_step(xt=prev_tokens, aux={'logits': logits})
+
+    fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
+    result = fn.should_stop(
+        step=jnp.int32(0),
+        current_step=current_step,
+        previous_step=previous_step,
+    )
+    chex.assert_shape(result, (2,))
+    self.assertTrue(jnp.all(result))
+
+  def test_unstable_tokens_continue(self):
+    """When argmax(logits) differs from previous_step.xt, should not stop."""
+    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
+    prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
+    logits = jnp.full((2, 3, 4), -100.0).at[:, :, 3].set(100.0)
+
+    previous_step = _make_diffusion_step(xt=prev_tokens)
+    current_step = _make_diffusion_step(xt=prev_tokens, aux={'logits': logits})
+
+    fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
+    result = fn.should_stop(
+        step=jnp.int32(0),
+        current_step=current_step,
+        previous_step=previous_step,
+    )
+    chex.assert_shape(result, (2,))
+    self.assertTrue(jnp.all(~result))
+
+  def test_per_batch_mixed_stability(self):
+    """Batch element 0 is stable, batch element 1 is unstable."""
+    prev_tokens = jnp.array([[0, 1, 2], [3, 2, 1]])
+    prev_tokens = jnp.reshape(prev_tokens, (2, 3, 1))
+    logits = jnp.full((2, 3, 4), -100.0)
+    for l in range(3):
+      logits = logits.at[0, l, prev_tokens[0, l]].set(100.0)
+    logits = logits.at[1, :, 0].set(100.0)
+
+    previous_step = _make_diffusion_step(xt=prev_tokens)
+    current_step = _make_diffusion_step(xt=prev_tokens, aux={'logits': logits})
+
+    fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn()
+    result = fn.should_stop(
+        step=jnp.int32(0),
+        current_step=current_step,
+        previous_step=previous_step,
+    )
+    chex.assert_shape(result, (2,))
+    self.assertTrue(result[0])
+    self.assertFalse(result[1])
+
+  def test_custom_logits_key(self):
+    """Should read logits from custom logits_key in aux."""
+    prev_tokens = jnp.array([[0, 1, 2]])
+    prev_tokens = jnp.reshape(prev_tokens, (1, 3, 1))
+    logits = jnp.full((1, 3, 4), -100.0)
+    for l in range(3):
+      logits = logits.at[0, l, prev_tokens[0, l]].set(100.0)
+
+    previous_step = _make_diffusion_step(xt=prev_tokens)
+    current_step = _make_diffusion_step(
+        xt=prev_tokens, aux={'my_logits': logits}
+    )
+
+    fn = diffusion_early_stopping.DiffusionTokenStabilityEarlyStopFn(
+        logits_key='my_logits'
+    )
+    result = fn.should_stop(
+        step=jnp.int32(0),
+        current_step=current_step,
+        previous_step=previous_step,
+    )
+    self.assertTrue(result[0])
+
+
+class DiffusionChainedEarlyStopFnTest(parameterized.TestCase):
+  """Tests for DiffusionChainedEarlyStopFn."""
+
+  def test_raises_value_error_if_empty(self):
+    """Should raise ValueError if instantiated with an empty list."""
+    with self.assertRaisesRegex(
+        ValueError, 'requires at least one EarlyStopFn'
+    ):
+      diffusion_early_stopping.DiffusionChainedEarlyStopFn(early_stop_fns=[])
+
+  def test_all_stoppers_true_stops(self):
+    """When all chained stoppers return True, should stop."""
+    fn1 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=1.0
+    )
+    fn2 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=2.0
+    )
+    chained = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn1, fn2]
+    )
+
+    logits = jnp.full((2, 3, 4), -100.0).at[:, :, 0].set(100.0)
+    step = _make_diffusion_step(xt=jnp.ones((2, 4, 1)), aux={'logits': logits})
+
+    result = chained.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    chex.assert_shape(result, (2,))
+    self.assertTrue(jnp.all(result))
+
+  def test_any_stopper_false_continues(self):
+    """When one chained stopper returns False, should continue (AND logic)."""
+    fn1 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=10.0
+    )
+    fn2 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=1e-5
+    )
+    chained = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn1, fn2]
+    )
+
+    logits = jnp.zeros((2, 3, 4))
+    step = _make_diffusion_step(xt=jnp.ones((2, 4)), aux={'logits': logits})
+
+    result = chained.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    chex.assert_shape(result, (2,))
+    self.assertTrue(jnp.all(~result))
+
+  def test_per_batch_chained(self):
+    """Logical AND per batch element across multiple stoppers."""
+    fn1 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=0.1
+    )
+    fn2 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=0.5
+    )
+    chained = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn1, fn2]
+    )
+
+    logits = jnp.array([
+        [[100.0, -100.0, -100.0, -100.0]] * 3,
+        [[0.0, 0.0, 0.0, 0.0]] * 3,
+    ])
+    step = _make_diffusion_step(xt=jnp.ones((2, 4, 1)), aux={'logits': logits})
+
+    result = chained.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    chex.assert_shape(result, (2,))
+    self.assertTrue(result[0])
+    self.assertFalse(result[1])
+
+  def test_order_does_not_matter(self):
+    """Logical AND per batch element across multiple stoppers."""
+    fn1 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=0.1
+    )
+    fn2 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=0.5
+    )
+    fn3 = diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
+        entropy_threshold=1.0
+    )
+    chained_1 = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn1, fn2, fn3]
+    )
+    chained_2 = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn1, fn3, fn2]
+    )
+    chained_3 = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn3, fn2, fn1]
+    )
+
+    logits = jnp.array([
+        [[100.0, -100.0, -100.0, -100.0]] * 3,
+        [[0.0, 0.0, 0.0, 0.0]] * 3,
+    ])
+    step = _make_diffusion_step(xt=jnp.ones((2, 4, 1)), aux={'logits': logits})
+
+    result_1 = chained_1.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    result_2 = chained_2.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    result_3 = chained_3.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    chex.assert_trees_all_equal(result_1, result_2)
+    chex.assert_trees_all_equal(result_2, result_3)
+    chex.assert_trees_all_equal(result_1, result_3)
+
+  def test_single_stopper_chain(self):
+    """Works correctly with a single stopper in the chain."""
+    fn = diffusion_early_stopping.DiffusionNoEarlyStopFn()
+    chained = diffusion_early_stopping.DiffusionChainedEarlyStopFn(
+        early_stop_fns=[fn]
+    )
+    step = _make_diffusion_step(xt=jnp.ones((4, 8, 1)))
+
+    result = chained.should_stop(
+        step=jnp.int32(0), current_step=step, previous_step=step
+    )
+    chex.assert_shape(result, (4,))
+    self.assertTrue(jnp.all(~result))
+
+
 if __name__ == '__main__':
   absltest.main()
