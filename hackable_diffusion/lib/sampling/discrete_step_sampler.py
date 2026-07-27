@@ -24,7 +24,7 @@ Core concepts:
   - Stay: Keep the current token `xt`.
   - Noise: Sample from the invariant distribution.
   - Clean: Use the predicted clean token `x0`.
-  
+
 * **RoutingStrategy**: An optional transformation applied to routing
   weights before they are sampled. This allows injecting custom selection
   strategies (e.g., greedy top-k) without modifying the sampler physics.
@@ -331,10 +331,8 @@ class Routing:
 
 
 def _sample_routing(
-    key: PRNGKey,
-    weights: Routing,
-    candidates: Routing
-    ) -> DataArray:  # pyrefly: ignore[not-a-type]
+    key: PRNGKey, weights: Routing, candidates: Routing
+) -> DataArray:  # pyrefly: ignore[not-a-type]
   """Apply 3-way routing to construct the next state.
 
   3-way routing determines the next state by sampling from a mixture of three
@@ -432,13 +430,34 @@ class RoutingStrategy(Protocol):
     ...
 
 
+def _token_confidence(
+    logits: Float['... M'],  # pyrefly: ignore[not-a-type]
+    x0: DataArray,  # pyrefly: ignore[not-a-type]
+) -> jax.Array:
+  """Compute per-position confidence: softmax(logits)[x0].
+
+  Args:
+    logits: Model logits of shape ``(*, M)``.
+    x0: Sampled clean token indices of shape ``(*, 1)``.
+
+  Returns:
+    Confidence scores of shape ``(*)`` (last dim squeezed).
+  """
+  p = jax.nn.softmax(logits, axis=-1)
+  return jnp.take_along_axis(p, x0, axis=-1).squeeze(-1)
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class GreedyPlanner(RoutingStrategy):
   """Confidence-based top-k greedy planner.
 
   Selects the top-k positions by confidence of the sampled x0 token, forces
-  those to CLEAN, and handles the remaining positions according to the
-  ``resample`` flag.
+  those to CLEAN. Non-selected positions have their clean weight zeroed out so
+  they can only stay or re-noise according to the posterior.
+
+  This greedy planner is similar to the LLaDA sampler with "low_confidence"
+  mode. See https://github.com/ML-GSAI/LLaDA/blob/main/generate.py for details.
+  See also https://arxiv.org/pdf/2502.09992 (Algorithm 5).
 
   The budget k is computed as:
     k = num_eligible * p_clean_norm
@@ -449,14 +468,51 @@ class GreedyPlanner(RoutingStrategy):
   Attributes:
     tie_breaking_noise: Scale of uniform noise added to confidence scores for
       tie-breaking. Default 1e-6.
-    resample: If True, non-selected positions keep their full original routing
-      weights (stay, noise, and clean), allowing stochastic resampling via the
-      posterior. If False (default), non-selected positions have their clean
-      weight zeroed out so they can only stay or re-noise.
   """
 
   tie_breaking_noise: float = 1e-6
-  resample: bool = False
+
+  def _num_tokens_to_denoise(
+      self,
+      routing_weights: Routing,
+      eligible: jax.Array,
+  ) -> jax.Array:
+    """Compute the number of tokens to denoise (k).
+
+    Budget is k = num_eligible * p_clean_norm, where p_clean_norm is the
+    normalized clean probability. For a linear schedule (α = 1−t), this
+    simplifies to k = num_eligible * (1 − next_time/time).
+    In expectation, we have num_eligible = seq_len * (1 - time) so we get that
+    k = seq_len * (1 - next_time), which is the budget of the LLaDA sampler.
+    See below for more details.
+
+    Equivalence with LLaDA sampler (linear schedule, α = 1−t):
+      With UnMaskingStep, Lt positions are eligible (masked) and each has
+      p_clean_norm = (t−s)/t, giving k = L(t−s). Combined with L(1−t)
+      already-clean positions, the total denoised count is L(1−s), matching
+      LLaDA (Algorithm 5, Line 12 in https://arxiv.org/pdf/2502.09992).
+
+    Args:
+      routing_weights: Per-position routing weights.
+      eligible: Boolean mask of shape (batch, num_positions) indicating which
+        positions are eligible for denoising.
+
+    Returns:
+      Integer array of shape (batch, 1) with the number of tokens to denoise.
+    """
+    batch_size = eligible.shape[0]
+    total_weight = (
+        routing_weights.stay + routing_weights.noise + routing_weights.clean
+    )
+    p_clean_norm = routing_weights.clean / jnp.maximum(total_weight, 1e-12)
+    # p_clean_norm is the same for all eligible positions. Take max over spatial
+    # dimensions to get the value (ineligible positions have 0).
+    p_clean_norm_flat = p_clean_norm.reshape(batch_size, -1)
+    frac = jnp.max(p_clean_norm_flat, axis=-1, keepdims=True)
+    frac = jnp.clip(frac, 0.0, 1.0)
+
+    num_eligible = jnp.sum(eligible.astype(jnp.float32), axis=-1, keepdims=True)
+    return (num_eligible * frac).astype(jnp.int32)
 
   @kt.typechecked
   def __call__(
@@ -475,11 +531,8 @@ class GreedyPlanner(RoutingStrategy):
     batch_size = routing_weights.stay.shape[0]
     spatial_shape = routing_weights.stay.shape[1:-1]  # e.g. (seq,) or (N, N)
 
-    # Confidence = softmax(logits)[x0] per position
-    p = jax.nn.softmax(logits, axis=-1)
-    confidence = jnp.take_along_axis(p, x0, axis=-1).squeeze(-1)
-    # confidence: (batch, *spatial) → flatten to (batch, num_positions)
-    confidence = confidence.reshape(batch_size, -1)
+    # Confidence = softmax(logits)[x0] per position, flattened.
+    confidence = _token_confidence(logits=logits, x0=x0).reshape(batch_size, -1)
 
     # Only consider positions that could go clean (p_clean > 0)
     eligible = routing_weights.clean[..., 0] > 0
@@ -492,31 +545,16 @@ class GreedyPlanner(RoutingStrategy):
         self.tie_breaking_noise
     )
 
-    # Budget: k = num_eligible * p_clean_norm.
-    # p_clean_norm = p_clean / (p_stay + p_noise + p_clean) is the same
-    # for all eligible positions (π(x_t) cancels in normalization).
-    # For a linear schedule (α = 1-t), this equals (1 - next_time/time).
-    total_weight = (
-        routing_weights.stay + routing_weights.noise + routing_weights.clean
-    )
-    p_clean_norm = routing_weights.clean / jnp.maximum(total_weight, 1e-12)
-    # p_clean_norm is the same for all eligible positions. Take max over spatial
-    # dimensions to get the value (ineligible positions have 0).
-    p_clean_norm_flat = p_clean_norm.reshape(batch_size, -1)
-    frac = jnp.max(p_clean_norm_flat, axis=-1, keepdims=True)
-    frac = jnp.clip(frac, 0.0, 1.0)
-
-    num_eligible = jnp.sum(eligible.astype(jnp.float32), axis=-1, keepdims=True)
-    k = (num_eligible * frac).astype(jnp.int32)
+    num_to_denoise = self._num_tokens_to_denoise(routing_weights, eligible)
 
     # Top-k threshold (operates on flattened positions)
     num_positions = confidence.shape[-1]
     sorted_conf = jnp.sort(confidence, axis=-1)[..., ::-1]
     threshold = jnp.take_along_axis(
-        sorted_conf, jnp.clip(k - 1, 0, num_positions - 1), axis=-1
+        sorted_conf, jnp.clip(num_to_denoise - 1, 0, num_positions - 1), axis=-1
     )
-    # When k=0, no positions should be selected.
-    to_update = (confidence >= threshold) & (k > 0)
+    # When num_to_denoise=0, no positions should be selected.
+    to_update = (confidence >= threshold) & (num_to_denoise > 0)
 
     # Unflatten to_update back to original spatial shape
     to_update = to_update.reshape(batch_size, *spatial_shape)
