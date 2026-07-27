@@ -32,6 +32,7 @@ from hackable_diffusion.lib.sampling.discrete_step_sampler import IntegratedDisc
 from hackable_diffusion.lib.sampling.discrete_step_sampler import MaskValueCorruptedMaskFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import MaxCappedRemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import NoRemaskingFn
+from hackable_diffusion.lib.sampling.discrete_step_sampler import PriorStep
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RescaledRemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import Routing
