@@ -214,6 +214,29 @@ class SimplicialStepSamplerTest(parameterized.TestCase):
 
       self.assertEqual(final_step.xt.shape, self.initial_noise.shape)
 
+  def test_temperature_schedule(self):
+    step_const = SimplicialDDIMStep(
+        corruption_process=self.process,
+        temperature=simplicial_step_sampler.ConstantTemperature(
+            temperature=0.5
+        ),
+    )
+    self.assertIsInstance(
+        step_const.temperature, simplicial_step_sampler.ConstantTemperature
+    )
+    assert isinstance(
+        step_const.temperature, simplicial_step_sampler.ConstantTemperature
+    )
+    self.assertEqual(step_const.temperature.temperature, 0.5)
+
+    anneal = simplicial_step_sampler.AnnealingTemperature(
+        schedule=self.schedule, max_temperature=0.8, min_temperature=0.4
+    )
+    step_anneal = SimplicialDDIMStep(
+        corruption_process=self.process, temperature=anneal
+    )
+    self.assertEqual(step_anneal.temperature, anneal)
+
   def test_churn_variation(self):
     # Test that different churn values yield different results
     initial_step_info = StepInfo(
