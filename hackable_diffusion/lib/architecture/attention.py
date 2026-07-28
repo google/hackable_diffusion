@@ -91,12 +91,12 @@ class AttentionHeadsSpec:
         )
       return self.head_dim, embedding_dim // self.head_dim
 
-    if embedding_dim % self.num_heads != 0:
+    if embedding_dim % self.num_heads != 0:  # pyrefly: ignore[unsupported-operation]
       raise ValueError(
           f"Embedding dim {embedding_dim} is not divisible by"
           f" num_heads {self.num_heads}."
       )
-    return embedding_dim // self.num_heads, self.num_heads
+    return embedding_dim // self.num_heads, self.num_heads  # pyrefly: ignore[bad-return, unsupported-operation]
 
 
 @kt.typechecked
