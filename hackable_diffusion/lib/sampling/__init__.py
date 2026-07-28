@@ -27,6 +27,7 @@ from hackable_diffusion.lib.sampling.discrete_step_sampler import AllCorruptedMa
 from hackable_diffusion.lib.sampling.discrete_step_sampler import CorruptedMaskFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import DiscreteDDIMStep
 from hackable_diffusion.lib.sampling.discrete_step_sampler import DiscreteFlowMatchingStep
+from hackable_diffusion.lib.sampling.discrete_step_sampler import EntropyBoundPlanner
 from hackable_diffusion.lib.sampling.discrete_step_sampler import GreedyPlanner
 from hackable_diffusion.lib.sampling.discrete_step_sampler import IntegratedDiscreteDDIMStep
 from hackable_diffusion.lib.sampling.discrete_step_sampler import MaskValueCorruptedMaskFn

@@ -1387,8 +1387,12 @@ class DiscreteFlowMatchingStepTest(absltest.TestCase):
 # MARK: EntropyBoundStep Tests
 ################################################################################
 
+# The DiffusionGemma implementation of the sampler is equivalent to a PriorStep
+# with an EntropyBoundPlanner. For simplicity, we call this sampler
+# EntropyBoundStep here. Below, we test this implementation as its own stepper.
 
-class EntropyBoundStepTest(absltest.TestCase):
+
+class EntropyBoundStepTest(parameterized.TestCase):
   """Tests for the EntropyBoundStep sampler."""
 
   def setUp(self):
@@ -1402,9 +1406,9 @@ class EntropyBoundStepTest(absltest.TestCase):
     self.initial_noise = jax.random.randint(
         key, (2, 4, 1), 0, self.process.process_num_categories
     )
-    self.step_sampler = discrete_step_sampler.EntropyBoundStep(
+    self.step_sampler = discrete_step_sampler.PriorStep(
         corruption_process=self.process,
-        entropy_bound=0.1,
+        planner=discrete_step_sampler.EntropyBoundPlanner(entropy_bound=0.1),
     )
 
   def _dummy_inference_fn(self, xt, conditioning, time):
@@ -1501,9 +1505,9 @@ class EntropyBoundStepTest(absltest.TestCase):
     )
     current_step = DiffusionStep(xt=xt, step_info=step_info, aux={})
 
-    sampler = discrete_step_sampler.EntropyBoundStep(
+    sampler = discrete_step_sampler.PriorStep(
         corruption_process=self.process,
-        entropy_bound=0.05,
+        planner=discrete_step_sampler.EntropyBoundPlanner(entropy_bound=0.05),
     )
     next_step_info = StepInfo(
         step=1,
@@ -1536,9 +1540,9 @@ class EntropyBoundStepTest(absltest.TestCase):
     )
     current_step = DiffusionStep(xt=xt, step_info=step_info, aux={})
 
-    sampler = discrete_step_sampler.EntropyBoundStep(
+    sampler = discrete_step_sampler.PriorStep(
         corruption_process=self.process,
-        entropy_bound=100.0,
+        planner=discrete_step_sampler.EntropyBoundPlanner(entropy_bound=100.0),
     )
     next_step_info = StepInfo(
         step=1,
@@ -1642,6 +1646,114 @@ class EntropyBoundStepTest(absltest.TestCase):
 
     self.assertEqual(final_step.xt.shape, self.initial_noise.shape)
     self.assertEqual(final_step.xt.dtype, self.initial_noise.dtype)
+
+  @parameterized.parameters(0.01, 0.1, 0.5, 2.0)
+  def test_diffusion_gemma_equivalence(self, bound):
+    """Verifies equivalence between original DiffusionGemma and PriorStep + EntropyBoundPlanner.
+
+    The original logic is sourced directly from DiffusionGemma's
+    SampleFromPredictions in gemma/diffusion/_sampler.py:
+    https://github.com/google-deepmind/gemma/blob/main/gemma/diffusion/_sampler.py
+    """
+
+    def _legacy_update(
+        process,
+        entropy_bound,
+        prediction,
+        current_step,
+        next_step_info,
+        temperature=1.0,
+    ):
+      xt = current_step.xt
+      unused_mask = xt == process.unused_token
+      time = current_step.step_info.time
+      time_bcast = discrete_step_sampler.jax_helpers.bcast_right(time, xt.ndim)
+      key = next_step_info.rng
+      _, candidate_key, _, _ = jax.random.split(key, 4)
+
+      x0, x_noise, logits = discrete_step_sampler._generate_candidates(
+          process,
+          prediction,
+          xt,
+          time_bcast,
+          candidate_key,
+          temperature,
+      )
+      log_probs = jax.nn.log_softmax(logits.astype(jnp.float32))
+      probs = jnp.exp(log_probs)
+      safe_log_probs = jnp.where(probs == 0, 0.0, log_probs)
+      token_entropy = -jnp.sum(safe_log_probs * probs, axis=-1)
+
+      sorted_index = jnp.argsort(token_entropy, axis=-1)
+      sorted_entropy = jnp.take_along_axis(token_entropy, sorted_index, axis=-1)
+      accumulated_entropy = jnp.cumsum(sorted_entropy, axis=-1)
+      sorted_selection_mask = (
+          accumulated_entropy - sorted_entropy
+      ) <= entropy_bound
+
+      batch_size = xt.shape[0]
+      seq_len = xt.shape[1]
+      selection_mask = (
+          jnp.zeros((batch_size, seq_len), dtype=jnp.bool_)
+          .at[jnp.arange(batch_size)[:, None], sorted_index]
+          .set(sorted_selection_mask)
+      )
+      new_xt = jnp.where(selection_mask[..., None], x0, x_noise)
+      new_xt = process.post_corruption_fn(new_xt)
+      return jnp.where(unused_mask, process.unused_token, new_xt), logits
+
+    _, subkey1, subkey2, subkey3 = jax.random.split(jax.random.PRNGKey(42), 4)
+
+    xt = jax.random.randint(
+        subkey1, (2, 8, 1), 0, self.process.process_num_categories
+    )
+    step_info = StepInfo(
+        step=0,
+        time=jnp.array([0.8, 0.8])[:, None, None],
+        rng=subkey2,
+    )
+    random_logits = jax.random.normal(
+        subkey3, (2, 8, self.process.process_num_categories)
+    )
+    prediction = {'logits': random_logits}
+    next_step_info = StepInfo(
+        step=1,
+        time=jnp.array([0.4, 0.4])[:, None, None],
+        rng=jax.random.PRNGKey(123),
+    )
+
+    # Original (DiffusionGemma SampleFromPredictions) implementation
+    legacy_xt, legacy_logits = _legacy_update(
+        self.process,
+        bound,
+        prediction,
+        DiffusionStep(xt=xt, step_info=step_info, aux={}),
+        next_step_info,
+    )
+
+    # PriorStep + EntropyBoundPlanner
+    prior_sampler = discrete_step_sampler.PriorStep(
+        corruption_process=self.process,
+        planner=discrete_step_sampler.EntropyBoundPlanner(entropy_bound=bound),
+    )
+    prior_step = prior_sampler.initialize(xt, step_info)
+    prior_result = prior_sampler.update(prediction, prior_step, next_step_info)
+
+    # Assert PriorStep + EntropyBoundPlanner matches legacy
+    chex.assert_trees_all_equal(
+        prior_result.xt,
+        legacy_xt,
+        custom_message=(
+            f'PriorStep+EntropyBoundPlanner != legacy for bound={bound}'
+        ),
+    )
+    chex.assert_trees_all_close(
+        prior_result.aux['logits'],
+        legacy_logits.astype(prior_result.aux['logits'].dtype),
+        custom_message=(
+            f'PriorStep+EntropyBoundPlanner logits != legacy for bound={bound}'
+        ),
+    )
 
 
 ################################################################################
