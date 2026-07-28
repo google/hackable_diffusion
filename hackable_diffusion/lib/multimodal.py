@@ -22,7 +22,7 @@ arbitrary PyTrees of data — e.g. ``{"image": ..., "text": ...}``.
 
 Each `Nested*` class holds a PyTree of single-modal instances whose structure
 mirrors the data tree, and delegates calls leaf-wise using
-``jax_helpers.lenient_map``.  This means any combination of modalities and nesting
+`jax_helpers.lenient_map`. This means any combination of modalities and nesting
 depths works out-of-the-box without modifying the underlying single-modal
 implementations.
 
@@ -39,6 +39,8 @@ The module provides the following wrappers:
     - ``NestedTimeSchedule``  — discrete time-step schedules
     - ``NestedGuidanceFn``    — classifier-free guidance
     - ``NestedProjectionFn``  — output projection / clamping
+    - ``NestedFlaxLinenInferenceFn``  — Linen model wrapper
+    - ``NestedGuidedDiffusionInferenceFn`` — guided inference
 
   Architecture:
     - ``NestedTimeEmbedder``  — per-modality time embeddings
@@ -520,6 +522,131 @@ class NestedProjectionFn(projection_lib.ProjectionFn):
         time,
         outputs,
     )
+
+
+################################################################################
+# MARK: NestedFlaxLinenInferenceFn
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class NestedFlaxLinenInferenceFn(hd_api.InferenceFn):
+  """Inference function for multimodal (nested/PyTree) data with nn.Module.
+
+  This is the multimodal counterpart of ``wrappers.FlaxLinenInferenceFn``.
+  It uses ``DataTree`` / ``TimeTree`` type annotations so that
+  ``@kt.typechecked`` accepts PyTree inputs.
+
+  Attributes:
+    network: The Flax Linen module (e.g. ``MultiModalDiffusionNetwork``).
+    params: The model parameters.
+  """
+
+  network: nn.Module
+  params: PyTree  # pyrefly: ignore[not-a-type]
+
+  @kt.typechecked
+  def __call__(
+      self,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning | None,
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+    """Returns the model outputs."""
+    return self.network.apply(
+        {'params': self.params},
+        time=time,
+        xt=xt,
+        conditioning=conditioning,
+        is_training=False,
+    )
+
+
+################################################################################
+# MARK: NestedGuidedDiffusionInferenceFn
+################################################################################
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
+  """Guided diffusion inference function for multimodal (nested/PyTree) data.
+
+  This is the multimodal counterpart of
+  ``diffusion_inference.GuidedDiffusionInferenceFn``.  It accepts PyTree-valued
+  ``time`` and ``xt`` arguments and delegates guidance and projection to
+  tree-aware ``NestedGuidanceFn`` / ``NestedProjectionFn``.
+
+  The ``base_inference_fn`` is expected to accept tree-valued inputs directly
+  (e.g. a ``NestedFlaxLinenInferenceFn`` wrapping a ``MultiModalDiffusionNetwork``).
+
+  Usage Example:
+    ```
+    nested_inference_fn = NestedGuidedDiffusionInferenceFn(
+        base_inference_fn=NestedFlaxLinenInferenceFn(
+            network=multi_modal_network, params=params
+        ),
+        guidance_fn=NestedGuidanceFn(
+            guidance_fns={
+                "image": ScalarGuidanceFn(guidance=3.0),
+                "label": ScalarGuidanceFn(guidance=1.0),
+            }
+        ),
+        projection_fn=NestedProjectionFn(
+            projection_fns={
+                "image": IdentityProjectionFn(),
+                "label": IdentityProjectionFn(),
+            }
+        ),
+    )
+    ```
+
+  Attributes:
+    base_inference_fn: The base inference function (must accept tree-valued
+      inputs).
+    guidance_fn: A tree-aware guidance function.
+    projection_fn: A tree-aware projection function.
+  """
+
+  base_inference_fn: NestedFlaxLinenInferenceFn
+  guidance_fn: NestedGuidanceFn
+  projection_fn: NestedProjectionFn
+
+  @kt.typechecked
+  def __call__(
+      self,
+      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning | None,
+  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+    """Returns the model outputs with guidance and projection."""
+
+    cond_outputs = self.base_inference_fn(
+        time=time,
+        xt=xt,
+        conditioning=conditioning,
+    )
+    uncond_outputs = self.base_inference_fn(
+        time=time,
+        xt=xt,
+        conditioning=None,
+    )
+
+    guided_outputs = self.guidance_fn(
+        xt=xt,
+        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        time=time,
+        cond_outputs=cond_outputs,
+        uncond_outputs=uncond_outputs,
+    )
+
+    projected_outputs = self.projection_fn(
+        xt=xt,
+        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        time=time,
+        outputs=guided_outputs,
+    )
+    return projected_outputs
+
 
 
 ################################################################################

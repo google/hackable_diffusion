@@ -47,7 +47,6 @@ from hackable_diffusion.lib.sampling.gaussian_step_sampler import VelocityStep
 from hackable_diffusion.lib.sampling.riemannian_sampling import RiemannianFlowSamplerStep
 from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
 from hackable_diffusion.lib.sampling.sampling import DiffusionSamplerWithEarlyStopping
-from hackable_diffusion.lib.sampling.sampling import DiffusionStepTree
 from hackable_diffusion.lib.sampling.sampling import UpdateConditioningFn
 from hackable_diffusion.lib.sampling.simplicial_step_sampler import SimplicialDDIMStep
 from hackable_diffusion.lib.sampling.time_scheduling import EDMTimeSchedule

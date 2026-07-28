@@ -29,11 +29,9 @@ import kauldron.ktyping as kt
 
 Conditioning = hd_typing.Conditioning
 DataArray = hd_typing.DataArray
-DataTree = hd_typing.DataTree
 TargetInfo = hd_typing.TargetInfo
-TargetInfoTree = hd_typing.TargetInfoTree
 TimeArray = hd_typing.TimeArray
-TimeTree = hd_typing.TimeTree
+
 
 ################################################################################
 # MARK: Protocols
@@ -45,11 +43,11 @@ class ProjectionFn(Protocol):
 
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Projection function protocol."""
     ...
 
@@ -138,9 +136,9 @@ class IdentityProjectionFn(ProjectionFn):
 
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning | None,
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,
   ) -> TargetInfo:
     """Identity projection function."""

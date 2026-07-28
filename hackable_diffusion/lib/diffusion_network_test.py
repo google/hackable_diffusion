@@ -28,9 +28,8 @@ from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet
 from hackable_diffusion.lib.architecture import unet_blocks
 from hackable_diffusion.lib.corruption import gaussian
-from hackable_diffusion.lib.inference import diffusion_inference
 from hackable_diffusion.lib.inference import guidance
-from hackable_diffusion.lib.inference import wrappers
+from hackable_diffusion.lib.inference import projection
 import jax
 import jax.numpy as jnp
 
@@ -273,10 +272,10 @@ class SelfConditioningBackbone(nn.Module, diffusion_network.ConditionalBackbone)
   @nn.compact
   def __call__(
       self,
-      x: hd_typing.DataTree,  # pyrefly: ignore[not-a-type]
+      x: hd_typing.DataArray,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> hd_typing.DataTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_typing.DataArray:  # pyrefly: ignore[not-a-type]
     return nn.Dense(features=self.num_classes)(x)
 
 
@@ -733,6 +732,13 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
             'data_2': {'data_3': guidance.ScalarGuidanceFn(guidance=1.0)},
         }
     )
+    self.nested_projection_fn = multimodal.NestedProjectionFn(
+        projection_fns={
+            'data_1': projection.IdentityProjectionFn(),
+            'data_2': {'data_3': projection.IdentityProjectionFn()},
+        }
+    )
+
 
   def test_nested_inference(self):
     layer = diffusion_network.MultiModalDiffusionNetwork(
@@ -750,12 +756,13 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
     )
     params = variables['params']
     shifted_params = jax.tree.map(lambda x: x + 1e-4, params)
-    base_inference_fn = wrappers.FlaxLinenInferenceFn(
+    base_inference_fn = multimodal.NestedFlaxLinenInferenceFn(
         network=layer, params=shifted_params
     )
-    inference_fn = diffusion_inference.GuidedDiffusionInferenceFn(
+    inference_fn = multimodal.NestedGuidedDiffusionInferenceFn(
         base_inference_fn=base_inference_fn,
         guidance_fn=self.nested_guidance_fn,
+        projection_fn=self.nested_projection_fn,
     )
     output = inference_fn(
         xt=self.nested_xt,

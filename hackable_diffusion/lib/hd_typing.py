@@ -58,15 +58,8 @@ check_type = kt.check_type
 
 # Array described the batched data.
 DataArray = Array['batch *#data_shape']
-# PyTree of the shape and structure of the input data.
-# Note: the _ prefix means that the data_shape can be different for different
-# leaves of the PyTree (non-binding dim). This replaces jaxtyping's `?#`
-# combined prefix which ktyping does not support.
-
-DataTree = PyTree[Array['batch *_data_shape'], '$T']
 
 Scalar = Array['batch']
-ScalarTree = PyTree[Array['batch'], '$T']
 
 # Array of the shape and structure of the time parameter.
 # '*#data_shape' means broadcastable to the shape of the data.
@@ -74,12 +67,9 @@ ScalarTree = PyTree[Array['batch'], '$T']
 # TODO(b/493016456): TimeArray should use `*#data_shape` like DataArray, but
 # time sometimes has shape (B,) instead of (B, 1, 1, 1), so we use non-binding.
 TimeArray = Array['#batch *_data_shape']
-# Corresponding PyTree for the time array.
-TimeTree = PyTree[Array['_batch *_data_shape'], '$T']
 
 # Corresponding schedule.
 ScheduleKey = str  # e.g. 'time', 'alpha', 'sigma', 'logsnr', etc.
-ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']  # pyrefly: ignore[not-a-type, unknown-name]
 
 # A dictionary containing the different training targets. Same structure as
 # DataArray for every different target (e.g. x0, epsilon, score, velocity,
@@ -89,7 +79,6 @@ ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T'] 
 # logits (x0 : Float["batch K"]).
 TargetKey = str  # e.g. 'x0', 'epsilon', 'score', 'velocity', 'v', 'mask', ...
 TargetInfo = dict[TargetKey, Array['batch *_data_shape']]  # pyrefly: ignore[not-a-type, unknown-name]
-TargetInfoTree = PyTree[Array['batch *_data_shape']]
 
 # Conditioning structures.
 ConditioningKey = str  # e.g. 'label', 'text', 'image', ...
@@ -101,14 +90,43 @@ ConditioningEmbeddings = dict[ConditioningEmbeddingsKey, Any]
 
 # Shape related structures.
 Shape = tuple[int, ...]
-ShapeTree = PyTree[Shape]
 ConditioningShape = dict[ConditioningKey, Shape]
 
 # Type related structures.
 DType = kt.DType
-DTypeTree = PyTree[DType, '$T']
 
 
 # Loss related structures.
 LossOutput = Float['batch']
+
+
+# ##############################################################################
+# MARK: Multimodal Structures (Tree Aliases)
+# ##############################################################################
+# These Tree aliases are intended to be used ONLY in multimodal.py and
+# diffusion_network.py (for MultiModalDiffusionNetwork).
+# All other code should use the non-Tree equivalents (e.g., DataArray instead of DataTree).
+
+# PyTree of the shape and structure of the input data.
+# Note: the _ prefix means that the data_shape can be different for different
+# leaves of the PyTree (non-binding dim). This replaces jaxtyping's `?#`
+# combined prefix which ktyping does not support.
+DataTree = PyTree[Array['batch *_data_shape'], '$T']
+
+ScalarTree = PyTree[Array['batch'], '$T']
+
+# Corresponding PyTree for the time array.
+TimeTree = PyTree[Array['_batch *_data_shape'], '$T']
+
+ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']  # pyrefly: ignore[not-a-type, unknown-name]
+
+TargetInfoTree = PyTree[Array['batch *_data_shape']]
+
+ShapeTree = PyTree[Shape]
+
+DTypeTree = PyTree[DType, '$T']
+
 LossOutputTree = PyTree[LossOutput, '$T']
+
+
+

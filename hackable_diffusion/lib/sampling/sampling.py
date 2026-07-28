@@ -42,12 +42,14 @@ Conditioning = hd_typing.Conditioning
 DataTree = hd_typing.DataTree
 DataArray = hd_typing.DataArray
 TimeTree = hd_typing.TimeTree
+TimeArray = hd_typing.TimeArray
 
 DiffusionStep = hd_api.DiffusionStep
 StepInfo = hd_api.StepInfo
 SamplerStep = hd_api.SamplerStep
 
 DiffusionStepTree = PyTree[DiffusionStep]
+
 
 InferenceFn = hd_api.InferenceFn
 TimeSchedule = time_scheduling.TimeSchedule
@@ -118,7 +120,7 @@ def _is_diffusion_leaf(x: PyTree) -> bool:  # pyrefly: ignore[not-a-type]
 
 
 def _get_input_inference_fn(
-    step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+    step_carry: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
 ) -> tuple[DataTree, TimeTree]:  # pyrefly: ignore[not-a-type]
   """Returns the input to the inference function for a given step."""
   xt = jax.tree.map(
@@ -205,7 +207,7 @@ class DiffusionSampler(hd_api.SampleFn):
       rng: PRNGKey,
       initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None = None,
-  ) -> tuple[PyTree[DiffusionStep], PyTree[DiffusionStep] | None]:  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:  # pyrefly: ignore[not-a-type]
     """Performs a full reverse diffusion sampling loop for a single sample.
 
     This function orchestrates the denoising process, starting from an initial

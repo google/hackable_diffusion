@@ -77,7 +77,7 @@ class DiffusionNoEarlyStopFn(DiffusionEarlyStoppingFn):
       step: jax.Array,
       current_step: DiffusionStep,
       previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type]
+  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
     del step, previous_step
     batch_size = current_step.xt.shape[0]
     return jnp.zeros(batch_size, dtype=jnp.bool_)
@@ -120,7 +120,7 @@ class DiffusionEntropyEarlyStopFn(DiffusionEarlyStoppingFn):
       step: jax.Array,
       current_step: DiffusionStep,
       previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type]
+  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
     del step, previous_step
     xt = current_step.xt
     if len(xt.shape) != 3:
@@ -166,7 +166,7 @@ class DiffusionTokenStabilityEarlyStopFn(DiffusionEarlyStoppingFn):
       step: jax.Array,
       current_step: DiffusionStep,
       previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type]
+  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
     del step
     prev_tokens = previous_step.xt
     if len(prev_tokens.shape) != 3:

@@ -31,9 +31,9 @@ import kauldron.ktyping as kt
 PyTree = hd_typing.PyTree
 
 Conditioning = hd_typing.Conditioning
-DataTree = hd_typing.DataTree
-TargetInfoTree = hd_typing.TargetInfoTree
-TimeTree = hd_typing.TimeTree
+DataArray = hd_typing.DataArray
+TargetInfo = hd_typing.TargetInfo
+TimeArray = hd_typing.TimeArray
 
 InferenceFn = hd_api.InferenceFn
 
@@ -53,12 +53,12 @@ class FlaxLinenInferenceFn(InferenceFn):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
-    return self.network.apply(
+    return self.network.apply(  # pyrefly: ignore[bad-return]
         {"params": self.params},
         time=time,
         xt=xt,
@@ -77,12 +77,12 @@ class ConvertedNNXDiffusionNetwork(Protocol):
 
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
       is_training: bool,
       rngs: nnx.Rngs,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
     ...
 
@@ -108,10 +108,10 @@ class FlaxNNXInferenceFn(InferenceFn):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
     return self.nnx_network(
         time=time,

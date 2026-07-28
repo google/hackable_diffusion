@@ -27,11 +27,12 @@ import kauldron.ktyping as kt
 ################################################################################
 
 Conditioning = hd_typing.Conditioning
-DataTree = hd_typing.DataTree
-TimeTree = hd_typing.TimeTree
-TargetInfoTree = hd_typing.TargetInfoTree
+DataArray = hd_typing.DataArray
+TimeArray = hd_typing.TimeArray
+TargetInfo = hd_typing.TargetInfo
 
 InferenceFn = hd_api.InferenceFn
+
 
 ################################################################################
 # MARK: IdentityInferenceFn
@@ -47,10 +48,10 @@ class IdentityInferenceFn(InferenceFn):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
     del conditioning  # unused
     return self.process.convert_predictions(
@@ -76,10 +77,10 @@ class GuidedDiffusionInferenceFn(InferenceFn):
   @kt.typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
 
     cond_outputs = self.base_inference_fn(

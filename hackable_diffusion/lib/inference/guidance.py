@@ -30,11 +30,8 @@ import kauldron.ktyping as kt
 
 Conditioning = hd_typing.Conditioning
 DataArray = hd_typing.DataArray
-DataTree = hd_typing.DataTree
 TargetInfo = hd_typing.TargetInfo
-TargetInfoTree = hd_typing.TargetInfoTree
 TimeArray = hd_typing.TimeArray
-TimeTree = hd_typing.TimeTree
 
 ################################################################################
 # MARK: Protocols
@@ -46,12 +43,12 @@ class GuidanceFn(Protocol):
 
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+      uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Combine conditional and unconditional outputs."""
     ...
 
@@ -70,12 +67,12 @@ class ScalarGuidanceFn(GuidanceFn):
   @kt.typechecked
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning | None,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+      uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Simple scalar guidance function."""
     del conditioning, time, xt  # unused
     return jax.tree.map(
@@ -102,19 +99,19 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
           "Lower bound must be strictly smaller than the upper bound."
       )
 
-  def _interval_mask(self, time: TimeTree) -> jax.Array:
+  def _interval_mask(self, time: TimeArray) -> jax.Array:
     """Returns a boolean mask indicating whether time/metric is within bounds."""
     return jnp.logical_and(time >= self.lower, time <= self.upper)
 
   @kt.typechecked
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      xt: DataArray,  # pyrefly: ignore[not-a-type]
       conditioning: Conditioning,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      time: TimeArray,  # pyrefly: ignore[not-a-type]
+      cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+      uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
+  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Limited interval guidance function."""
     del conditioning  # unused
     time = jax_helpers.bcast_right(time, xt.ndim)
@@ -138,7 +135,7 @@ class LogSnrLimitedIntervalGuidanceFn(LimitedIntervalGuidanceFn):
 
   noise_schedule: corruption.GaussianSchedule
 
-  def _interval_mask(self, time: TimeTree) -> jax.Array:
+  def _interval_mask(self, time: TimeArray) -> jax.Array:
     """Returns a boolean mask indicating whether time/metric is within bounds."""
     logsnr = self.noise_schedule.logsnr(time)
     return jnp.logical_and(logsnr >= self.lower, logsnr <= self.upper)

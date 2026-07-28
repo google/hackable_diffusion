@@ -90,8 +90,8 @@ class IdentityBackbone(nn.Module, diffusion_network.ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: hd_typing.DataTree,  # pyrefly: ignore[not-a-type]
+      x: hd_typing.DataArray,  # pyrefly: ignore[not-a-type]
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> hd_typing.DataTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_typing.DataArray:  # pyrefly: ignore[not-a-type]
     return x

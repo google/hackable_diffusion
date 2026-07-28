@@ -40,7 +40,7 @@ PRNGKey = hd_typing.PRNGKey
 PyTree = hd_typing.PyTree
 
 DataArray = hd_typing.DataArray
-DataTree = hd_typing.DataTree
+Conditioning = hd_typing.Conditioning
 
 StepInfo = hd_api.StepInfo
 

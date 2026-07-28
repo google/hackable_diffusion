@@ -208,7 +208,7 @@ choice of time distribution can significantly affect training dynamics.
 ### `TimeSampler` Protocol
 
 ```python
-def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:
+def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:
   ...
 ```
 
