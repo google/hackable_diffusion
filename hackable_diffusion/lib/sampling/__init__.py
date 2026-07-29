@@ -24,8 +24,6 @@ from hackable_diffusion.lib.sampling.ar_diffusion_sampler import AutoregressiveD
 from hackable_diffusion.lib.sampling.diffusion_early_stopping import DiffusionEntropyEarlyStopFn
 from hackable_diffusion.lib.sampling.diffusion_early_stopping import DiffusionNoEarlyStopFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import AllCorruptedMaskFn
-from hackable_diffusion.lib.sampling.discrete_step_sampler import AnnealingTemperature
-from hackable_diffusion.lib.sampling.discrete_step_sampler import ConstantTemperature
 from hackable_diffusion.lib.sampling.discrete_step_sampler import CorruptedMaskFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import DiscreteDDIMStep
 from hackable_diffusion.lib.sampling.discrete_step_sampler import DiscreteFlowMatchingStep
@@ -40,7 +38,6 @@ from hackable_diffusion.lib.sampling.discrete_step_sampler import RemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RescaledRemaskingFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import Routing
 from hackable_diffusion.lib.sampling.discrete_step_sampler import RoutingStrategy
-from hackable_diffusion.lib.sampling.discrete_step_sampler import TemperatureSchedule
 from hackable_diffusion.lib.sampling.discrete_step_sampler import UnMaskingStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import AdjustedDDIMStep
 from hackable_diffusion.lib.sampling.gaussian_step_sampler import DDIMStep

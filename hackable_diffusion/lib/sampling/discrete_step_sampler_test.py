@@ -38,65 +38,6 @@ UnMaskingStep = discrete_step_sampler.UnMaskingStep
 ################################################################################
 
 
-class TemperatureScheduleTest(parameterized.TestCase):
-  """Tests for temperature schedules."""
-
-  def setUp(self):
-    super().setUp()
-    self.schedule = discrete.LinearDiscreteSchedule()
-    self.time = jnp.array([1.0, 0.5, 0.0])
-
-  def test_constant_temperature(self):
-    fn = discrete_step_sampler.ConstantTemperature(temperature=0.8)
-    result = fn(self.time)
-    expected = jnp.full_like(self.time, 0.8)
-    chex.assert_trees_all_close(result, expected)
-
-  @parameterized.named_parameters(
-      ('negative', -0.5, r'^temperature must be >= 1e-12, got -0\.5$'),
-      ('below_min', 1e-13, r'^temperature must be >= 1e-12, got 1e-13$'),
-  )
-  def test_constant_temperature_invalid_raises(
-      self, temperature, expected_regex
-  ):
-    with self.assertRaisesRegex(ValueError, expected_regex):
-      discrete_step_sampler.ConstantTemperature(temperature=temperature)
-
-  def test_annealing_temperature(self):
-    fn = discrete_step_sampler.AnnealingTemperature(
-        schedule=self.schedule,
-        exponent=1.0,
-        max_temperature=0.8,
-        min_temperature=0.4,
-    )
-    result = fn(self.time)
-    # At time=1.0: alpha(1.0)=0 => noise_proportion=1.0 => temp = max_temp = 0.8
-    # At time=0.0: alpha(0.0)=1 => noise_proportion=0.0 => temp = min_temp = 0.4
-    chex.assert_trees_all_close(result[0], jnp.array(0.8))
-    chex.assert_trees_all_close(result[2], jnp.array(0.4))
-
-  def test_annealing_temperature_invalid_min_temp_raises(self):
-    with self.assertRaisesRegex(
-        ValueError, r'^min_temperature must be >= 1e-12, got -0\.1$'
-    ):
-      discrete_step_sampler.AnnealingTemperature(
-          schedule=self.schedule,
-          max_temperature=0.8,
-          min_temperature=-0.1,
-      )
-
-  def test_annealing_temperature_max_less_than_min_raises(self):
-    with self.assertRaisesRegex(
-        ValueError,
-        r'^max_temperature \(0\.3\) must be >= min_temperature \(0\.4\)$',
-    ):
-      discrete_step_sampler.AnnealingTemperature(
-          schedule=self.schedule,
-          max_temperature=0.3,
-          min_temperature=0.4,
-      )
-
-
 class RemaskingFnTest(parameterized.TestCase):
   """Tests for remasking functions."""
 
@@ -334,27 +275,6 @@ class UnMaskingStepTest(absltest.TestCase):
           current_step=initial_step,
           next_step_info=next_step_info,
       )
-
-  def test_temperature_schedules(self):
-    step_const = UnMaskingStep(
-        corruption_process=self.process,
-        temperature=discrete_step_sampler.ConstantTemperature(temperature=0.5),
-    )
-    self.assertIsInstance(
-        step_const.temperature, discrete_step_sampler.ConstantTemperature
-    )
-    assert isinstance(
-        step_const.temperature, discrete_step_sampler.ConstantTemperature
-    )
-    self.assertEqual(step_const.temperature.temperature, 0.5)
-
-    anneal = discrete_step_sampler.AnnealingTemperature(
-        schedule=self.schedule, max_temperature=0.8, min_temperature=0.4
-    )
-    step_anneal = UnMaskingStep(
-        corruption_process=self.process, temperature=anneal
-    )
-    self.assertEqual(step_anneal.temperature, anneal)
 
   def test_update_raises_for_shape_mismatch(self):
     initial_step_info = StepInfo(
@@ -1742,12 +1662,8 @@ class EntropyBoundStepTest(parameterized.TestCase):
         prediction,
         current_step,
         next_step_info,
-        temperature=discrete_step_sampler.ConstantTemperature(),
+        temperature=1.0,
     ):
-      if isinstance(temperature, (int, float)):
-        temperature = discrete_step_sampler.ConstantTemperature(
-            temperature=float(temperature)
-        )
       xt = current_step.xt
       unused_mask = xt == process.unused_token
       time = current_step.step_info.time

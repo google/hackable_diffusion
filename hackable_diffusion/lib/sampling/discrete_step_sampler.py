@@ -137,110 +137,6 @@ SamplerStep = hd_api.SamplerStep
 CategoricalProcess = discrete.CategoricalProcess
 DiscreteSchedule = discrete.DiscreteSchedule
 
-# Minimum value for the temperature to ensure numerical stability.
-_MIN_TEMP = 1e-12
-
-################################################################################
-# MARK: Temperature schedules
-################################################################################
-
-
-class TemperatureSchedule(Protocol):
-  """Protocol for computing a temperature value from the diffusion time.
-
-  A temperature schedule maps the current diffusion time (which goes from 1
-  at the start of sampling to 0 at the end) to a scalar temperature value.
-  This allows both constant temperatures and time-dependent annealing.
-  """
-
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    """Returns the temperature for the given diffusion time.
-
-    Args:
-      time: The current diffusion time, going from 1 (fully noisy) to 0 (fully
-        clean).
-
-    Returns:
-      The temperature value(s), same shape as time.
-    """
-    ...
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class ConstantTemperature(TemperatureSchedule):
-  """Constant temperature schedule.
-
-  Attributes:
-    temperature: The constant temperature value.
-  """
-
-  temperature: float = 1.0
-
-  def __post_init__(self):
-    if self.temperature < _MIN_TEMP:
-      raise ValueError(
-          f'temperature must be >= {_MIN_TEMP}, got {self.temperature}'
-      )
-
-  @kt.typechecked
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    return jnp.full_like(time, self.temperature)
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class AnnealingTemperature(TemperatureSchedule):
-  """Temperature schedule that anneals based on the noise proportion.
-
-  The temperature decreases from ``max_temperature`` (when the data is fully
-  noisy) down to ``min_temperature`` (when the data is fully clean) according
-  to a power law controlled by the ``exponent`` parameter.
-
-  The noise proportion is derived from the schedule's ``alpha(time)`` as
-  ``noise_proportion = 1 - alpha(time)``, which makes this schedule
-  independent of the time parameterization.
-
-  Follows the approach of ``AnnealingTemperatureShaper`` in
-  ``gemma/diffusion/_sampler.py``.
-
-  Attributes:
-    schedule: The discrete schedule used to compute the noise proportion from
-      diffusion time.
-    exponent: Controls the shape of the temperature curve. exponent=1 gives
-      linear decrease; exponent>1 decreases slower initially, faster later;
-      exponent<1 decreases faster initially, slower later.
-    max_temperature: The temperature at the start of sampling
-      (noise_proportion=1).
-    min_temperature: The temperature at the end of sampling
-      (noise_proportion=0).
-  """
-
-  schedule: DiscreteSchedule
-  exponent: float = 1.0
-  max_temperature: float = 0.8
-  min_temperature: float = 0.4
-
-  def __post_init__(self):
-    if self.min_temperature < _MIN_TEMP:
-      raise ValueError(
-          f'min_temperature must be >= {_MIN_TEMP}, got {self.min_temperature}'
-      )
-    if self.max_temperature < self.min_temperature:
-      raise ValueError(
-          f'max_temperature ({self.max_temperature}) must be >='
-          f' min_temperature ({self.min_temperature})'
-      )
-
-  @kt.typechecked
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    noise_proportion = 1.0 - self.schedule.alpha(time)
-    temperature_fraction = 1.0 - (1.0 - noise_proportion) ** self.exponent
-    temperature = (
-        temperature_fraction * (self.max_temperature - self.min_temperature)
-        + self.min_temperature
-    )
-    return jnp.maximum(temperature, _MIN_TEMP)
-
-
 ################################################################################
 # MARK: Remasking strategy
 ################################################################################
@@ -474,14 +370,13 @@ def _generate_candidates(
     xt: DataArray,  # pyrefly: ignore[not-a-type]
     time_bcast: TimeArray,  # pyrefly: ignore[not-a-type]
     key: PRNGKey,
-    temperature: TemperatureSchedule,
+    temperature: float,
 ) -> tuple[DataArray, DataArray, Float['... M']]:  # pyrefly: ignore[not-a-type]
   """Generate candidate x0, x_noise samples and logits."""
   logits = corruption_process.convert_predictions(prediction, xt, time_bcast)[
       'logits'
   ]
-  temp_val = temperature(time_bcast)
-  logits = logits / temp_val.astype(logits.dtype)
+  logits = logits / temperature
 
   x0_key, noise_key = jax.random.split(key)
   x0 = jax.random.categorical(key=x0_key, logits=logits)[..., None]
@@ -815,15 +710,15 @@ class UnMaskingStep(SamplerStep):
         being no remasking.
     corruption_mask_fn: The corrupted mask function to use. This is optional
       with the default being all tokens corrupted.
-    temperature: The temperature schedule to use. Default is
-      ConstantTemperature().
+    temperature: The temperature to use. This is optional with the default being
+      a temperature of 1.0.
   """
 
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
   remasking_fn: RemaskingFn = NoRemaskingFn()
   corruption_mask_fn: CorruptedMaskFn = AllCorruptedMaskFn()
-  temperature: TemperatureSchedule = ConstantTemperature()
+  temperature: float = 1.0
   logits_dtype: jnp.dtype = jnp.float32
 
   def __post_init__(self):
@@ -1052,7 +947,7 @@ class DiscreteDDIMStep(SamplerStep):
 
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
-  temperature: TemperatureSchedule = ConstantTemperature()
+  temperature: float = 1.0
   logits_dtype: jnp.dtype = jnp.float32
 
   def __post_init__(self):
@@ -1222,7 +1117,7 @@ class DiscreteFlowMatchingStep(SamplerStep):
 
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
-  temperature: TemperatureSchedule = ConstantTemperature()
+  temperature: float = 1.0
   stoch_coeff: float = 0.0
 
   @kt.typechecked
@@ -1397,7 +1292,7 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
   """
 
   corruption_process: CategoricalProcess
-  temperature: TemperatureSchedule = ConstantTemperature()
+  temperature: float = 1.0
   logits_dtype: jnp.dtype = jnp.float32
 
   def __post_init__(self):
@@ -1468,8 +1363,7 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
           f' {x0.shape=}.'
       )
 
-    temp_val = self.temperature(time)
-    logits = logits / temp_val.astype(logits.dtype)
+    logits = logits / self.temperature
     p_x0 = jax.nn.softmax(logits, axis=-1)
     # (bsz, *seq_len, M)
 
@@ -1579,7 +1473,7 @@ class PriorStep(SamplerStep):
 
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
-  temperature: TemperatureSchedule = ConstantTemperature()
+  temperature: float = 1.0
   logits_dtype: jnp.dtype = jnp.bfloat16
 
   @kt.typechecked

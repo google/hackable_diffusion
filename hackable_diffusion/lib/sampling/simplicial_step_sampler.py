@@ -38,7 +38,6 @@ from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import simplicial
-from hackable_diffusion.lib.sampling import discrete_step_sampler
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
@@ -59,10 +58,6 @@ SamplerStep = hd_api.SamplerStep
 
 SimplicialProcess = simplicial.SimplicialProcess
 SimplicialSchedule = simplicial.SimplicialSchedule
-
-TemperatureSchedule = discrete_step_sampler.TemperatureSchedule
-ConstantTemperature = discrete_step_sampler.ConstantTemperature
-AnnealingTemperature = discrete_step_sampler.AnnealingTemperature
 
 
 ################################################################################
@@ -130,7 +125,6 @@ class SimplicialDDIMStep(SamplerStep):
   corruption_process: SimplicialProcess
   churn: float = 1.0
   safety_epsilon: float = 1e-6
-  temperature: TemperatureSchedule = ConstantTemperature()
 
   @kt.typechecked
   def initialize(
@@ -169,8 +163,6 @@ class SimplicialDDIMStep(SamplerStep):
         xt=log_xt,
         time=time,
     )['logits']
-    temp_val = self.temperature(time)
-    logits = logits / temp_val.astype(logits.dtype)
 
     # Sample hard token
     key, sample_key = jax.random.split(key)
