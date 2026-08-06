@@ -112,7 +112,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     else:
       raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
-    self.assertEqual(conditional_embedding.shape, expected_shape)
+    self.assertEqual(conditional_embedding.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       (
@@ -184,7 +184,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     else:
       raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
-    self.assertEqual(conditional_embedding.shape, expected_shape)
+    self.assertEqual(conditional_embedding.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       (
@@ -259,7 +259,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     else:
       raise ValueError(f'Unknown method {merge_embeddings_fn}')
 
-    self.assertEqual(conditional_embedding.shape, expected_shape)
+    self.assertEqual(conditional_embedding.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       (
@@ -359,16 +359,16 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     self.assertIn('cross_attention', output)
     self.assertEqual(
-        output['cross_attention'].shape,
+        output['cross_attention'].shape,  # pyrefly: ignore[bad-index]
         (self.batch_size,) + image_shape,
     )
     self.assertTrue(
-        jnp.all(output['cross_attention'] == c['image'])
+        jnp.all(output['cross_attention'] == c['image'])  # pyrefly: ignore[bad-index]
     )
 
     self.assertIn('adaptive_norm', output)
     self.assertEqual(
-        output['adaptive_norm'].shape,
+        output['adaptive_norm'].shape,  # pyrefly: ignore[bad-index]
         (self.batch_size, self.num_features),
     )
 
@@ -471,7 +471,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         self.batch_size,
         time_encode_num_features + label_encode_num_features,
     )
-    self.assertEqual(conditional_embedding.shape, expected_shape)
+    self.assertEqual(conditional_embedding.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       (
@@ -564,7 +564,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         + label1_encode_num_features
         + label2_encode_num_features,
     )
-    self.assertEqual(conditional_embedding.shape, expected_shape)
+    self.assertEqual(conditional_embedding.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
   @parameterized.named_parameters(
       (
@@ -650,7 +650,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         + label1_encode_num_features
         + label2_encode_num_features,
     )
-    self.assertEqual(conditional_embedding.shape, expected_shape)
+    self.assertEqual(conditional_embedding.shape, expected_shape)  # pyrefly: ignore[missing-attribute]
 
   def test_dropout(self):
     """Tests that dropout is correctly applied based on `is_training`."""
@@ -693,7 +693,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         {'params': params['time_embedder']}, t
     )
     self.assertTrue(
-        jnp.all(output_train['adaptive_norm'] == time_embedding_train)
+        jnp.all(output_train['adaptive_norm'] == time_embedding_train)  # pyrefly: ignore[bad-index]
     )
 
     # With is_training=False, the label embedding should not be dropped.
@@ -705,7 +705,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         rngs={'dropout': self.rng},
     )
     self.assertFalse(
-        jnp.all(output_eval['adaptive_norm'] == time_embedding_train)
+        jnp.all(output_eval['adaptive_norm'] == time_embedding_train)  # pyrefly: ignore[bad-index]
     )
 
   def _make_mask_test_encoder(self, conditioning_dropout_rate=0.5):
