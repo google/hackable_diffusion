@@ -125,9 +125,7 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
-        norm_strategy=normalization.ConditionalRMSNormStrategy(
-            use_shift=False
-        ),
+        norm_strategy=normalization.ConditionalRMSNormStrategy(use_shift=False),
         use_gates=False,
         ffn_type='swiglu',
     )
@@ -242,9 +240,7 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
-        norm_strategy=normalization.ConditionalRMSNormStrategy(
-            use_shift=False
-        ),
+        norm_strategy=normalization.ConditionalRMSNormStrategy(use_shift=False),
         use_gates=False,
         zero_init_output=False,
     )
@@ -270,9 +266,7 @@ class DiTBlockTest(parameterized.TestCase):
     module = dit_blocks.DiTBlock(
         hidden_size=self.d,
         attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
-        norm_strategy=normalization.ConditionalRMSNormStrategy(
-            use_shift=False
-        ),
+        norm_strategy=normalization.ConditionalRMSNormStrategy(use_shift=False),
         use_gates=False,
         ffn_type=ffn_type,
         ffn_use_bias=ffn_use_bias,
@@ -310,7 +304,10 @@ class DiTBlockPresetsTest(parameterized.TestCase):
     cond_shape = (self.batch, self.c)
     x = jnp.ones(input_shape)
     cond = jnp.ones(cond_shape)
-    module = block_cls(hidden_size=self.d, attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4))
+    module = block_cls(
+        hidden_size=self.d,
+        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+    )
     variables = module.init(self.key, x, cond, is_training=False)
     output = module.apply(variables, x, cond, is_training=False)
     self.assertEqual(output.shape, input_shape)
@@ -326,7 +323,10 @@ class DiTBlockPresetsTest(parameterized.TestCase):
     cond_shape = (self.batch, self.c)
     x = jax.random.normal(self.key, input_shape)
     cond = jnp.zeros(cond_shape)
-    module = block_cls(hidden_size=self.d, attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4))
+    module = block_cls(
+        hidden_size=self.d,
+        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+    )
     variables = module.init(self.key, x, cond, is_training=False)
     output = module.apply(variables, x, cond, is_training=False)
     self.assertTrue(jnp.allclose(output, x, atol=1e-5))
@@ -335,7 +335,10 @@ class DiTBlockPresetsTest(parameterized.TestCase):
     """Verifies DiTBlockFlux has no gate parameters."""
     x = jnp.ones((self.batch, self.n, self.d))
     cond = jnp.ones((self.batch, self.c))
-    module = dit_blocks.DiTBlockFlux(hidden_size=self.d, attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4))
+    module = dit_blocks.DiTBlockFlux(
+        hidden_size=self.d,
+        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+    )
     variables = module.init(self.key, x, cond, is_training=False)
     leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
     gate_paths = [p for p in leaves_with_paths if 'Gate' in p]
@@ -345,7 +348,10 @@ class DiTBlockPresetsTest(parameterized.TestCase):
     """Verifies DiTBlockSD3 has gate parameters."""
     x = jnp.ones((self.batch, self.n, self.d))
     cond = jnp.ones((self.batch, self.c))
-    module = dit_blocks.DiTBlockSD3(hidden_size=self.d, attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4))
+    module = dit_blocks.DiTBlockSD3(
+        hidden_size=self.d,
+        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+    )
     variables = module.init(self.key, x, cond, is_training=False)
     leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
     gate_paths = [p for p in leaves_with_paths if 'Gate' in p]
@@ -355,7 +361,10 @@ class DiTBlockPresetsTest(parameterized.TestCase):
     """Verifies DiTBlockAdaLNZero has gate parameters."""
     x = jnp.ones((self.batch, self.n, self.d))
     cond = jnp.ones((self.batch, self.c))
-    module = dit_blocks.DiTBlockAdaLNZero(hidden_size=self.d, attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4))
+    module = dit_blocks.DiTBlockAdaLNZero(
+        hidden_size=self.d,
+        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+    )
     variables = module.init(self.key, x, cond, is_training=False)
     leaves_with_paths = test_helpers.get_leaves_with_paths(variables)
     gate_paths = [p for p in leaves_with_paths if 'Gate' in p]

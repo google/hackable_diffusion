@@ -15,6 +15,7 @@
 """Attention layers and utils."""
 
 import dataclasses
+import math
 from typing import Literal
 import warnings
 
@@ -22,6 +23,7 @@ import flax.linen as nn
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
+import jax.experimental.pallas.ops.tpu.flash_attention as flash
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 
@@ -51,9 +53,10 @@ MASK_LOGITS_VALUE = -1e9
 ################################################################################
 
 
+# TODO: b/539954103 - Rename to AttentionSpec.
 @dataclasses.dataclass(frozen=True)
 class AttentionHeadsSpec:
-  """Configuration for multi-head attention dimensionality.
+  """Configuration for multi-head attention.
 
   Specify at least one of `num_heads` or `head_dim`. When only one is set, the
   other is inferred from the embedding dimension at call time via `resolve()`.
@@ -63,10 +66,14 @@ class AttentionHeadsSpec:
   Attributes:
     num_heads: Fixed number of attention heads.
     head_dim: Fixed dimension per head.
+    use_flash_attention: Whether to use Flash Attention.
+    block_sizes: Block sizes for FlashAttention.
   """
 
   num_heads: int | None = None
   head_dim: int | None = None
+  use_flash_attention: bool = False
+  block_sizes: flash.BlockSizes | None = None
 
   def __post_init__(self):
     if not self.num_heads and not self.head_dim:
@@ -126,7 +133,7 @@ def _dot_product_attention(
     q: Float["batch head sequence_query dim"],  # pyrefly: ignore[not-a-type]
     k: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
     v: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
-    rescale: Float["..."],  # pyrefly: ignore[bad-index, not-a-type]
+    rescale: float | Float["..."],  # pyrefly: ignore[bad-index, not-a-type]
     *,
     mask: Bool["batch sequence_key"] | None = None,
     dropout_rate: float = 0.0,
@@ -157,7 +164,9 @@ def _dot_product_attention(
   # for masked tokens.
   if mask is not None:
     bcast_mask = jnp.expand_dims(mask, axis=(1, 2))
-    attention_logits = jnp.where(bcast_mask, attention_logits, MASK_LOGITS_VALUE)
+    attention_logits = jnp.where(
+        bcast_mask, attention_logits, MASK_LOGITS_VALUE
+    )
 
   # Softmax and attention weights
   attention_weights = _stable_softmax(logits=attention_logits)
@@ -174,6 +183,77 @@ def _dot_product_attention(
   attention_output = attention_output.transpose(0, 2, 1, 3).reshape(b, t, -1)
 
   return attention_output
+
+
+@kt.typechecked
+def _flash_dot_product_attention(
+    q: Float["batch head sequence_query dim"],  # pyrefly: ignore[not-a-type]
+    k: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
+    v: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
+    rescale: float | Float["..."],  # pyrefly: ignore[bad-index, not-a-type]
+    *,
+    mask: Bool["batch sequence_key"] | None = None,
+    block_sizes: flash.BlockSizes | None = None,
+) -> Float["batch sequence_query head_dim_concat"]:
+  """Broadcasts mask to SegmentIds and performs flash attention.
+
+  Prevents quadratic attention memory usage and full intermediate and mask
+  materialization in HBM as done by _dot_product_attention.
+
+  Args:
+    q: Query tensor.
+    k: Key tensor.
+    v: Value tensor.
+    rescale: Rescale factor for the attention scores.
+    mask: Mask tensor. Mask is True for tokens we want to keep and False for
+      tokens we want to mask. If None, no masking is performed.
+    block_sizes: Block sizes for FlashAttention. If None, default block size of
+      128 for Q and K is used. Block sizes must be divisible by 128 for TPU
+      Flash Attention; they can be increased from 128 to decrease inter-block
+      communication latency and increase MFU contingent on VMEM capacity and
+      sequence length.
+
+  Returns:
+    The output tensor.
+  """
+  b, seq_len_q, seq_len_kv = q.shape[0], q.shape[2], k.shape[2]
+  bq, bkm = (
+      (block_sizes.block_q, block_sizes.block_k_major)
+      if block_sizes
+      else (128, 128)
+  )
+  pad_q, pad_k = (bq - (seq_len_q % bq)) % bq, (bkm - (seq_len_kv % bkm)) % bkm
+
+  q_padded = jnp.pad(q, ((0, 0), (0, 0), (0, pad_q), (0, 0)))
+  k_padded = jnp.pad(k, ((0, 0), (0, 0), (0, pad_k), (0, 0)))
+  v_padded = jnp.pad(v, ((0, 0), (0, 0), (0, pad_k), (0, 0)))
+
+  segment_ids = None
+  if mask is not None or pad_k > 0:
+    m = mask if mask is not None else jnp.ones((b, seq_len_kv), dtype=bool)
+    mask_padded = jnp.pad(m, ((0, 0), (0, pad_k)), constant_values=False)
+    kv_seg = jnp.where(
+        mask_padded,
+        jnp.int32(0),
+        jnp.arange(1, mask_padded.shape[1] + 1, dtype=jnp.int32),
+    )
+    q_seg = jnp.zeros((b, seq_len_q + pad_q), dtype=jnp.int32)
+    segment_ids = flash.SegmentIds(q=q_seg, kv=kv_seg)
+
+  attn_output = flash.flash_attention(
+      q_padded,
+      k_padded,
+      v_padded,
+      segment_ids=segment_ids,
+      causal=False,
+      sm_scale=float(rescale),
+      block_sizes=block_sizes,
+  )
+  return (
+      attn_output[:, :, :seq_len_q, :]
+      .transpose(0, 2, 1, 3)
+      .reshape(b, seq_len_q, -1)
+  )
 
 
 ################################################################################
@@ -194,8 +274,8 @@ class MultiHeadAttention(nn.Module):
   It supports RoPE for positional embeddings and QK normalization.
 
   Attributes:
-    attention_heads_spec: An AttentionHeadsSpec instance that specifies num_heads
-      and/or head_dim for the attention layer.
+    attention_heads_spec: An AttentionHeadsSpec instance that specifies
+      num_heads and/or head_dim for the attention layer.
     normalize_qk: Whether to normalize query and key before attention.
     use_rope: Whether to use rotary positional embeddings on query and key.
     rope_positions_fn: The position function of rotary positional embeddings to
@@ -205,6 +285,9 @@ class MultiHeadAttention(nn.Module):
       is initialized to zeros.
     dropout_rate: The dropout rate for the attention weights.
     dtype: The data type of the computation.
+    use_flash: Whether to use Flash Attention, currently only supported for TPU.
+    block_sizes: Block sizes for FlashAttention. If None, default block sizes
+      are used. Block sizes must be divisible by 128 for TPU Flash Attention.
   """
 
   attention_heads_spec: AttentionHeadsSpec
@@ -262,6 +345,14 @@ class MultiHeadAttention(nn.Module):
             f"In cross-attention, mask shape {mask.shape} does not match"
             f" expected shape {c.shape[:2]}."
         )
+
+    if (
+        self.attention_heads_spec.use_flash_attention
+        and self.dropout_rate > 0.0
+        and is_training
+    ):
+      raise ValueError("Flash attention is not supported with dropout.")
+
     b, _, d = x.shape  # batch size, sequence length, embedding dim
     head_d, num_heads = self.attention_heads_spec.resolve(d)
 
@@ -304,7 +395,6 @@ class MultiHeadAttention(nn.Module):
       if self.qk_norm_method == "rms_norm":
         q = nn.RMSNorm(name="RMSNorm_Q")(q)
         k = nn.RMSNorm(name="RMSNorm_K")(k)
-        scale = 1.0 / jnp.sqrt(jnp.float32(head_d))
       # QK L2 normalization: https://arxiv.org/abs/2010.04245
       elif self.qk_norm_method == "l2":
         scale = self.param(
@@ -317,14 +407,22 @@ class MultiHeadAttention(nn.Module):
 
         norm_q = jnp.linalg.norm(q, ord=2, axis=-1, keepdims=True)
         norm_k = jnp.linalg.norm(k, ord=2, axis=-1, keepdims=True)
-        q = q / (norm_q + SAFETY_EPSILON)
+        # we pre-scale Q here instead of within the attention function to avoid
+        # passing in a differentiable parameter to the attention; the scale
+        # parameter still receives the same gradient as it would if it were
+        # inside the attention
+        q = q * (scale / (norm_q + SAFETY_EPSILON))
         k = k / (norm_k + SAFETY_EPSILON)
       else:
         raise ValueError(
             f"Unsupported QK normalization method: {self.qk_norm_method}."
         )
-    else:
-      scale = 1.0 / jnp.sqrt(jnp.float32(head_d))
+
+    # Downstream attention dot-product scaling factor
+    is_l2 = self.normalize_qk and self.qk_norm_method == "l2"
+    # 'rescale=1.0' is passed to _dot_product_attention for functional
+    # equivalence.
+    rescale = 1.0 if is_l2 else (1.0 / math.sqrt(head_d))
 
     # RoPE: https://arxiv.org/abs/2104.09864
     if self.use_rope:
@@ -336,15 +434,28 @@ class MultiHeadAttention(nn.Module):
       )(k)
       # shape is [batch, num_heads, sequence_length, head_dim]
 
-    attention_output = _dot_product_attention(
-        q=q,
-        k=k,
-        v=v,
-        rescale=scale,
-        mask=mask,
-        dropout_rate=self.dropout_rate,
-        is_training=is_training,
-    )
+    if self.attention_heads_spec.use_flash_attention:
+      # exception is raised when the block sizes are not divisible by 128
+      # (number of TPU lanes) or when enabling TPU Flash Attention on a non-TPU
+      # backend.
+      attention_output = _flash_dot_product_attention(
+          q=q,
+          k=k,
+          v=v,
+          rescale=rescale,
+          mask=mask,
+          block_sizes=self.attention_heads_spec.block_sizes,
+      )
+    else:
+      attention_output = _dot_product_attention(
+          q=q,
+          k=k,
+          v=v,
+          rescale=rescale,
+          mask=mask,
+          dropout_rate=self.dropout_rate,
+          is_training=is_training,
+      )
 
     attention_output = nn.Dense(
         features=d,

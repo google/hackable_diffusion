@@ -234,7 +234,9 @@ class DiTBlock(nn.Module):
 
     # Attention Branch.
     x_normed = self.conditional_norm_attention(x, c=cond_activated)
-    attention_out = self.attention(x_normed, c=None, mask=mask, is_training=is_training)
+    attention_out = self.attention(
+        x_normed, c=None, mask=mask, is_training=is_training
+    )
     if use_gates:
       gate_msa = self.gate_msa(cond_activated)
       attention_out = gate_msa[..., None, :] * attention_out
@@ -405,7 +407,7 @@ class DePatchify(nn.Module):
 
     return einops.rearrange(
         x,
-        "... (hn wn) (hp wp c) -> ... (hn hp) (wn wp) c",
+        '... (hn wn) (hp wp c) -> ... (hn hp) (wn wp) c',
         hn=hn,
         wn=wn,
         hp=hp,

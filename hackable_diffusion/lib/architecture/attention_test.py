@@ -19,6 +19,8 @@ from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
+from jax.experimental.pallas import tpu as pltpu
+import jax.experimental.pallas.ops.tpu.flash_attention as flash
 import jax.numpy as jnp
 import kauldron.ktyping as kt
 import numpy as np
@@ -640,6 +642,139 @@ class AttentionTest(parameterized.TestCase):
         ValueError, "Unsupported QK normalization method"
     ):
       module.init(self.rng, self.x, c=None)
+
+  @parameterized.named_parameters(
+      # Format: (name, normalize_qk, qk_norm_method, seq_len_q, seq_len_kv, dim)
+      # 1. Aligned Baseline
+      ("aligned_no_norm", False, "l2", 128, 128, 128),
+      ("aligned_l2_norm", True, "l2", 128, 128, 128),
+      # 2. Mixed Boundaries (covers 1 below/above and 10 above/below in
+      # cross-attention)
+      ("mixed_boundary_1_l2", True, "l2", 127, 129, 128),
+      ("mixed_boundary_10_rms", True, "rms_norm", 138, 118, 128),
+      # 3. Extreme / Small Sizes (also covers dim 64)
+      ("minimum_size", True, "l2", 1, 1, 64),
+      ("small_context_dim_64", True, "l2", 8, 32, 64),
+      # 4. Large Context
+      ("large_context", True, "l2", 256, 512, 128),
+  )
+  def test_flash_attention_correctness(
+      self, normalize_qk, qk_norm_method, seq_len_q, seq_len_kv, dim
+  ):
+    """Verifies that the Flash Attention forward and backward passes match Naive."""
+
+    # Setup inputs
+    rng_init, rng_eval, rng_grad = jax.random.split(self.rng, 3)
+    x = jax.random.normal(rng_eval, (self.batch_size, seq_len_q, dim))
+    c = jax.random.normal(rng_eval, (self.batch_size, seq_len_kv, dim))
+
+    # Compile two modules: one with naive, one with flash
+    module_naive = attention.MultiHeadAttention(
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads, use_flash_attention=False
+        ),
+        normalize_qk=normalize_qk,
+        qk_norm_method=qk_norm_method,
+    )
+    module_flash = attention.MultiHeadAttention(
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads, use_flash_attention=True
+        ),
+        normalize_qk=normalize_qk,
+        qk_norm_method=qk_norm_method,
+    )
+
+    variables = module_naive.init(rng_init, x, c)
+
+    # Define forward wrapper to use with jax.vjp
+    def forward_fn(module, q, k):
+      return module.apply(variables, q, k, is_training=False)
+
+    # 1. Forward and VJP: Naive Attention
+    out_naive, vjp_fn_naive = jax.vjp(
+        lambda q, k: forward_fn(module_naive, q, k), x, c
+    )
+
+    # 2. Forward and VJP: Flash Attention under TPU interpret mode
+    with pltpu.force_tpu_interpret_mode():
+      out_flash, vjp_fn_flash = jax.vjp(
+          lambda q, k: forward_fn(module_flash, q, k), x, c
+      )
+
+    # Assert Forward Correctness
+    np.testing.assert_allclose(out_flash, out_naive, atol=1e-5, rtol=1e-5)
+
+    # 3. Propagate incoming gradients backward
+    g = jax.random.normal(rng_grad, out_naive.shape)
+    dx_naive, dc_naive = vjp_fn_naive(g)
+
+    with pltpu.force_tpu_interpret_mode():
+      dx_flash, dc_flash = vjp_fn_flash(g)
+
+    # Assert VJP Correctness (Gradients of inputs)
+    np.testing.assert_allclose(dx_flash, dx_naive, atol=1e-5, rtol=1e-5)
+    np.testing.assert_allclose(dc_flash, dc_naive, atol=1e-5, rtol=1e-5)
+
+  def test_flash_attention_fails_without_tpu_or_interpreter(self):
+    """Verifies that Flash Attention fails when run on CPU without interpreter."""
+    spec = attention.AttentionHeadsSpec(
+        num_heads=self.num_heads,
+        use_flash_attention=True,
+    )
+    module = attention.MultiHeadAttention(attention_heads_spec=spec)
+    x = jnp.ones((self.batch_size, self.seq_len_q, self.dim))
+    # We force interpret mode to None, which disables CPU interpreter emulation.
+    with pltpu.force_tpu_interpret_mode(None):  # type: ignore[wrong-arg-types]
+      with self.assertRaises((ValueError, RuntimeError)):
+        variables = module.init(self.rng, x, None)
+        module.apply(variables, x, None)
+
+  def test_flash_attention_invalid_block_k_raises_error(self):
+    """Verifies that block_k not divisible by 128 raises error in Flash Attention."""
+    invalid_block_sizes = flash.BlockSizes(
+        block_q=128,
+        block_k_major=128,
+        block_k=64,  # 64 is not a multiple of 128
+        block_b=1,
+    )
+    spec = attention.AttentionHeadsSpec(
+        num_heads=self.num_heads,
+        use_flash_attention=True,
+        block_sizes=invalid_block_sizes,
+    )
+
+    module = attention.MultiHeadAttention(attention_heads_spec=spec)
+    x = jnp.ones((self.batch_size, self.seq_len_q, self.dim))
+    mask = jnp.ones((self.batch_size, self.seq_len_q), dtype=jnp.bool_)
+
+    with self.assertRaises((NotImplementedError, ValueError, RuntimeError)):
+      variables = module.init(self.rng, x, None, mask=mask)
+      module.apply(variables, x, None, mask=mask)
+
+  def test_flash_attention_with_dropout_raises_error(self):
+    """Verifies Flash Attention w/ dropout during training raises ValueError."""
+    module = attention.MultiHeadAttention(
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads,
+            use_flash_attention=True,
+        ),
+        dropout_rate=0.1,
+    )
+
+    # Verify exception is raised during initialization (with is_training=True)
+    with self.assertRaisesRegex(
+        ValueError, "Flash attention is not supported with dropout."
+    ):
+      module.init(self.rng, self.x, None, is_training=True)
+
+    # Initialize with is_training=False under interpret mode, then verify
+    # exception during apply with is_training=True
+    with pltpu.force_tpu_interpret_mode():
+      variables = module.init(self.rng, self.x, None, is_training=False)
+    with self.assertRaisesRegex(
+        ValueError, "Flash attention is not supported with dropout."
+    ):
+      module.apply(variables, self.x, None, is_training=True)
 
 
 if __name__ == "__main__":
