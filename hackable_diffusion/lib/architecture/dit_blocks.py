@@ -258,7 +258,7 @@ class DiTBlock(nn.Module):
 ################################################################################
 
 
-class DiTBlockFlux(DiTBlock):
+class DiTBlockFlux(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   """FLUX DiTBlock.
 
   Based on https://github.com/black-forest-labs/flux. It uses RMSNorm and
@@ -278,7 +278,7 @@ class DiTBlockFlux(DiTBlock):
     super().__post_init__()
 
 
-class DiTBlockSD3(DiTBlock):
+class DiTBlockSD3(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   """SD3 / MMDiT DiTBlock.
 
   Based on https://arxiv.org/abs/2403.03206. It uses RMSNorm with scale-only
@@ -298,7 +298,7 @@ class DiTBlockSD3(DiTBlock):
     super().__post_init__()
 
 
-class DiTBlockAdaLNZero(DiTBlock):
+class DiTBlockAdaLNZero(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   """Original DiTBlock.
 
   Based on https://arxiv.org/abs/2212.09748. It uses LayerNorm with scale and
