@@ -719,7 +719,7 @@ class UnMaskingStep(SamplerStep):
   remasking_fn: RemaskingFn = NoRemaskingFn()
   corruption_mask_fn: CorruptedMaskFn = AllCorruptedMaskFn()
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.float32
+  logits_dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
 
   def __post_init__(self):
     """UnMaskingStep only supports masking processes.
@@ -948,7 +948,7 @@ class DiscreteDDIMStep(SamplerStep):
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.float32
+  logits_dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
 
   def __post_init__(self):
     """DiscreteDDIMStep does not support masking processes.
@@ -1293,7 +1293,7 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
 
   corruption_process: CategoricalProcess
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.float32
+  logits_dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
 
   def __post_init__(self):
     """IntegratedDiscreteDDIMStep does not support masking processes.
@@ -1474,7 +1474,7 @@ class PriorStep(SamplerStep):
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.bfloat16
+  logits_dtype: jnp.dtype = jnp.bfloat16  # pyrefly: ignore[bad-assignment]
 
   @kt.typechecked
   def initialize(
