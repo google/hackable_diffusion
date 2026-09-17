@@ -157,13 +157,14 @@ class ConditionalRMSNormStrategy(NormStrategy):
 
   epsilon: float = 1e-5
   use_shift: bool = True
+  use_scale: bool = False
   dtype: DType = jnp.float32
 
   def build_layer(self, name: str | None = None) -> nn.Module:
     return _NormalizationLayer(
         base_norm=nn.RMSNorm(
             epsilon=self.epsilon,
-            use_scale=False,
+            use_scale=self.use_scale,
             dtype=self.dtype,
         ),
         conditioning=_ConditioningWithTransform(
