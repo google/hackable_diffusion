@@ -14,39 +14,76 @@
 
 """Common typing definitions."""
 
-from typing import Any, Mapping
+import typing
+from typing import Any, Mapping, TypeAlias
+import jax
 import kauldron.ktyping as kt
 
-# pylint: disable=g-multiple-import,g-importing-member, unused-import
-from kauldron.ktyping import (
-    Array,
-    BFloat16,
-    Bool,
-    Complex,
-    Complex64,
-    Float,
-    Float32,
-    Float64,
-    Int,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Num,
-    PRNGKey,
-    PyTree,
-    Scalar,
-    SInt,
-    UInt,
-    UInt8,
-    UInt16,
-    UInt32,
-    UInt64,
-)
+if typing.TYPE_CHECKING:
+  # PEP 484 static type checkers parse string literals inside generic type
+  # subscripts (e.g. `Float['batch c']`) as forward-reference Python type
+  # expressions rather than ktyping shape strings. Using an opaque `Any` alias
+  # (matching `jaxtyping`) allows 1-argument shape-string subscripts without
+  # triggering `[not-a-type]` or `[invalid-annotation]` errors.
+  _AnyType = getattr(typing, 'foo' + 'bar')
+  Array = _AnyType
+  BFloat16 = _AnyType
+  Bool = _AnyType
+  Complex = _AnyType
+  Complex64 = _AnyType
+  ElementSpec = _AnyType
+  Float = _AnyType
+  Float32 = _AnyType
+  Float64 = _AnyType
+  Int = _AnyType
+  Int8 = _AnyType
+  Int16 = _AnyType
+  Int32 = _AnyType
+  Int64 = _AnyType
+  Num = _AnyType
+  PRNGKey: TypeAlias = jax.Array
+  PyTree = _AnyType
+  ScalarBool: TypeAlias = jax.Array | bool
+  ScalarFloat: TypeAlias = jax.Array | float
+  ScalarInt: TypeAlias = jax.Array | int
+  SInt = _AnyType
+  UInt = _AnyType
+  UInt8 = _AnyType
+  UInt16 = _AnyType
+  UInt32 = _AnyType
+  UInt64 = _AnyType
+  dim = typing.Any  # pylint: disable=invalid-name
+  typechecked = lambda fn: fn
+else:
+  Array = kt.Array
+  BFloat16 = kt.BFloat16
+  Bool = kt.Bool
+  Complex = kt.Complex
+  Complex64 = kt.Complex64
+  ElementSpec = kt.ElementSpec
+  Float = kt.Float
+  Float32 = kt.Float32
+  Float64 = kt.Float64
+  Int = kt.Int
+  Int8 = kt.Int8
+  Int16 = kt.Int16
+  Int32 = kt.Int32
+  Int64 = kt.Int64
+  Num = kt.Num
+  PRNGKey = kt.PRNGKey
+  PyTree = kt.PyTree
+  ScalarBool = kt.ScalarBool
+  ScalarFloat = kt.ScalarFloat
+  ScalarInt = kt.ScalarInt
+  SInt = kt.SInt
+  UInt = kt.UInt
+  UInt8 = kt.UInt8
+  UInt16 = kt.UInt16
+  UInt32 = kt.UInt32
+  UInt64 = kt.UInt64
+  dim = kt.dim  # pylint: disable=invalid-name
+  typechecked = kt.typechecked
 
-# pylint: enable=g-multiple-import,g-importing-member, unused-import
-
-typechecked = kt.typechecked
 check_type = kt.check_type
 
 
@@ -78,7 +115,12 @@ ScheduleKey = str  # e.g. 'time', 'alpha', 'sigma', 'logsnr', etc.
 # are usually labels (x0 : Int["batch 1"]) while the predictions are
 # logits (x0 : Float["batch K"]).
 TargetKey = str  # e.g. 'x0', 'epsilon', 'score', 'velocity', 'v', 'mask', ...
-TargetInfo = dict[TargetKey, Array['batch *_data_shape']]  # pyrefly: ignore[not-a-type, unknown-name]
+if typing.TYPE_CHECKING:
+  TargetInfo: TypeAlias = dict[TargetKey, jax.Array]
+  LossOutput: TypeAlias = jax.Array
+else:
+  TargetInfo = dict[TargetKey, Array['batch *_data_shape']]
+  LossOutput = Float['batch']
 
 # Conditioning structures.
 ConditioningKey = str  # e.g. 'label', 'text', 'image', ...
@@ -94,10 +136,6 @@ ConditioningShape = dict[ConditioningKey, Shape]
 
 # Type related structures.
 DType = kt.DType
-
-
-# Loss related structures.
-LossOutput = Float['batch']
 
 
 # ##############################################################################
@@ -118,7 +156,7 @@ ScalarTree = PyTree[Array['batch'], '$T']
 # Corresponding PyTree for the time array.
 TimeTree = PyTree[Array['_batch *_data_shape'], '$T']
 
-ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']  # pyrefly: ignore[not-a-type, unknown-name]
+ScheduleInfoTree = PyTree[dict[ScheduleKey, Array['batch *_data_shape']], '$T']  # pyrefly: ignore[unknown-name]
 
 TargetInfoTree = PyTree[Array['batch *_data_shape']]
 
@@ -127,6 +165,3 @@ ShapeTree = PyTree[Shape]
 DTypeTree = PyTree[DType, '$T']
 
 LossOutputTree = PyTree[LossOutput, '$T']
-
-
-
