@@ -712,7 +712,7 @@ class JointNestedTimeSampler(time_sampling.TimeSampler):
   @kt.typechecked
   def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
     def _call_sampler(sampler, data_spec):
-      return sampler(key, data_spec)
+      return sampler(jax.random.clone(key), data_spec)
 
     return jax.tree.map(_call_sampler, self.samplers, data_spec)
 

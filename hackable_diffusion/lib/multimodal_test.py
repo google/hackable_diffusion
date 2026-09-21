@@ -498,7 +498,7 @@ class NestedTimeSamplerTest(parameterized.TestCase):
     self.assertEqual(time['modality']['label'].shape, (2,))
 
   def test_joint_nested_time_sampler(self):
-    key = jax.random.PRNGKey(0)
+    key = jax.random.key(0)
     data_spec = {
         'image': jnp.zeros((2, 3, 4)),
         'modality': {'label': jnp.zeros((2,))},
@@ -510,7 +510,8 @@ class NestedTimeSamplerTest(parameterized.TestCase):
             'modality': {'label': time_sampling.UniformTimeSampler()},
         }
     )
-    time = sampler(key, data_spec)
+    with jax.debug_key_reuse(True):
+      time = sampler(key, data_spec)
 
     self.assertIsInstance(time, dict)
     self.assertEqual(time['image'].shape, (2, 1, 1))
