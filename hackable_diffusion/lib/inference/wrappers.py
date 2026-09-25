@@ -22,6 +22,7 @@ from flax.nnx import bridge
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 import jax
+import jax.numpy as jnp
 import kauldron.ktyping as kt
 
 ################################################################################
@@ -97,9 +98,11 @@ class FlaxNNXInferenceFn(InferenceFn):
   """Inference function protocol with a diffusion network given by nn.Module.
 
   Note: ``inference_seed`` is used for any stochastic layers (e.g., dropout)
-  that remain active at inference time. Since ``is_training=False`` is always
-  passed, dropout layers are typically disabled and this seed has no effect.
-  If you need stochastic inference (e.g., MC dropout), provide different seeds.
+  that remain active at inference time. Distinct diffusion timesteps fold in
+  the timestep value to derive uncorrelated PRNG keys, preventing key reuse
+  across sampling steps. Since ``is_training=False`` is always passed, dropout
+  layers are typically disabled unless configured for stochastic inference
+  (e.g., MC dropout).
   """
 
   nnx_network: ConvertedNNXDiffusionNetwork
@@ -113,12 +116,18 @@ class FlaxNNXInferenceFn(InferenceFn):
       conditioning: Conditioning | None,
   ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
     """Returns the model outputs."""
+    time_bits = jax.lax.bitcast_convert_type(
+        jnp.asarray(time, dtype=jnp.float32), jnp.uint32
+    )
+    step_key = jax.random.fold_in(
+        jax.random.key(self.inference_seed), time_bits.ravel()[0]
+    )
     return self.nnx_network(
         time=time,
         xt=xt,
         conditioning=conditioning,
         is_training=False,
-        rngs=nnx.Rngs(self.inference_seed),
+        rngs=nnx.Rngs(step_key),
     )
 
 

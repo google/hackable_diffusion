@@ -75,6 +75,32 @@ class WrappersTest(absltest.TestCase):
     outputs_nnx = mlp_nnx_converted(inputs=x)
     self.assertTrue(jnp.allclose(outputs_nnx, outputs_linen))  # pyrefly: ignore[bad-argument-type]
 
+  def test_flax_nnx_inference_fn_stochastic_distinct_timesteps(self):
+    class StochasticModule(nnx.Module):
+
+      def __init__(self, rngs: nnx.Rngs):
+        self.dropout = nnx.Dropout(rate=0.5, rngs=rngs)
+
+      def __call__(self, time, xt, conditioning, is_training, rngs):
+        del time, conditioning, is_training  # Unused.
+        return {'x0': self.dropout(xt, deterministic=False, rngs=rngs)}
+
+    network = StochasticModule(rngs=nnx.Rngs(0))
+    inference_fn = wrappers.FlaxNNXInferenceFn(
+        nnx_network=network, inference_seed=42
+    )
+
+    xt = jnp.ones((16, 16))
+    time1 = jnp.array([0.2])
+    time2 = jnp.array([0.8])
+
+    out1 = inference_fn(time=time1, xt=xt, conditioning=None)
+    out2 = inference_fn(time=time2, xt=xt, conditioning=None)
+    self.assertFalse(jnp.allclose(out1['x0'], out2['x0']))
+
+    out1_again = inference_fn(time=time1, xt=xt, conditioning=None)
+    self.assertTrue(jnp.allclose(out1['x0'], out1_again['x0']))
+
 
 if __name__ == '__main__':
   absltest.main()
