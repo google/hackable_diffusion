@@ -15,6 +15,7 @@
 """Tests for unet_blocks."""
 
 from typing import Literal, Tuple
+from unittest import mock
 
 
 from hackable_diffusion.lib.architecture import attention
@@ -242,6 +243,44 @@ class AttentionResidualBlockTest(parameterized.TestCase):
         rngs={'dropout': self.key},
     )
     self.assertEqual(output.shape, x_shape)  # pyrefly: ignore[missing-attribute]
+
+  @parameterized.named_parameters(
+      ('training', True),
+      ('inference', False),
+  )
+  def test_attention_residual_block_forwards_is_training(
+      self,
+      is_training: bool,
+  ):
+    """Tests that is_training is forwarded to MultiHeadAttention."""
+    block = self._get_attention_residual_block(
+        cross_attention_bool=False,
+        normalization_type='default_group_norm',
+    )
+    x = jnp.ones((2, 16, 16, 32))
+    variables = block.init(
+        {'params': self.key, 'dropout': self.key},
+        x=x,
+        cross_attention_emb=None,
+        is_training=is_training,
+    )
+    with mock.patch.object(
+        attention.MultiHeadAttention,
+        '__call__',
+        autospec=True,
+        side_effect=attention.MultiHeadAttention.__call__,
+    ) as mock_call:
+      block.apply(
+          variables,
+          x=x,
+          cross_attention_emb=None,
+          is_training=is_training,
+          rngs={'dropout': self.key},
+      )
+      mock_call.assert_called_once()
+      self.assertEqual(
+          mock_call.call_args.kwargs.get('is_training'), is_training
+      )
 
 
 if __name__ == '__main__':
