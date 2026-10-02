@@ -77,6 +77,7 @@ def _ddim_update(
     next_time: jnp.ndarray,
     stochasticity_level: float,
     process: GaussianProcess,
+    noise_frac: float = 0.0,
 ):
   """Helper function to compute the DDIM update."""
   x0 = process.convert_predictions(
@@ -101,7 +102,11 @@ def _ddim_update(
   coeff_x0 = next_alpha * (
       1.0 - stochasticity_level * r22 - (1.0 - stochasticity_level) * r11
   )
-  volatility = next_sigma * jnp.sqrt(
+  sigma_interpolated = (
+      (next_sigma ** (1.0 - noise_frac)) * (sigma**noise_frac)
+  )
+  sigma_interpolated = jnp.where(next_sigma == 0.0, 0.0, sigma_interpolated)
+  volatility = sigma_interpolated * jnp.sqrt(
       1.0 - jnp.square(stochasticity_level * r11 + (1.0 - stochasticity_level))
   )
   new_mean = coeff_xt * xt + coeff_x0 * x0
@@ -586,6 +591,73 @@ class DDIMStepTest(parameterized.TestCase):
         next_time=next_step.step_info.time,
         stochasticity_level=stochasticity_level,
         process=self.process,
+    )
+    expected_xt = mean + volatility * z
+
+    chex.assert_trees_all_close(
+        next_step,
+        DiffusionStep(
+            xt=expected_xt,
+            step_info=StepInfo(
+                step=1,
+                time=jnp.array([0.1]),
+                rng=jax.random.PRNGKey(1),
+            ),
+            aux={},
+        ),
+        atol=1e-6,
+    )
+
+  @parameterized.parameters([0.0, 0.3, 0.5, 1.0])
+  def test_update_with_noise_frac(self, noise_frac):
+    if noise_frac > 0.0:
+      ddim_step = gaussian_step_sampler.DDIMStep(
+          corruption_process=self.process,
+          stoch_coeff=1.0,
+          noise_frac=noise_frac,
+      )
+    else:
+      # this also tests the default value of noise_frac
+      ddim_step = gaussian_step_sampler.DDIMStep(
+          corruption_process=self.process,
+          stoch_coeff=1.0,
+      )
+
+    initial_step = ddim_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=StepInfo(
+            step=0,
+            time=jnp.array([0.2]),
+            rng=jax.random.PRNGKey(0),
+        ),
+    )
+
+    prediction = dummy_inference_fn(
+        xt=initial_step.xt,
+        conditioning={},
+        time=initial_step.step_info.time,
+    )
+
+    next_step = ddim_step.update(
+        prediction=prediction,
+        current_step=initial_step,
+        next_step_info=StepInfo(
+            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+        ),
+    )
+
+    z = jax.random.normal(
+        key=next_step.step_info.rng, shape=initial_step.xt.shape
+    )
+
+    mean, volatility = _ddim_update(
+        xt=initial_step.xt,
+        prediction=prediction,
+        time=initial_step.step_info.time,
+        next_time=next_step.step_info.time,
+        stochasticity_level=1.0,
+        process=self.process,
+        noise_frac=noise_frac,
     )
     expected_xt = mean + volatility * z
 

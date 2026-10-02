@@ -267,15 +267,21 @@ class DDIMStep(SamplerStep):
 
   stoch_coeff controls the interpolation between DDIM and DDPM:
   stoch_coeff = 0.0 gives (deterministic) DDIM and stoch_coeff = 1.0 gives DDPM.
+  noise_frac controls the interpolation between the noise at the start and end
+  of the time step (see https://arxiv.org/pdf/2107.00630 section I.2 or
+  https://arxiv.org/pdf/2102.09672 section 3.2 for more details).
 
   Attributes:
     corruption_process: The corruption process to use.
     stoch_coeff: The interpolation parameter between DDIM and DDPM.
+    noise_frac: Interpolation between noise at the end (0.0) and start of the 
+      step (1.0).
     stochastic_last_step: Whether the last step is stochastic.
   """
 
   corruption_process: GaussianProcess
   stoch_coeff: float
+  noise_frac: float = 0.0
   stochastic_last_step: bool = False
 
   @kt.typechecked
@@ -329,7 +335,17 @@ class DDIMStep(SamplerStep):
     coeff_x0 = next_alpha * (
         1.0 - self.stoch_coeff * r22 - (1.0 - self.stoch_coeff) * r11
     )
-    volatility = next_sigma * jnp.sqrt(
+
+    # Interpolate between noise at the start and end of the step.
+    if self.noise_frac == 0.0:
+      sigma_volatility = next_sigma
+    else:
+      sigma_volatility = (
+          (next_sigma ** (1.0 - self.noise_frac)) * (sigma**self.noise_frac)
+      )
+      sigma_volatility = jnp.where(next_sigma == 0.0, 0.0, sigma_volatility)
+
+    volatility = sigma_volatility * jnp.sqrt(
         1.0 - jnp.square(self.stoch_coeff * r11 + (1.0 - self.stoch_coeff))
     )
     new_mean = coeff_xt * xt + coeff_x0 * x0
