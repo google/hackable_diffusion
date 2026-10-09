@@ -34,6 +34,7 @@ from hackable_diffusion.lib.corruption.gaussian import GeometricSchedule
 from hackable_diffusion.lib.corruption.gaussian import InverseCosineSchedule
 from hackable_diffusion.lib.corruption.gaussian import LinearDiffusionSchedule
 from hackable_diffusion.lib.corruption.gaussian import OffsetSchedule
+from hackable_diffusion.lib.corruption.gaussian import PowerSchedule
 from hackable_diffusion.lib.corruption.gaussian import RFSchedule
 from hackable_diffusion.lib.corruption.gaussian import ShiftedSchedule
 from hackable_diffusion.lib.corruption.riemannian import LinearRiemannianSchedule

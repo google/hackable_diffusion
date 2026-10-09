@@ -187,6 +187,7 @@ SCHEDULES = [
     gaussian.InverseCosineSchedule(),
     gaussian.LinearDiffusionSchedule(),
     gaussian.GeometricSchedule(sigma_min=0.1, sigma_max=0.9),
+    gaussian.PowerSchedule(p=7.0, sigma_min=0.002, sigma_max=80.0),
 ]
 
 
@@ -557,6 +558,32 @@ class NumericalGaussianScheduleTest(parameterized.TestCase):
     # Inverse logsnr roundtrip via Newton-Raphson
     t_rec = blend.inverse_logsnr(blend.logsnr(t_mid))
     self.assertTrue(jnp.allclose(t_rec, t_mid, atol=1e-4))
+
+  def test_power_schedule(self):
+    sched = gaussian.PowerSchedule(
+        p=7.0,
+        sigma_min=0.002,
+        sigma_max=80.0,
+    )
+    t_0 = jnp.array([0.0])
+    t_1 = jnp.array([1.0])
+    # At t=0: logsnr = -2 * ln(0.002)
+    self.assertTrue(
+        jnp.allclose(sched.logsnr(t_0), -2.0 * jnp.log(0.002), atol=1e-4)
+    )
+    # At t=1: logsnr = -2 * ln(80.0)
+    self.assertTrue(
+        jnp.allclose(sched.logsnr(t_1), -2.0 * jnp.log(80.0), atol=1e-4)
+    )
+
+    t_mid = jnp.array([0.1, 0.5, 0.9])
+    alpha = sched.alpha(t_mid)
+    sigma = sched.sigma(t_mid)
+    self.assertTrue(jnp.allclose(alpha**2 + sigma**2, 1.0, atol=1e-5))
+
+    # Exact closed-form inverse roundtrip
+    t_rec = sched.inverse_logsnr(sched.logsnr(t_mid))
+    self.assertTrue(jnp.allclose(t_rec, t_mid, atol=1e-5))
 
 
 if __name__ == '__main__':

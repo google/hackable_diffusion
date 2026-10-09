@@ -400,6 +400,47 @@ class GeometricSchedule(GaussianSchedule):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
+class PowerSchedule(GaussianSchedule):
+  """Base power / EDM noise schedule (Karras et al., 2022).
+
+  Attributes:
+    p: Power exponent (default 7.0).
+    sigma_min: Minimum sigma cutoff (default 0.002).
+    sigma_max: Maximum sigma cutoff (default 80.0).
+  """
+
+  p: float = 7.0
+  sigma_min: float = 0.002
+  sigma_max: float = 80.0
+
+  @property
+  def _interp(self) -> float:
+    _inv_p = 1.0 / self.p
+    return self.sigma_max**_inv_p - self.sigma_min**_inv_p
+
+  @kt.typechecked
+  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Map time to logSNR."""
+    sigma_t = (self.sigma_min**(1.0 / self.p) + time * self._interp)**self.p
+    return -2.0 * jnp.log(sigma_t)
+
+  @kt.typechecked
+  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Exact closed-form inverse mapping logSNR to time."""
+    _inv_p = 1.0 / self.p
+    sigma_t = jnp.exp(-0.5 * logsnr)
+    return (sigma_t**_inv_p - self.sigma_min**_inv_p) / self._interp
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return jnp.sqrt(jax.nn.sigmoid(self.logsnr(time)))
+
+  @kt.typechecked
+  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return jnp.sqrt(jax.nn.sigmoid(-self.logsnr(time)))
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class ClampedSchedule(GaussianSchedule):
   """Clamped schedule.
 
