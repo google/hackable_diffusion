@@ -400,11 +400,127 @@ class GeometricSchedule(GaussianSchedule):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
+class ClampedSchedule(GaussianSchedule):
+  """Clamped schedule.
+
+  Rescales time so that logSNR stays within [logsnr_min, logsnr_max].
+
+  Attributes:
+    original_schedule: The original GaussianSchedule.
+    logsnr_max: The maximum logSNR for the original schedule.
+    logsnr_min: The minimum logSNR for the original schedule.
+  """
+
+  original_schedule: GaussianSchedule
+
+  logsnr_max: float = 15.0
+  logsnr_min: float = -15.0
+
+  @property
+  def tmin(self):
+    """The minimum time for the original schedule."""
+    return self.original_schedule.inverse_logsnr(jnp.array([self.logsnr_max]))
+
+  @property
+  def tmax(self):
+    """The maximum time for the original schedule."""
+    return self.original_schedule.inverse_logsnr(jnp.array([self.logsnr_min]))
+
+  @kt.typechecked
+  def rescaled_time(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Rescales time from [0, 1] to [tmin, tmax]."""
+    return time * (self.tmax - self.tmin) + self.tmin
+
+  @kt.typechecked
+  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Map time to logSNR of the clamped schedule."""
+    return self.original_schedule.logsnr(self.rescaled_time(time))
+
+  @kt.typechecked
+  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Map logSNR of the clamped schedule to time."""
+    time = self.original_schedule.inverse_logsnr(logsnr)
+    return (time - self.tmin) / (self.tmax - self.tmin)
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return self.original_schedule.alpha(self.rescaled_time(time))
+
+  @kt.typechecked
+  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return self.original_schedule.sigma(self.rescaled_time(time))
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class OffsetSchedule(GaussianSchedule):
+  """Offset schedule.
+
+  Adds a constant offset to the logSNR of any GaussianSchedule:
+  logSNR(t) = original_schedule.logSNR(t) + offset.
+
+  Attributes:
+    original_schedule: The original GaussianSchedule.
+    offset: Constant offset to add in logSNR space. If not provided,
+      it is computed from target_resolution and base_resolution.
+    target_resolution: Target resolution (optional, if offset is not given).
+    base_resolution: Base resolution (optional, if offset is not given).
+  """
+
+  original_schedule: GaussianSchedule
+  offset: float | None = None
+  target_resolution: int | None = None
+  base_resolution: int | None = None
+
+  @property
+  def logsnr_offset(self):
+    """The offset to be added to the logsnr."""
+    if self.offset is not None:
+      return self.offset
+    if self.target_resolution is not None and self.base_resolution is not None:
+      return -2.0 * (
+          jnp.log(self.target_resolution) - jnp.log(self.base_resolution)
+      )
+    raise ValueError(
+        'Either offset or both target_resolution and base_resolution must be'
+        ' provided.'
+    )
+
+  @kt.typechecked
+  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Map time to logSNR of the offset schedule."""
+    return self.original_schedule.logsnr(time) + self.logsnr_offset
+
+  @kt.typechecked
+  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Map logSNR of the offset schedule to time."""
+    return self.original_schedule.inverse_logsnr(logsnr - self.logsnr_offset)
+
+  @kt.typechecked
+  def time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Time change from offset to original process."""
+    return self.original_schedule.inverse_logsnr(self.logsnr(time))
+
+  @kt.typechecked
+  def inverse_time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Time change from original to offset process."""
+    return self.inverse_logsnr(self.original_schedule.logsnr(time))
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return self.original_schedule.alpha(self.time_change(time))
+
+  @kt.typechecked
+  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    return self.original_schedule.sigma(self.time_change(time))
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class ShiftedSchedule(GaussianSchedule):
   """Shifted schedule.
 
   This schedule takes any GaussianSchedule and shifts it following
-  https://arxiv.org/abs/2410.19324.
+  https://arxiv.org/abs/2410.19324. Implemented as a composition of
+  ClampedSchedule and OffsetSchedule.
 
   Attributes:
     original_schedule: The original GaussianSchedule.
@@ -432,30 +548,39 @@ class ShiftedSchedule(GaussianSchedule):
     )
 
   @property
+  def clamped_schedule(self) -> ClampedSchedule:
+    return ClampedSchedule(
+        original_schedule=self.original_schedule,
+        logsnr_max=self.logsnr_max,
+        logsnr_min=self.logsnr_min,
+    )
+
+  @property
+  def offset_schedule(self) -> OffsetSchedule:
+    return OffsetSchedule(
+        original_schedule=self.clamped_schedule,
+        offset=self.logsnr_shift,
+    )
+
+  @property
   def tmin(self):
     """The minimum time for the original schedule."""
-    return self.original_schedule.inverse_logsnr(jnp.array([self.logsnr_max]))
+    return self.clamped_schedule.tmin
 
   @property
   def tmax(self):
     """The maximum time for the original schedule."""
-    return self.original_schedule.inverse_logsnr(jnp.array([self.logsnr_min]))
+    return self.clamped_schedule.tmax
 
   @kt.typechecked
   def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     """Map time to logSNR of the shifted schedule."""
-    rescaled_time = time * (self.tmax - self.tmin) + self.tmin
-    rescaled_logsnr = self.original_schedule.logsnr(rescaled_time)
-    rescaled_shifted_logsnr = rescaled_logsnr + self.logsnr_shift
-    return rescaled_shifted_logsnr
+    return self.offset_schedule.logsnr(time)
 
   @kt.typechecked
   def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     """Map logSNR of the shifted schedule to time."""
-    shifted_logsnr = logsnr - self.logsnr_shift
-    shifted_time = self.original_schedule.inverse_logsnr(shifted_logsnr)
-    rescaled_shifted_time = (shifted_time - self.tmin) / (self.tmax - self.tmin)
-    return rescaled_shifted_time
+    return self.offset_schedule.inverse_logsnr(logsnr)
 
   @kt.typechecked
   def time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
@@ -464,7 +589,6 @@ class ShiftedSchedule(GaussianSchedule):
     For a given input time `t`, finds logSNR(t) of the shifted schedule, and
     then computes the time in the original schedule that corresponds to
     logSNR(t).
-
 
     Args:
       time: Input time.
@@ -482,11 +606,59 @@ class ShiftedSchedule(GaussianSchedule):
 
   @kt.typechecked
   def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    return self.original_schedule.alpha(self.time_change(time))
+    return self.offset_schedule.alpha(time)
 
   @kt.typechecked
   def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
-    return self.original_schedule.sigma(self.time_change(time))
+    return self.offset_schedule.sigma(time)
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class BlendSchedule(GaussianSchedule):
+  """Blend schedule.
+
+  Linearly blends between schedule_0 (at t=0) and schedule_1 (at t=1)
+  in logSNR space:
+    logSNR(t) = (1 - t) * schedule_0.logSNR(t) + t * schedule_1.logSNR(t)
+
+  Attributes:
+    schedule_0: The schedule at t=0.
+    schedule_1: The schedule at t=1.
+    num_solver_steps: Number of Newton-Raphson steps for inverse_logsnr.
+  """
+
+  schedule_0: GaussianSchedule
+  schedule_1: GaussianSchedule
+  num_solver_steps: int = 5
+
+  @kt.typechecked
+  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Map time to blended logSNR."""
+    return (
+        (1.0 - time) * self.schedule_0.logsnr(time)
+        + time * self.schedule_1.logsnr(time)
+    )
+
+  @kt.typechecked
+  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    logsnr = self.logsnr(time)
+    return jnp.sqrt(jax.nn.sigmoid(logsnr))
+
+  @kt.typechecked
+  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    logsnr = self.logsnr(time)
+    return jnp.sqrt(jax.nn.sigmoid(-logsnr))
+
+  @kt.typechecked
+  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+    """Invert logSNR to time using Newton-Raphson iterations."""
+    t = jnp.clip(self.schedule_0.inverse_logsnr(logsnr), 0.0, 1.0)
+    grad_fn = jax_helpers.egrad(self.logsnr)
+    for _ in range(self.num_solver_steps):
+      f = self.logsnr(t) - logsnr
+      df = grad_fn(t)
+      t = jnp.clip(t - f / df, 0.0, 1.0)
+    return t
 
 
 ################################################################################

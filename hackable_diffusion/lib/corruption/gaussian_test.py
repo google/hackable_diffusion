@@ -417,6 +417,147 @@ class NumericalGaussianScheduleTest(parameterized.TestCase):
         f' {jnp.max(jnp.abs(sigmas - sigmas_expected))}',
     )
 
+  def test_clamped_schedule(self):
+    max_logsnr = 3.0
+    min_logsnr = -3.0
+    original_schedule = gaussian.CosineSchedule()
+    clamped_schedule = gaussian.ClampedSchedule(
+        original_schedule=original_schedule,
+        logsnr_max=max_logsnr,
+        logsnr_min=min_logsnr,
+    )
+
+    t_0, t_1 = jnp.array([0.0]), jnp.array([1.0])
+    self.assertAlmostEqual(clamped_schedule.logsnr(t_0), max_logsnr, places=5)
+    self.assertAlmostEqual(clamped_schedule.logsnr(t_1), min_logsnr, places=5)
+
+    t = jnp.linspace(0.0, 1.0, 50)
+    recovered_t = clamped_schedule.inverse_logsnr(clamped_schedule.logsnr(t))
+    self.assertTrue(jnp.allclose(t, recovered_t, atol=1e-5, rtol=1e-5))
+
+    alphas = clamped_schedule.alpha(t)
+    sigmas = clamped_schedule.sigma(t)
+    self.assertTrue(jnp.allclose(alphas**2 + sigmas**2, 1.0, atol=1e-5))
+
+  def test_offset_schedule(self):
+    original_schedule = gaussian.RFSchedule()
+    offset_val = 1.5
+    offset_schedule = gaussian.OffsetSchedule(
+        original_schedule=original_schedule,
+        offset=offset_val,
+    )
+
+    t = jnp.linspace(0.1, 0.9, 50)
+    expected_logsnr = original_schedule.logsnr(t) + offset_val
+    self.assertTrue(
+        jnp.allclose(offset_schedule.logsnr(t), expected_logsnr, atol=1e-5)
+    )
+
+    recovered_t = offset_schedule.inverse_logsnr(offset_schedule.logsnr(t))
+    self.assertTrue(jnp.allclose(t, recovered_t, atol=1e-5))
+
+    # Test resolution-based offset
+    res_schedule = gaussian.OffsetSchedule(
+        original_schedule=original_schedule,
+        target_resolution=128,
+        base_resolution=32,
+    )
+    expected_offset = -2.0 * (jnp.log(128) - jnp.log(32))
+    self.assertAlmostEqual(res_schedule.logsnr_offset, expected_offset, places=5)
+
+  def test_shifted_schedule_composition_equivalence(self):
+    original_schedule = gaussian.CosineSchedule()
+    target_res = 128
+    base_res = 32
+    max_logsnr = 4.0
+    min_logsnr = -4.0
+
+    shifted_schedule = gaussian.ShiftedSchedule(
+        original_schedule=original_schedule,
+        target_resolution=target_res,
+        base_resolution=base_res,
+        logsnr_max=max_logsnr,
+        logsnr_min=min_logsnr,
+    )
+
+    clamped = gaussian.ClampedSchedule(
+        original_schedule=original_schedule,
+        logsnr_max=max_logsnr,
+        logsnr_min=min_logsnr,
+    )
+    offset_sched = gaussian.OffsetSchedule(
+        original_schedule=clamped,
+        offset=shifted_schedule.logsnr_shift,
+    )
+
+    t = jnp.linspace(0.01, 0.99, 50)
+    self.assertTrue(
+        jnp.allclose(
+            shifted_schedule.logsnr(t), offset_sched.logsnr(t), atol=1e-6
+        )
+    )
+    self.assertTrue(
+        jnp.allclose(
+            shifted_schedule.alpha(t), offset_sched.alpha(t), atol=1e-6
+        )
+    )
+    self.assertTrue(
+        jnp.allclose(
+            shifted_schedule.sigma(t), offset_sched.sigma(t), atol=1e-6
+        )
+    )
+
+    logsnrs = shifted_schedule.logsnr(t)
+    self.assertTrue(
+        jnp.allclose(
+            shifted_schedule.inverse_logsnr(logsnrs),
+            offset_sched.inverse_logsnr(logsnrs),
+            atol=1e-6,
+        )
+    )
+
+  def test_blend_schedule(self):
+    original_schedule = gaussian.CosineSchedule()
+    clamped = gaussian.ClampedSchedule(
+        original_schedule=original_schedule,
+        logsnr_max=12.0,
+        logsnr_min=-12.0,
+    )
+    shifted = gaussian.OffsetSchedule(
+        original_schedule=clamped,
+        target_resolution=64,
+        base_resolution=32,
+    )
+    blend = gaussian.BlendSchedule(
+        schedule_0=clamped,
+        schedule_1=shifted,
+    )
+
+    # At t=0: logsnr is unshifted (12.0)
+    t_0 = jnp.array([0.0])
+    self.assertAlmostEqual(float(blend.logsnr(t_0)[0]), 12.0, places=4)
+
+    # At t=1: logsnr is fully shifted (-12.0 - 2*ln(2))
+    t_1 = jnp.array([1.0])
+    expected_logsnr_1 = -12.0 - 2.0 * float(jnp.log(2.0))
+    self.assertAlmostEqual(
+        float(blend.logsnr(t_1)[0]), expected_logsnr_1, places=4
+    )
+
+    # Midpoints: verify (1-t)*s0 + t*s1 == s0 + t*offset
+    t_mid = jnp.array([0.1, 0.5, 0.9])
+    expected_mid = clamped.logsnr(t_mid) + t_mid * shifted.logsnr_offset
+    self.assertTrue(jnp.allclose(blend.logsnr(t_mid), expected_mid, atol=1e-5))
+
+    # Alpha and sigma properties: alpha^2 + sigma^2 == 1
+    alpha = blend.alpha(t_mid)
+    sigma = blend.sigma(t_mid)
+    self.assertTrue(jnp.allclose(alpha**2 + sigma**2, 1.0, atol=1e-5))
+
+    # Inverse logsnr roundtrip via Newton-Raphson
+    t_rec = blend.inverse_logsnr(blend.logsnr(t_mid))
+    self.assertTrue(jnp.allclose(t_rec, t_mid, atol=1e-4))
+
 
 if __name__ == '__main__':
   absltest.main()
