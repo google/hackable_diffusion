@@ -14,6 +14,7 @@
 
 """Tests for the DiT blocks."""
 
+from flax import linen as nn
 from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import dit_blocks
 from hackable_diffusion.lib.architecture import normalization
@@ -495,6 +496,19 @@ class DePatchifyTest(parameterized.TestCase):
         }
     }
     self.assertDictEqual(expected_variables_shapes, variables_shapes)
+
+  def test_custom_initializers(self):
+    n = (self.h // self.patch_size[0]) * (self.w // self.patch_size[1])
+    x = jnp.ones((self.batch, n, self.embedding_dim))
+    module = dit_blocks.DePatchify(
+        patch_size=self.patch_size,
+        output_shape=(self.h, self.w, self.c),
+        dense_kernel_init=nn.initializers.zeros_init(),
+        dense_bias_init=nn.initializers.ones_init(),
+    )
+    variables = module.init(self.key, x)
+    output = module.apply(variables, x)
+    self.assertTrue(jnp.all(output == 1.0))
 
 
 if __name__ == '__main__':

@@ -380,10 +380,15 @@ class DePatchify(nn.Module):
   Attributes:
     patch_size: The size of the patches.
     output_shape: The shape of the output.
+    dense_kernel_init: Initializer for the output projection kernel.
+    dense_bias_init: Initializer for the output projection bias.
+    dtype: The data type of the module.
   """
 
   patch_size: tuple[int, int]
   output_shape: tuple[int, int, int]
+  dense_kernel_init: nn.initializers.Initializer = nn.linear.default_kernel_init
+  dense_bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
   dtype: DType = jnp.float32
 
   @nn.compact
@@ -401,6 +406,8 @@ class DePatchify(nn.Module):
 
     x = nn.Dense(
         features=hp * wp * c,
+        kernel_init=self.dense_kernel_init,
+        bias_init=self.dense_bias_init,
         name='Dense_Out',
         dtype=self.dtype,
     )(x)
