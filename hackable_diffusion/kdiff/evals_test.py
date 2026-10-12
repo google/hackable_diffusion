@@ -87,6 +87,28 @@ class KDiffInferenceFnTest(absltest.TestCase):
     mock_guidance_fn.assert_called_once()
     self.assertEqual(out["v"].shape, (2, 4))
 
+  def test_projection_fn_specified(self):
+    dummy_net = DummyNetwork()
+    model = DummyModel(network=dummy_net)
+    context = kd.train.Context(step=0, batch={}, params={"network": {}})
+
+    mock_projection_fn = mock.Mock(return_value={"v": jnp.ones((2, 4))})
+    factory = evals.KDiffInferenceFn(
+        network_path="network",
+        projection_fn=mock_projection_fn,
+    )
+    inference_fn = factory.from_model_and_context(model, context)
+
+    self.assertIsInstance(
+        inference_fn, hd.inference.GuidedDiffusionInferenceFn
+    )
+    self.assertEqual(inference_fn.projection_fn, mock_projection_fn)
+    xt = jnp.zeros((2, 4))
+    time = jnp.array([0.5, 0.5])
+    out = inference_fn(xt=xt, conditioning=None, time=time)
+    mock_projection_fn.assert_called_once()
+    self.assertEqual(out["v"].shape, (2, 4))
+
 
 if __name__ == "__main__":
   absltest.main()

@@ -41,10 +41,14 @@ TimeArray = hd_typing.TimeArray
 class GuidanceFn(Protocol):
   """Guidance function protocol."""
 
+  def should_guide(self, time: TimeArray) -> bool | jax.Array:  # pyrefly: ignore[not-a-type]
+    """Returns whether the unconditional pass is needed at the given time."""
+    ...
+
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
@@ -63,6 +67,11 @@ class ScalarGuidanceFn(GuidanceFn):
   """Simple scalar guidance function."""
 
   guidance: float = 0.0
+
+  def should_guide(self, time: TimeArray) -> bool:  # pyrefly: ignore[not-a-type]
+    """Returns whether the unconditional pass is needed at the given time."""
+    del time  # unused
+    return self.guidance != 0.0
 
   @kt.typechecked
   def __call__(
@@ -99,15 +108,19 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
           "Lower bound must be strictly smaller than the upper bound."
       )
 
-  def _interval_mask(self, time: TimeArray) -> jax.Array:
+  def _interval_mask(self, time: TimeArray) -> jax.Array:  # pyrefly: ignore[not-a-type]
     """Returns a boolean mask indicating whether time/metric is within bounds."""
     return jnp.logical_and(time >= self.lower, time <= self.upper)
+
+  def should_guide(self, time: TimeArray) -> bool | jax.Array:  # pyrefly: ignore[not-a-type]
+    """Returns whether the unconditional pass is needed at the given time."""
+    return False if self.guidance == 0.0 else jnp.any(self._interval_mask(time))
 
   @kt.typechecked
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
