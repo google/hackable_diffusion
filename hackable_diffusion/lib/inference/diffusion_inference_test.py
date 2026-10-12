@@ -309,6 +309,45 @@ class DiffusionInferenceTest(parameterized.TestCase):
     self.assertIn('x0', other_output)
     self.assertFalse(jnp.allclose(output['x0'], other_output['x0']))
 
+  def test_skips_unconditional_pass_when_not_guided(self):
+    """Tests that base_inference_fn is called only once when guidance is inactive."""
+    calls = []
+
+    def counting_base_inference_fn(time, xt, conditioning):
+      del time
+      calls.append(conditioning)
+      scale = 2.0 if conditioning is not None else 1.0
+      return {'x0': xt * scale}
+
+    # Static zero guidance should not invoke the unconditional branch.
+    zero_guided_fn = diffusion_inference.GuidedDiffusionInferenceFn(
+        base_inference_fn=counting_base_inference_fn,
+        guidance_fn=guidance.ScalarGuidanceFn(guidance=0.0),
+    )
+    out = zero_guided_fn(
+        time=self.t, xt=self.xt, conditioning=self.conditioning
+    )
+    self.assertLen(calls, 1)
+    self.assertIsNotNone(calls[0])
+    self.assertTrue(jnp.allclose(out['x0'], self.xt * 2.0))
+
+    # Limited-interval guidance outside [lower, upper] should execute only the
+    # conditional branch at runtime via lax.cond.
+    interval_fn = diffusion_inference.GuidedDiffusionInferenceFn(
+        base_inference_fn=lambda time, xt, conditioning: (
+            {'x0': xt * 2.0}
+            if conditioning is not None
+            else {'x0': jnp.full_like(xt, jnp.nan)}
+        ),
+        guidance_fn=guidance.LimitedIntervalGuidanceFn(
+            guidance=1.0, lower=0.6, upper=0.8
+        ),
+    )
+    out_outside = interval_fn(
+        time=self.t, xt=self.xt, conditioning=self.conditioning
+    )
+    self.assertTrue(jnp.allclose(out_outside['x0'], self.xt * 2.0))
+
 
 class IdentityInferenceFnTest(absltest.TestCase):
 

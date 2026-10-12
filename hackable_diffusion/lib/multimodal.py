@@ -453,7 +453,7 @@ class NestedGuidanceFn(guidance_lib.GuidanceFn):
   def __call__(
       self,
       xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeTree,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
@@ -505,7 +505,7 @@ class NestedProjectionFn(projection_lib.ProjectionFn):
   def __call__(
       self,
       xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeTree,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
@@ -633,7 +633,7 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
     guided_outputs = self.guidance_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         cond_outputs=cond_outputs,
         uncond_outputs=uncond_outputs,
@@ -641,7 +641,7 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         outputs=guided_outputs,
     )

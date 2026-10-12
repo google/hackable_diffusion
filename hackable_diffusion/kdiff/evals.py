@@ -45,10 +45,12 @@ class KDiffInferenceFn:
   Attributes:
     network_path: The path to the network in the model.
     guidance_fn: The guidance function to use for sampling.
+    projection_fn: The projection function to use for sampling.
   """
 
   network_path: str = "network"
   guidance_fn: hd.inference.GuidanceFn | None = None
+  projection_fn: hd.inference.ProjectionFn | None = None
 
   def from_model_and_context(
       self, model: nn.Module, context: kd.train.Context
@@ -59,10 +61,21 @@ class KDiffInferenceFn:
     inference_fn = hd.inference.FlaxLinenInferenceFn(
         network=network, params=params
     )
-    if self.guidance_fn is not None:
+    if self.guidance_fn is not None or self.projection_fn is not None:
+      guidance_fn = (
+          self.guidance_fn
+          if self.guidance_fn is not None
+          else hd.inference.ScalarGuidanceFn()
+      )
+      projection_fn = (
+          self.projection_fn
+          if self.projection_fn is not None
+          else hd.inference.IdentityProjectionFn()
+      )
       inference_fn = hd.inference.GuidedDiffusionInferenceFn(
           base_inference_fn=inference_fn,
-          guidance_fn=self.guidance_fn,
+          guidance_fn=guidance_fn,
+          projection_fn=projection_fn,
       )
 
     return inference_fn

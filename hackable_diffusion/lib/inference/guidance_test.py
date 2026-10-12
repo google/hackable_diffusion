@@ -77,6 +77,8 @@ class GuidanceTest(parameterized.TestCase):
     # Expected: cond * (1 + g) - uncond * g = 2.0 * 4.0 - 1.0 * 3.0 = 5.0
     expected_output = jnp.ones_like(self.xt) * 5.0
     self.assertTrue(jnp.allclose(result['pred'], expected_output))
+    self.assertTrue(guidance_fn.should_guide(time))
+    self.assertFalse(guidance.ScalarGuidanceFn(guidance=0.0).should_guide(time))
 
   def test_limited_interval_guidance_fn_fails_on_invalid_interval(self):
     """Tests the LimitedIntervalGuidanceFn with a batch of times."""
@@ -124,6 +126,13 @@ class GuidanceTest(parameterized.TestCase):
         jnp.ones(self.data_shape) * 5.0,
     ])
     self.assertTrue(jnp.allclose(result['pred'], expected_output))
+    self.assertTrue(bool(guidance_fn.should_guide(time)))
+    self.assertFalse(bool(guidance_fn.should_guide(jnp.array([0.1, 0.1]))))
+    self.assertFalse(
+        guidance.LimitedIntervalGuidanceFn(
+            guidance=0.0, lower=self.lower_time, upper=self.upper_time
+        ).should_guide(time)
+    )
 
   def test_limited_logsnr_interval_guidance_fn(self):
     """Tests the LimitedIntervalGuidanceFn with a batch of times."""

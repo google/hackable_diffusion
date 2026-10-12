@@ -20,6 +20,7 @@ from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import projection
+import jax
 import kauldron.ktyping as kt
 
 ################################################################################
@@ -68,7 +69,7 @@ class IdentityInferenceFn(InferenceFn):
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class GuidedDiffusionInferenceFn(InferenceFn):
-  """Inference function protocol."""
+  """Guided diffusion inference function."""
 
   base_inference_fn: InferenceFn
   guidance_fn: guidance.GuidanceFn = guidance.ScalarGuidanceFn()
@@ -88,23 +89,40 @@ class GuidedDiffusionInferenceFn(InferenceFn):
         xt=xt,
         conditioning=conditioning,
     )
-    uncond_outputs = self.base_inference_fn(
-        time=time,
-        xt=xt,
-        conditioning=None,
-    )
 
-    guided_outputs = self.guidance_fn(
-        xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
-        time=time,
-        cond_outputs=cond_outputs,
-        uncond_outputs=uncond_outputs,
+    def _run_guided() -> TargetInfo:  # pyrefly: ignore[not-a-type]
+      uncond_outputs = self.base_inference_fn(
+          time=time,
+          xt=xt,
+          conditioning=None,
+      )
+      return self.guidance_fn(
+          xt=xt,
+          conditioning=conditioning,
+          time=time,
+          cond_outputs=cond_outputs,
+          uncond_outputs=uncond_outputs,
+      )
+
+    should_guide = (
+        self.guidance_fn.should_guide(time)
+        if hasattr(self.guidance_fn, "should_guide")
+        else True
     )
+    if isinstance(should_guide, jax.Array):
+      guided_outputs = jax.lax.cond(
+          should_guide,
+          _run_guided,
+          lambda: cond_outputs,
+      )
+    elif should_guide:
+      guided_outputs = _run_guided()
+    else:
+      guided_outputs = cond_outputs
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         outputs=guided_outputs,
     )
