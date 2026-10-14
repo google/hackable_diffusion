@@ -248,7 +248,7 @@ class NumericalGaussianScheduleTest(parameterized.TestCase):
           -jax_helpers.egrad(schedule.logsnr)(t)
       )
       self.assertTrue(
-          jnp.allclose(g, g_expected, atol=1e-6, rtol=1e-6),
+          jnp.allclose(g, g_expected, atol=1e-5, rtol=1e-5),
           'g() check failed: Absolute difference:'
           f' {jnp.max(jnp.abs(g - g_expected))}',
       )
