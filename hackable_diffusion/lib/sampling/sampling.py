@@ -85,6 +85,33 @@ class UpdateConditioningFn(Protocol):
     ...
 
 
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class PropagateSelfConditioningFn(UpdateConditioningFn):
+  """Propagates predicted logits into the conditioning dict across sampling steps.
+
+  Extracts ``step_carry.aux['logits']`` from the previous diffusion step and
+  stores it in ``conditioning[self_conditioning_key]``. Compatible with both
+  single-modal (``DiffusionStep``) and multi-modal (``PyTree[DiffusionStep]``)
+  samplers.
+  """
+
+  self_conditioning_key: str = 'self_conditioning_logits'
+
+  def __call__(
+      self,
+      conditioning: Conditioning | None,
+      step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+  ) -> Conditioning:
+    sc_logits = jax.tree.map(
+        lambda step: step.aux['logits'],
+        step_carry,
+        is_leaf=_is_diffusion_leaf,
+    )
+    base_cond = dict(conditioning) if conditioning is not None else {}
+    base_cond[self.self_conditioning_key] = sc_logits
+    return base_cond
+
+
 ################################################################################
 # MARK: Helper Functions
 ################################################################################

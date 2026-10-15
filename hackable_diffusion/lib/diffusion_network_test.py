@@ -524,6 +524,46 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
           process=self.process,  # type: ignore[wrong-arg-types]
       )
 
+  def test_inference_with_carried_logits(self):
+    network = self._make_network()
+    variables = network.init(
+        {'params': self.key, 'self_conditioning': self.key},
+        self.t,
+        self.xt,
+        self.conditioning,
+        False,
+    )
+
+    # Without carried logits (step 0 / cold start)
+    out_cold = network.apply(
+        variables,
+        self.t,
+        self.xt,
+        self.conditioning,
+        False,
+    )
+    assert isinstance(out_cold, dict)
+
+    # With carried logits from previous step
+    carried_logits = jnp.full(
+        (self.batch_size, *self.spatial_shape, self.num_categories), 5.0
+    )
+    cond_with_sc = dict(self.conditioning)
+    cond_with_sc['self_conditioning_logits'] = carried_logits
+
+    out_sc = network.apply(
+        variables,
+        self.t,
+        self.xt,
+        cond_with_sc,
+        False,
+    )
+    assert isinstance(out_sc, dict)
+
+    self.assertFalse(
+        jnp.allclose(out_cold['logits'], out_sc['logits'])
+    )
+
 
 ################################################################################
 # MARK: MultiModalDiffusionNetwork Tests

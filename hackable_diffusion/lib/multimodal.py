@@ -731,6 +731,10 @@ class NestedSelfConditioningDiffusionNetwork(
   It assumes ALL modalities in the PyTree are discrete and require
   self-conditioning.
 
+  During multi-step sampling, when ``self_conditioning_key`` is present in
+  ``conditioning`` (propagated by ``PropagateSelfConditioningFn``), performs a
+  single forward pass per step.
+
   Attributes:
     backbone_network: The backbone network to use. Must accept PyTree inputs
       where each leaf has concatenated logits.
@@ -739,6 +743,9 @@ class NestedSelfConditioningDiffusionNetwork(
     processes: A NestedProcess containing the corruption processes for each
       modality (used to get `num_categories`).
     self_cond_prob: Probability of applying self-conditioning during training.
+    self_conditioning_key: Key in ``conditioning`` containing carried logits
+      from the previous step during sampling. Defaults to
+      ``'self_conditioning_logits'``.
     data_dtype: PyTree of dtypes for each modality.
     input_rescaler: Optional PyTree of input rescalers.
     time_rescaler: Optional PyTree of time rescalers.
@@ -750,6 +757,7 @@ class NestedSelfConditioningDiffusionNetwork(
   prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
   processes: NestedProcess
   self_cond_prob: float = 0.5
+  self_conditioning_key: str = 'self_conditioning_logits'
   data_dtype: PyTree[DType] = jnp.float32  # pyrefly: ignore[not-a-type]
   input_rescaler: PyTree[diffusion_network.InputRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
   time_rescaler: PyTree[diffusion_network.TimeRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
@@ -802,59 +810,68 @@ class NestedSelfConditioningDiffusionNetwork(
         is_training=is_training,
     )
 
-    # 3. Create zero logits for each leaf in the data tree
-    def _create_zero_logits(xt_leaf, process_leaf):
-      # Assumes process_leaf has `num_categories`
-      return jnp.zeros(
-          xt_leaf.shape[:-1] + (process_leaf.num_categories,),
-          dtype=xt_leaf.dtype,
-      )
-
-    zero_logits = jax.tree.map(
-        _create_zero_logits, xt_rescaled, self.processes.processes
-    )
-
-    # 4. First pass: run with zero logits
-    xt_with_zeros = jax.tree.map(
-        lambda x, z: jnp.concatenate([x, z], axis=-1), xt_rescaled, zero_logits
-    )
-
     backbone_module = self.backbone_network
 
-    first_output = backbone_module(
-        x=xt_with_zeros,
-        conditioning_embeddings=conditioning_embeddings,
-        is_training=is_training,
-    )
+    # 3. Obtain self-conditioning logits (either carried from the previous
+    #    sampling step or computed via an initial stop-gradient pass).
+    if (
+        not is_training
+        and conditioning is not None
+        and self.self_conditioning_key in conditioning
+    ):
+      x0_hat_logits = conditioning[self.self_conditioning_key]
+    else:
 
-    x0_hat_logits = jax.tree.map(jax.lax.stop_gradient, first_output)
+      def _create_zero_logits(xt_leaf, process_leaf):
+        # Assumes process_leaf has `num_categories`
+        return jnp.zeros(
+            xt_leaf.shape[:-1] + (process_leaf.num_categories,),
+            dtype=xt_leaf.dtype,
+        )
 
-    # 5. Apply self-conditioning mask during training
-    if is_training:
-      # We assume a global mask for the entire batch across all modalities
-      # Find a leaf to get the batch size
-      flat_xt, _ = jax.tree_util.tree_flatten(xt)
-      batch_size = flat_xt[0].shape[0]
-
-      do_self_cond = (
-          jax.random.uniform(
-              self.make_rng(self.rng_collection), shape=(batch_size,)
-          )
-          < self.self_cond_prob
+      zero_logits = jax.tree.map(
+          _create_zero_logits, xt_rescaled, self.processes.processes
       )
 
-      def _apply_mask(logits_leaf, zero_leaf):
-        # Broadcast mask to match leaf dimensions
-        mask = do_self_cond.reshape(
-            (batch_size,) + (1,) * (logits_leaf.ndim - 1)
+      xt_with_zeros = jax.tree.map(
+          lambda x, z: jnp.concatenate([x, z], axis=-1),
+          xt_rescaled,
+          zero_logits,
+      )
+
+      first_output = backbone_module(
+          x=xt_with_zeros,
+          conditioning_embeddings=conditioning_embeddings,
+          is_training=is_training,
+      )
+
+      x0_hat_logits = jax.tree.map(jax.lax.stop_gradient, first_output)
+
+      if is_training:
+        # We assume a global mask for the entire batch across all modalities
+        # Find a leaf to get the batch size
+        flat_xt, _ = jax.tree_util.tree_flatten(xt)
+        batch_size = flat_xt[0].shape[0]
+
+        do_self_cond = (
+            jax.random.uniform(
+                self.make_rng(self.rng_collection), shape=(batch_size,)
+            )
+            < self.self_cond_prob
         )
-        return jnp.where(mask, logits_leaf, zero_leaf)
 
-      x0_hat_logits = jax.tree.map(_apply_mask, x0_hat_logits, zero_logits)
+        def _apply_mask(logits_leaf, zero_leaf):
+          # Broadcast mask to match leaf dimensions
+          mask = do_self_cond.reshape(
+              (batch_size,) + (1,) * (logits_leaf.ndim - 1)
+          )
+          return jnp.where(mask, logits_leaf, zero_leaf)
 
-    # 6. Second pass: run with predicted logits concatenated
+        x0_hat_logits = jax.tree.map(_apply_mask, x0_hat_logits, zero_logits)
+
+    # 4. Final pass: run with self-conditioning logits concatenated
     xt_with_x0_hat_logits = jax.tree.map(
-        lambda x, l: jnp.concatenate([x, l], axis=-1),
+        lambda x, l: jnp.concatenate([x, l.astype(jnp.float32)], axis=-1),
         xt_rescaled,
         x0_hat_logits,
     )
@@ -865,7 +882,7 @@ class NestedSelfConditioningDiffusionNetwork(
         is_training=is_training,
     )
 
-    # 7. Wrap outputs in prediction type structure
+    # 5. Wrap outputs in prediction type structure
     return jax_helpers.lenient_map(
         lambda out, pred_type: {pred_type: out},
         backbone_outputs,
