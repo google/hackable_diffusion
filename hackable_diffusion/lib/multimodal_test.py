@@ -23,6 +23,7 @@ from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib import multimodal
+from hackable_diffusion.lib import sampling
 from hackable_diffusion.lib.corruption import discrete
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.inference import guidance
@@ -631,6 +632,108 @@ class NestedSelfConditioningDiffusionNetworkTest(parameterized.TestCase):
     }
 
     chex.assert_trees_all_close(output, expected_output)
+
+  def test_nested_self_conditioning_inference_with_carried_logits(self):
+    num_categories = 10
+    batch_size = 2
+
+    class DummyBackbone(nn.Module, diffusion_network.ConditionalBackbone):
+
+      @nn.compact
+      def __call__(self, x, conditioning_embeddings, is_training):
+
+        def _forward(arr):
+          second_half = arr[..., arr.shape[-1] // 2 :]
+          return second_half * 10.0
+
+        return jax.tree.map(_forward, x)
+
+    mock_process = mock.create_autospec(
+        discrete.CategoricalProcess, instance=True
+    )
+    mock_process.num_categories = num_categories
+
+    processes = multimodal.NestedProcess(
+        processes={'a': mock_process, 'b': {'c': mock_process}}
+    )
+
+    xt = {
+        'a': jnp.zeros((batch_size, 4, num_categories)),
+        'b': {'c': jnp.zeros((batch_size, num_categories))},
+    }
+    time = {
+        'a': jnp.zeros((batch_size, 1)),
+        'b': {'c': jnp.zeros((batch_size, 1))},
+    }
+
+    class DummyCondEncoder(nn.Module):
+
+      @nn.compact
+      def __call__(self, time, conditioning, is_training):
+        return {}
+
+    network = multimodal.NestedSelfConditioningDiffusionNetwork(
+        backbone_network=DummyBackbone(),
+        conditioning_encoder=DummyCondEncoder(),
+        prediction_type={'a': 'logits', 'b': {'c': 'logits'}},
+        processes=processes,
+        self_cond_prob=0.5,
+    )
+
+    key = jax.random.PRNGKey(0)
+    variables = network.init(
+        {'params': key, 'self_conditioning': key},
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=False,
+    )
+
+    carried_logits = {
+        'a': jnp.full((batch_size, 4, num_categories), 3.0),
+        'b': {'c': jnp.full((batch_size, num_categories), 5.0)},
+    }
+    output = network.apply(
+        variables,
+        time=time,
+        xt=xt,
+        conditioning={'self_conditioning_logits': carried_logits},
+        is_training=False,
+    )
+
+    expected_output = {
+        'a': {'logits': jnp.full((batch_size, 4, num_categories), 30.0)},
+        'b': {'c': {'logits': jnp.full((batch_size, num_categories), 50.0)}},
+    }
+    chex.assert_trees_all_close(output, expected_output)
+
+  def test_propagate_self_conditioning_fn(self):
+    step_carry = {
+        'mod1': hd_api.DiffusionStep(
+            xt=jnp.zeros((2, 4, 1)),
+            aux={'logits': jnp.ones((2, 4, 10))},
+            step_info=mock.MagicMock(),
+        ),
+        'mod2': hd_api.DiffusionStep(
+            xt=jnp.zeros((2, 1)),
+            aux={'logits': jnp.full((2, 5), 2.0)},
+            step_info=mock.MagicMock(),
+        ),
+    }
+    propagate_fn = sampling.PropagateSelfConditioningFn()
+    base_conditioning = {'extra_label': jnp.array([1, 2])}
+    updated = propagate_fn(base_conditioning, step_carry)
+
+    self.assertIn('extra_label', updated)
+    self.assertIn('self_conditioning_logits', updated)
+    self.assertEqual(updated['self_conditioning_logits']['mod1'].shape, (2, 4, 10))
+    self.assertEqual(updated['self_conditioning_logits']['mod2'].shape, (2, 5))
+    chex.assert_trees_all_close(
+        updated['self_conditioning_logits']['mod1'], jnp.ones((2, 4, 10))
+    )
+    chex.assert_trees_all_close(
+        updated['self_conditioning_logits']['mod2'], jnp.full((2, 5), 2.0)
+    )
 
 
 if __name__ == '__main__':
