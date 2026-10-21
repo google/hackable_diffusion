@@ -21,9 +21,9 @@ It defines a sampling loop that orchestrates three key components:
 """
 
 import dataclasses
-from typing import Protocol
 from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib.sampling import conditioning as conditioning_lib
 from hackable_diffusion.lib.sampling import diffusion_early_stopping
 from hackable_diffusion.lib.sampling import time_scheduling
 import jax
@@ -54,36 +54,7 @@ DiffusionStepTree = PyTree[DiffusionStep]
 InferenceFn = hd_api.InferenceFn
 TimeSchedule = time_scheduling.TimeSchedule
 DiffusionEarlyStoppingFn = diffusion_early_stopping.DiffusionEarlyStoppingFn
-
-################################################################################
-# MARK: Protocols
-################################################################################
-
-
-class UpdateConditioningFn(Protocol):
-  """Protocol for updating conditioning during the sampling loop.
-
-  This allows injecting step-dependent information back into the conditioning
-  dict between sampling steps (e.g. self-conditioning logits from the
-  previous prediction).
-  """
-
-  def __call__(
-      self,
-      conditioning: Conditioning,
-      step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
-  ) -> Conditioning:
-    """Update conditioning based on the current diffusion step.
-
-    Args:
-      conditioning: The current conditioning dict.
-      step_carry: The current diffusion step state.
-
-    Returns:
-      The updated conditioning dict.
-    """
-    ...
-
+UpdateConditioningFn = conditioning_lib.UpdateConditioningFn
 
 ################################################################################
 # MARK: Helper Functions

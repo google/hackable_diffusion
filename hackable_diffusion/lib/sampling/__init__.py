@@ -21,6 +21,8 @@ from hackable_diffusion.lib.hd_api import SamplerStep
 from hackable_diffusion.lib.hd_api import StepInfo
 from hackable_diffusion.lib.sampling.ar_diffusion_sampler import ARStateHandler
 from hackable_diffusion.lib.sampling.ar_diffusion_sampler import AutoregressiveDiffusionSampler
+from hackable_diffusion.lib.sampling.conditioning import PropagateSelfConditioningFn
+from hackable_diffusion.lib.sampling.conditioning import UpdateConditioningFn
 from hackable_diffusion.lib.sampling.diffusion_early_stopping import DiffusionEntropyEarlyStopFn
 from hackable_diffusion.lib.sampling.diffusion_early_stopping import DiffusionNoEarlyStopFn
 from hackable_diffusion.lib.sampling.discrete_step_sampler import AllCorruptedMaskFn
@@ -47,7 +49,6 @@ from hackable_diffusion.lib.sampling.gaussian_step_sampler import VelocityStep
 from hackable_diffusion.lib.sampling.riemannian_sampling import RiemannianFlowSamplerStep
 from hackable_diffusion.lib.sampling.sampling import DiffusionSampler
 from hackable_diffusion.lib.sampling.sampling import DiffusionSamplerWithEarlyStopping
-from hackable_diffusion.lib.sampling.sampling import UpdateConditioningFn
 from hackable_diffusion.lib.sampling.simplicial_step_sampler import SimplicialDDIMStep
 from hackable_diffusion.lib.sampling.time_scheduling import EDMTimeSchedule
 from hackable_diffusion.lib.sampling.time_scheduling import TimeSchedule
