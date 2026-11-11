@@ -14,12 +14,13 @@
 
 """Tests for wrappers."""
 
+from unittest import mock
+
 from flax import nnx
 import flax.linen as nn
 from hackable_diffusion.lib.inference import wrappers
 import jax
 import jax.numpy as jnp
-import mock
 from absl.testing import absltest
 
 
