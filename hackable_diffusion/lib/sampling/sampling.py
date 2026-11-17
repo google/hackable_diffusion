@@ -171,6 +171,17 @@ class DiffusionSampler(hd_api.SampleFn):
   store_trajectory: bool = True
   update_conditioning_fn: UpdateConditioningFn | None = None
 
+  def __post_init__(self):
+    # TODO(b/587283362): Revisit num_steps convention so num_steps >= 1 counts
+    # denoising transitions (producing num_steps + 1 trajectory states) across
+    # DiffusionSampler, DiffusionSamplerWithEarlyStopping, and HeunStep.
+    if self.num_steps < 2:
+      raise ValueError(
+          f'Number of steps must be at least 2 (1 initial state + at least 1'
+          f' denoising transition), got {self.num_steps}. Pass num_steps=2 for'
+          ' single-step denoising.'
+      )
+
   @kt.typechecked
   def __call__(
       self,
@@ -196,11 +207,6 @@ class DiffusionSampler(hd_api.SampleFn):
         - A `PyTree[DiffusionStep]` PyTree containing the full trajectory of all
         steps, or None if `store_trajectory` is False.
     """
-    if self.num_steps < 2:
-      raise ValueError(
-          f'Number of steps must be at least 2, got {self.num_steps}.'
-      )
-
     all_step_infos = self.time_schedule.all_step_infos(
         rng, self.num_steps, initial_noise
     )
@@ -302,6 +308,14 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
   )
   use_lax_while_loop: bool = True
 
+  def __post_init__(self):
+    if self.num_steps < 2:
+      raise ValueError(
+          f'Number of steps must be at least 2 (1 initial state + at least 1'
+          f' denoising transition), got {self.num_steps}. Pass num_steps=2 for'
+          ' single-step denoising.'
+      )
+
   @kt.typechecked
   def __call__(
       self,
@@ -327,19 +341,13 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
     Returns:
       A tuple containing:
         - The last ``DiffusionStep`` of the sampling process.  Its
-          ``step_info.step`` field records the actual number of update steps
-          executed.
+          ``step_info.step`` field records the actual number of denoising
+          transitions executed (intermediate updates + finalize).
         - ``None`` (trajectory storage is not supported).
-
-    Raises:
-      ValueError: If ``num_steps < 1``.
     """
-    if self.num_steps < 1:
-      raise ValueError(
-          f'Number of steps must be at least 1, got {self.num_steps}.'
-      )
-
-    # Pre-compute all step infos: shape [num_steps, ...] for each leaf.
+    # Pre-compute all step infos: shape [num_steps, ...] for each leaf
+    # (1 initial state + (num_steps - 2) intermediate updates + 1 finalize),
+    # matching DiffusionSampler.
     all_step_infos = self.time_schedule.all_step_infos(
         rng, self.num_steps, initial_noise
     )
@@ -347,8 +355,8 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
     first_step_info = _index_pytree(all_step_infos, 0)
     first_step = self.stepper.initialize(initial_noise, first_step_info)
 
-    # The total number of intermediate update steps excluding finalize.
-    num_intermediate_steps = self.num_steps - 1
+    # The total number of intermediate update steps excluding init and finalize.
+    num_intermediate_steps = self.num_steps - 2
 
     # done: per-element bool tracking which batch elements have converged.
     batch_size = initial_noise.shape[0]
@@ -408,8 +416,8 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
         carry = _body_fn(carry)
       before_last_step, steps_executed, done = carry
 
-    # Finalize: run the last step.
-    last_step_info = _index_pytree(all_step_infos, num_intermediate_steps)
+    # Finalize: run the last step across the final schedule interval.
+    last_step_info = _index_pytree(all_step_infos, self.num_steps - 1)
     xt, time = _get_input_inference_fn(before_last_step)
     last_conditioning = conditioning
     if self.update_conditioning_fn is not None:
