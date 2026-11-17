@@ -44,7 +44,7 @@ class ProjectionFn(Protocol):
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
@@ -171,7 +171,7 @@ class StaticThresholdProjectionFn(ProjectionFn):
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,
   ) -> TargetInfo:
@@ -217,11 +217,12 @@ class DynamicThresholdProjectionFn(ProjectionFn):
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfo,
   ) -> TargetInfo:
     """Dynamic threshold projection function."""
+    del conditioning  # unused
 
     prediction_type, x0_preds = _to_x0(outputs, xt, time, self.process)
     x0_preds = jax.tree.map(self._dynamic_threshold, x0_preds)

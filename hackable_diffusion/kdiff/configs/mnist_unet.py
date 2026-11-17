@@ -191,6 +191,7 @@ def get_config():
   cfg.evals = {
       "sample_DDIM": evals.SamplingEvaluator(
           run=kd.evals.EveryNSteps(10_000, skip_first=True),
+          init_transform=kd.optim.UseEmaParams(),
           num_batches=None,
           sampler=hd.sampling.DiffusionSampler(
               time_schedule=hd.sampling.UniformTimeSchedule(),
@@ -232,6 +233,7 @@ def get_config():
       # The SamplingEvaluator uses the "sampling" stream.
       kd.train.RngStream("default", train=True, eval=True),
       kd.train.RngStream("sampling", train=True, eval=True),
+      kd.train.RngStream("self_conditioning", train=True, eval=False),
   ])
 
   return cfg

@@ -175,7 +175,9 @@ def log_dirichlet_fast(
     The log of the Dirichlet sample.
   """
   alpha = jnp.array(alpha)
-  total_shape = shape + alpha.shape  # pyrefly: ignore[unsupported-operation]
+  if shape is None:
+    shape = ()
+  total_shape = shape + alpha.shape
   log_gammas = log_gamma_fast(key, alpha, shape=total_shape)
   return jax.nn.log_softmax(log_gammas, axis=-1)
 
@@ -198,7 +200,7 @@ def sample_log_beta_joint(
     key: PRNGKey,
     alpha: jax.Array,
     beta: jax.Array,
-    shape: tuple[int, ...] | None = (),
+    shape: tuple[int, ...] | None = None,
 ) -> tuple[jax.Array, jax.Array]:
   """Samples W ~ Beta(alpha, beta) and returns (log(W), log(1-W)).
 
@@ -215,6 +217,8 @@ def sample_log_beta_joint(
     The log of the Beta sample.
   """
   k1, k2 = jax.random.split(key)
+  if shape is None:
+    shape = jnp.broadcast_shapes(jnp.shape(alpha), jnp.shape(beta))
 
   log_ga = log_gamma_fast(k1, alpha, shape)
   log_gb = log_gamma_fast(k2, beta, shape)

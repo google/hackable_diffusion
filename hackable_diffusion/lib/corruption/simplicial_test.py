@@ -594,6 +594,21 @@ class SimplicialPostCorruptionTest(parameterized.TestCase):
         atol=1e-5,
     )
 
+  def test_masking_corrupt_target_info_logits_and_unused_mask(self):
+    schedule = simplicial.LinearSimplicialSchedule()
+    process = simplicial.SimplicialProcess.masking_process(
+        schedule=schedule, num_categories=4, unused_token=-1
+    )
+    x0 = jnp.array([[[0], [2], [-1]]], dtype=jnp.int32)
+    xt, target_info = process.corrupt(
+        jax.random.PRNGKey(0), x0, jnp.array([0.4])
+    )
+    self.assertEqual(xt.shape, (1, 3, 5))
+    self.assertEqual(target_info['logits'].shape, (1, 3, 4))
+    chex.assert_trees_all_equal(
+        target_info['is_unused'], jnp.array([[[False], [False], [True]]])
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -44,7 +44,7 @@ class GuidanceFn(Protocol):
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
@@ -107,7 +107,7 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
   def __call__(
       self,
       xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeArray,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]

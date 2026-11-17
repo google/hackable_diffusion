@@ -104,12 +104,13 @@ from hackable_diffusion.lib.sampling import sampling
 import jax
 import jax.numpy as jnp
 import kauldron.ktyping as kt
-from kauldron.ktyping import Bool, PRNGKey
 
 ################################################################################
 # MARK: Type aliases
 ################################################################################
 
+Bool = kt.Bool
+PRNGKey = kt.PRNGKey
 SamplerState = dict[str, Any]
 DataArray = hd_typing.DataArray
 Conditioning = hd_typing.Conditioning
@@ -141,7 +142,7 @@ class ARStateHandler(Protocol):
       self,
       *,
       batch_size: int,
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       canvas_length: int,
       max_num_canvases: int,
   ) -> SamplerState:
@@ -246,7 +247,7 @@ class AutoregressiveDiffusionSampler:
       diffusion_inference_fn: inference.InferenceFn,
       batch_size: int,
       rng: PRNGKey,
-      conditioning: Conditioning,
+      conditioning: Conditioning | None = None,
   ) -> tuple[DataArray, SamplerState]:  # pyrefly: ignore[not-a-type]
     """Generates data autoregressively via discrete diffusion.
 
@@ -301,8 +302,8 @@ class AutoregressiveDiffusionSampler:
           ),
       )
 
-      # Sample canvas via diffusion.
-      # TODO: Implement returning the whole sampling trajectory.
+      # Sample canvas via diffusion (returning trajectory is planned for
+      # autoregressive.py).
       canvas_last_step, _ = self.canvas_sampler(
           inference_fn=diffusion_inference_fn,
           rng=canvas_sampler_rng,

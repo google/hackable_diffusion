@@ -27,6 +27,7 @@ from hackable_diffusion.lib.architecture import unet_blocks
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.inference import diffusion_inference
 from hackable_diffusion.lib.inference import guidance
+from hackable_diffusion.lib.inference import projection
 from hackable_diffusion.lib.inference import wrappers
 import jax
 import jax.numpy as jnp
@@ -308,6 +309,38 @@ class DiffusionInferenceTest(parameterized.TestCase):
     self.assertIn('x0', output)
     self.assertIn('x0', other_output)
     self.assertFalse(jnp.allclose(output['x0'], other_output['x0']))
+
+  def test_unconditional_none_conditioning_with_guidance_and_projection(self):
+    uncond_encoder = conditioning_encoder.StandardConditioningEncoder(
+        time_embedder=self.time_encoder,
+        conditioning_embedders={},
+        merge_embeddings_fn=conditioning_encoder.ConcatEmbeddings(),
+        conditioning_rules={'time': 'adaptive_norm'},
+    )
+    layer = diffusion_network.StandardDiffusionNetwork(
+        backbone_network=IdentityBackbone(),
+        conditioning_encoder=uncond_encoder,
+        prediction_type='x0',
+    )
+    variables = layer.init(
+        self.key, self.t, self.xt, None, is_training=False
+    )
+    base_fn = wrappers.FlaxLinenInferenceFn(
+        network=layer, params=variables['params']
+    )
+    for proj_fn in (
+        projection.StaticThresholdProjectionFn(process=self.process),
+        projection.DynamicThresholdProjectionFn(process=self.process),
+    ):
+      guided_fn = diffusion_inference.GuidedDiffusionInferenceFn(
+          base_inference_fn=base_fn,
+          guidance_fn=guidance.LimitedIntervalGuidanceFn(
+              guidance=1.0, lower=0.1, upper=0.9
+          ),
+          projection_fn=proj_fn,
+      )
+      out = guided_fn(time=self.t, xt=self.xt, conditioning=None)
+      self.assertEqual(out['x0'].shape, self.xt.shape)
 
 
 class IdentityInferenceFnTest(absltest.TestCase):

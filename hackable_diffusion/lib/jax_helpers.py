@@ -176,7 +176,7 @@ def lenient_map(
 
     restructured_rest.append(jax.tree.unflatten(struct, r_leaves))
     del r_struct
-  return jax.tree.map(fn, tree, *restructured_rest)
+  return jax.tree.map(fn, tree, *restructured_rest, is_leaf=is_leaf)
 
 
 @kt.typechecked
