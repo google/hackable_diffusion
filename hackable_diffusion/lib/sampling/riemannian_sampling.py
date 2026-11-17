@@ -81,4 +81,4 @@ class RiemannianFlowSamplerStep(hd_api.SamplerStep):
       current_step: hd_api.DiffusionStep,
       last_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
   ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
-    return current_step
+    return self.update(prediction, current_step, last_step_info)
