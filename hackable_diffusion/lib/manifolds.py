@@ -16,6 +16,7 @@
 
 from typing import Protocol
 from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
 
@@ -205,6 +206,7 @@ def geodesic(
   Returns:
     Geodesic between x and y at time t.
   """
+  t = jax_helpers.bcast_right(t, x.ndim)
   return manifold.exp(x, t * manifold.log(x, y))
 
 
@@ -361,6 +363,7 @@ class Sphere(Manifold):
     v = (y - cos_theta * x) / unnormalized_sinc(theta)
 
     # theta is mathematically equivalent to |v|
+    t = jax_helpers.bcast_right(t, x.ndim)
     return -theta * jnp.sin(t * theta) * x + jnp.cos(t * theta) * v
 
 
@@ -536,7 +539,7 @@ class SO3(Manifold):
     )
     return jnp.matmul(x, omega_mat)
 
-  def dist(self, x: DataArray, y: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def dist(self, x: DataArray, y: DataArray) -> LossOutput:  # pyrefly: ignore[not-a-type]
     """Computes the shortest geodesic distance between rotations x and y.
 
     Let y = exp(x, v) = x @ exp(Omega). Then the distance is given by theta,
@@ -557,7 +560,14 @@ class SO3(Manifold):
     cos_theta = (jnp.trace(exp_omega_mat, axis1=-1, axis2=-2) - 1.0) / 2.0
     cos_theta = jnp.clip(cos_theta, -1.0 + EPSILON, 1.0 - EPSILON)
     # theta away from pi, since in those cases the distance is ill-defined.
-    return jnp.arccos(cos_theta)
+    per_rot_dist = jnp.arccos(cos_theta)
+    if per_rot_dist.ndim > 1:
+      return safe_norm(
+          per_rot_dist,
+          axis=tuple(range(1, per_rot_dist.ndim)),
+          keepdims=False,
+      )
+    return per_rot_dist
 
   def project(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     """Project ambient matrix v to tangent space at x.
@@ -680,6 +690,7 @@ class SO3(Manifold):
     v = self.log(x, y)
 
     # Find the point on the geodesic at time t: x(t) = x @ exp(t * Omega)
+    t = jax_helpers.bcast_right(t, v.ndim)
     xt = self.exp(x, t * v)
 
     # Extract the Lie algebra skew-symmetric matrix: Omega = x^T @ v
@@ -705,19 +716,21 @@ class Torus(Manifold):
     return (y - x + 0.5) % 1.0 - 0.5
 
   def dist(self, x: DataArray, y: DataArray) -> LossOutput:  # pyrefly: ignore[not-a-type]
-    return jnp.linalg.norm(self.log(x, y), axis=-1)
+    return safe_norm(
+        self.log(x, y), axis=tuple(range(1, x.ndim)), keepdims=False
+    )
 
   def project(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
     return v  # Tangent space is R^d
 
-  def random_uniform(self, key: DataArray, shape: tuple[int, ...]) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def random_uniform(self, key: PRNGKey, shape: tuple[int, ...]) -> DataArray:  # pyrefly: ignore[not-a-type]
     return jax.random.uniform(key, shape)
 
   def velocity(
       self,
       x: DataArray,  # pyrefly: ignore[not-a-type]
       y: DataArray,  # pyrefly: ignore[not-a-type]
-      t: DataArray,  # pyrefly: ignore[not-a-type]
+      t: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> DataArray:  # pyrefly: ignore[not-a-type]
     # Geodesics on the flat torus are straight lines (with periodic wrapping),
     # so the velocity is constant and independent of time t.

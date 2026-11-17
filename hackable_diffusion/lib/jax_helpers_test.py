@@ -450,6 +450,17 @@ class UtilsTest(parameterized.TestCase):
     result = jax_helpers.lenient_map(lambda x: x + 1, empty_tree)
     self.assertEqual(result, empty_tree)
 
+  def test_lenient_map_forwards_is_leaf(self):
+    tree = {'a': 2.0, 'b': 3.0}
+    scales = frozen_dict.freeze({'a': 10.0, 'b': None})
+    result = jax_helpers.lenient_map(
+        lambda x, s: x * s if s is not None else x,
+        tree,
+        scales,
+        is_leaf=lambda x: x is None,
+    )
+    self.assertEqual(result, {'a': 20.0, 'b': 3.0})
+
 
 class SafeSpanTest(parameterized.TestCase):
 
