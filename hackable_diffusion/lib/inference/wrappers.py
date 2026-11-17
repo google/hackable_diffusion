@@ -15,28 +15,23 @@
 """Wrappers for inference functions for flax.linen and flax.nnx."""
 
 import dataclasses
-from typing import Protocol
+from typing import Any, Protocol, TypeAlias
 from flax import nnx
 import flax.linen as nn
 from flax.nnx import bridge
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-PyTree = hd_typing.PyTree
-
-Conditioning = hd_typing.Conditioning
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
-
-InferenceFn = hd_api.InferenceFn
+Batch: TypeAlias = hd_api.Batch
+Conditioning: TypeAlias = hd_api.Conditioning
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -45,19 +40,19 @@ InferenceFn = hd_api.InferenceFn
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class FlaxLinenInferenceFn(InferenceFn):
+class FlaxLinenInferenceFn(hd_api.InferenceFn[Batch]):
   """Inference function protocol with a diffusion network given by nn.Module."""
 
   network: nn.Module
-  params: PyTree  # pyrefly: ignore[not-a-type]
+  params: jt.PyTree[Any]
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Batch]:
     """Returns the model outputs."""
     return self.network.apply(  # pyrefly: ignore[bad-return]
         {"params": self.params},
@@ -78,12 +73,12 @@ class ConvertedNNXDiffusionNetwork(Protocol):
 
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
       is_training: bool,
       rngs: nnx.Rngs,
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Batch]:
     """Returns the model outputs."""
     ...
 
@@ -94,7 +89,7 @@ class ConvertedNNXDiffusionNetwork(Protocol):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class FlaxNNXInferenceFn(InferenceFn):
+class FlaxNNXInferenceFn(hd_api.InferenceFn[Batch]):
   """Inference function protocol with a diffusion network given by nn.Module.
 
   Note: ``inference_seed`` is used for any stochastic layers (e.g., dropout)
@@ -108,13 +103,13 @@ class FlaxNNXInferenceFn(InferenceFn):
   nnx_network: ConvertedNNXDiffusionNetwork
   inference_seed: int = 0
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Batch]:
     """Returns the model outputs."""
     time_bits = jax.lax.bitcast_convert_type(
         jnp.asarray(time, dtype=jnp.float32), jnp.uint32
@@ -138,7 +133,7 @@ class FlaxNNXInferenceFn(InferenceFn):
 
 def convert_flax_linen_module_with_params_to_nnx(
     linen_module: nn.Module,
-    restored_linen_params: PyTree,  # pyrefly: ignore[not-a-type]
+    restored_linen_params: jt.PyTree[Any],
     *init_args,
     **init_kwargs,
 ) -> nnx.Module:

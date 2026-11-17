@@ -40,8 +40,6 @@ import jax.numpy as jnp
 from absl.testing import absltest
 from absl.testing import parameterized
 
-Float = hd_typing.Float
-
 
 def _create_leaf_process(data_array, time_array, target_info_name):
   process = mock.MagicMock()
@@ -62,10 +60,10 @@ class IdentityBackbone(nn.Module, diffusion_network.ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: hd_typing.DataArray,  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[hd_api.Batch],
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> hd_typing.DataArray:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.Data[hd_api.Batch]:
     return x
 
 
@@ -211,13 +209,13 @@ class NestedSamplerStepTest(parameterized.TestCase):
     }
     self.step_info = {
         'data_continuous': hd_api.StepInfo(
-            time=jnp.array((0.5,)),
+            time=jnp.full((1, 1, 1, 1), 0.5),
             step=jnp.array(0),
             rng=jax.random.PRNGKey(0),
         ),
         'modality': {
             'data_discrete': hd_api.StepInfo(
-                time=jnp.array((0.5,)),
+                time=jnp.full((1, 1, 1), 0.5),
                 step=jnp.array(0),
                 rng=jax.random.PRNGKey(0),
             ),
@@ -225,13 +223,13 @@ class NestedSamplerStepTest(parameterized.TestCase):
     }
     self.next_step_info = {
         'data_continuous': hd_api.StepInfo(
-            time=jnp.array((0.7,)),
+            time=jnp.full((1, 1, 1, 1), 0.7),
             step=jnp.array(1),
             rng=jax.random.PRNGKey(1),
         ),
         'modality': {
             'data_discrete': hd_api.StepInfo(
-                time=jnp.array((0.7,)),
+                time=jnp.full((1, 1, 1), 0.7),
                 step=jnp.array(1),
                 rng=jax.random.PRNGKey(1),
             )
@@ -337,8 +335,8 @@ class NestedDiffusionLossTest(parameterized.TestCase):
     )
 
     time = {
-        'data_continuous': jnp.ones((1,)) * 0.5,
-        'data_discrete': jnp.ones((1,)) * 0.5,
+        'data_continuous': jnp.ones((1, 1, 1, 1)) * 0.5,
+        'data_discrete': jnp.ones((1, 1, 1)) * 0.5,
     }
     targets = {
         'data_continuous': {'x0': jnp.ones((1, 32, 32, 3))},
@@ -384,8 +382,8 @@ class NestedGuidanceFnTest(parameterized.TestCase):
         'modality': {'data_discrete': xt_data},
     }
     time = {
-        'data_continuous': jnp.array([0.5, 0.5]),
-        'modality': {'data_discrete': jnp.array([0.5, 0.5])},
+        'data_continuous': jnp.full((batch_size, 1, 1, 1), 0.5),
+        'modality': {'data_discrete': jnp.full((batch_size, 1, 1, 1), 0.5)},
     }
     cond_outputs = {
         'data_continuous': {'pred': jnp.ones_like(xt_data) * 2.0},
@@ -706,6 +704,71 @@ class NestedSelfConditioningDiffusionNetworkTest(parameterized.TestCase):
         'b': {'c': {'logits': jnp.full((batch_size, num_categories), 50.0)}},
     }
     chex.assert_trees_all_close(output, expected_output)
+
+  def test_nested_self_conditioning_partial_none_rescalers(self):
+    num_categories = 4
+    batch_size = 2
+
+    class FirstHalfBackbone(nn.Module, diffusion_network.ConditionalBackbone):
+
+      @nn.compact
+      def __call__(self, x, conditioning_embeddings, is_training):
+        del conditioning_embeddings, is_training
+        return jax.tree.map(lambda arr: arr[..., : arr.shape[-1] // 2], x)
+
+    class DummyCondEncoder(nn.Module):
+
+      @nn.compact
+      def __call__(self, time, conditioning, is_training):
+        del conditioning, is_training
+        return {'time': time}
+
+    mock_process = mock.create_autospec(
+        discrete.CategoricalProcess, instance=True
+    )
+    mock_process.num_categories = num_categories
+    processes = multimodal.NestedProcess(
+        processes={'a': mock_process, 'b': {'c': mock_process}}
+    )
+    xt = {
+        'a': jnp.ones((batch_size, 3, num_categories)),
+        'b': {'c': jnp.ones((batch_size, num_categories))},
+    }
+    time = {
+        'a': jnp.ones((batch_size, 1)),
+        'b': {'c': jnp.ones((batch_size, 1))},
+    }
+    network = multimodal.NestedSelfConditioningDiffusionNetwork(
+        backbone_network=FirstHalfBackbone(),
+        conditioning_encoder=DummyCondEncoder(),
+        prediction_type={'a': 'logits', 'b': {'c': 'logits'}},
+        processes=processes,
+        self_cond_prob=0.0,
+        time_rescaler={'a': None, 'b': {'c': lambda t: t * 2.0}},  # pyrefly: ignore[bad-argument-type]
+        input_rescaler={'a': lambda t, x: x * 0.5, 'b': {'c': None}},  # pyrefly: ignore[bad-argument-type]
+    )
+    key = jax.random.PRNGKey(0)
+    variables = network.init(
+        {'params': key, 'self_conditioning': key},
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=False,
+    )
+    output = network.apply(
+        variables,
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=False,
+    )
+    chex.assert_trees_all_close(
+        output,
+        {
+            'a': {'logits': 0.5 * xt['a']},
+            'b': {'c': {'logits': xt['b']['c']}},
+        },
+    )
 
 
 if __name__ == '__main__':

@@ -49,9 +49,11 @@ class RiemannianArchitectureTest(absltest.TestCase):
     }
 
     variables = model.init(key, xt, conditioning_embeddings, is_training=False)
-    v = model.apply(variables, xt, conditioning_embeddings, is_training=False)
+    v = jnp.asarray(
+        model.apply(variables, xt, conditioning_embeddings, is_training=False)
+    )
 
-    self.assertEqual(v.shape, (4, 3))  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(v.shape, (4, 3))
 
     # Check that v is tangent to xt
     inner_products = jnp.sum(xt * v, axis=-1)

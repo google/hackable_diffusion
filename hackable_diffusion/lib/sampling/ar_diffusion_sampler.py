@@ -95,26 +95,30 @@ is reached or an early stopping condition is met.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Protocol
+from typing import Any, Protocol, TYPE_CHECKING, TypeAlias
 
 from hackable_diffusion.lib import corruption
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import inference
-from hackable_diffusion.lib.sampling import sampling
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
-from kauldron.ktyping import Bool, PRNGKey
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type aliases
 ################################################################################
 
-SamplerState = dict[str, Any]
-DataArray = hd_typing.DataArray
-Conditioning = hd_typing.Conditioning
-InferenceFn = inference.InferenceFn
-DiffusionStep = sampling.DiffusionStep
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+SamplerState: TypeAlias = dict[str, Any]
+Conditioning: TypeAlias = hd_api.Conditioning
+typechecked = jax_helpers.typechecked
+
+if TYPE_CHECKING:
+  ScalarBool: TypeAlias = jax.Array
+else:
+  ScalarBool = jt.Bool[jt.Array, '']
 
 ################################################################################
 # MARK: ARStateHandler
@@ -141,7 +145,7 @@ class ARStateHandler(Protocol):
       self,
       *,
       batch_size: int,
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       canvas_length: int,
       max_num_canvases: int,
   ) -> SamplerState:
@@ -149,7 +153,7 @@ class ARStateHandler(Protocol):
 
   def update_ar_state(
       self,
-      canvas_last_step: DiffusionStep,  # pyrefly: ignore[not-a-type]
+      canvas_last_step: hd_api.DiffusionStep[Batch],
       sampler_state: SamplerState,
   ) -> SamplerState:
     ...
@@ -157,7 +161,7 @@ class ARStateHandler(Protocol):
   def finalize_ar_state(
       self,
       sampler_state: SamplerState,
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.Data[Batch]:
     ...
 
   def create_conditioning_from_state(
@@ -181,14 +185,14 @@ class EarlyStoppingFn(Protocol):
   per-batch-element boolean array.
   """
 
-  def __call__(self, sampler_state: SamplerState) -> Bool['']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, sampler_state: SamplerState) -> ScalarBool:
     """Returns true when the AR loop should terminate."""
 
 
 class DoneEarlyStoppingFn(EarlyStoppingFn):
   """Stops when every batch element is done."""
 
-  def __call__(self, sampler_state: SamplerState) -> Bool['']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, sampler_state: SamplerState) -> ScalarBool:
     if 'done' not in sampler_state:
       raise ValueError(
           'DoneEarlyStoppingFn requires sampler_state["done"] to be set.'
@@ -230,7 +234,7 @@ class AutoregressiveDiffusionSampler:
       pythonic one.
   """
 
-  canvas_sampler: sampling.DiffusionSampler
+  canvas_sampler: hd_api.SampleFn[Batch]
   diffusion_process: corruption.CategoricalProcess
   canvas_length: int
   max_num_canvases: int
@@ -240,14 +244,14 @@ class AutoregressiveDiffusionSampler:
   early_stopping_fn: EarlyStoppingFn = DoneEarlyStoppingFn()
   use_lax_while_loop: bool = True
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      diffusion_inference_fn: inference.InferenceFn,
+      diffusion_inference_fn: inference.InferenceFn[Batch],
       batch_size: int,
       rng: PRNGKey,
-      conditioning: Conditioning,
-  ) -> tuple[DataArray, SamplerState]:  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning | None = None,
+  ) -> tuple[hd_api.Data[Batch], SamplerState]:
     """Generates data autoregressively via discrete diffusion.
 
     Uses ``jax.lax.while_loop`` for JIT compatibility with true early

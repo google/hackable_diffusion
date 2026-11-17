@@ -23,7 +23,7 @@ import jax.numpy as jnp
 from absl.testing import absltest
 
 
-def _make_step_info() -> hd_api.StepInfo:
+def _make_step_info() -> hd_api.StepInfo[hd_api.Batch]:
   return hd_api.StepInfo(
       step=jnp.int32(0),
       time=jnp.float32(0.5),

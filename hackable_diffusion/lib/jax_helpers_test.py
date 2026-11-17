@@ -16,7 +16,7 @@
 
 import dataclasses
 import itertools
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 import chex
 from flax import linen as nn
@@ -24,7 +24,9 @@ from flax.core import frozen_dict
 from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
 from kauldron.ktyping import PyTree  # pylint: disable=g-multiple-import,g-importing-member
+import typeguard
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -450,6 +452,17 @@ class UtilsTest(parameterized.TestCase):
     result = jax_helpers.lenient_map(lambda x: x + 1, empty_tree)
     self.assertEqual(result, empty_tree)
 
+  def test_lenient_map_forwards_is_leaf(self):
+    tree = {'a': 2.0, 'b': None}
+    scales = frozen_dict.freeze({'a': 10.0, 'b': None})
+    result = jax_helpers.lenient_map(
+        lambda x, s: 'called' if x is None else x * s,
+        tree,
+        scales,
+        is_leaf=lambda x: x is None,
+    )
+    self.assertEqual(result, {'a': 20.0, 'b': 'called'})
+
 
 class SafeSpanTest(parameterized.TestCase):
 
@@ -495,6 +508,30 @@ class SafeSpanTest(parameterized.TestCase):
     lo, hi = jax_helpers.SafeSpan(_minval=0.2, _maxval=0.8)
     self.assertEqual(lo, 0.2)
     self.assertEqual(hi, 0.8)
+
+
+class SubscriptableTest(absltest.TestCase):
+
+  def test_subscriptable_dataclass_and_typechecked(self):
+    @jax_helpers.subscriptable
+    def Box(operand: Any) -> Any:  # pylint: disable=invalid-name
+      return operand(jt.Float, 'b')
+
+    t_var = TypeVar('t_var')
+    self.assertIs(Box[t_var], Any)
+    self.assertTrue(dataclasses.is_dataclass(jax_helpers.subscriptable))
+
+    def batch_op(dtype: Any, shape: str = '') -> Any:
+      return dtype[jt.Array, shape]
+
+    @jax_helpers.typechecked
+    def double(x: Box[batch_op]) -> Box[batch_op]:  # pyrefly: ignore[not-a-type]
+      return 2.0 * x
+
+    out = double(jnp.ones((4,)))
+    self.assertEqual(out.shape, (4,))
+    with self.assertRaises((typeguard.TypeCheckError, jt.TypeCheckError)):
+      double(jnp.ones((4, 2)))
 
 
 if __name__ == '__main__':

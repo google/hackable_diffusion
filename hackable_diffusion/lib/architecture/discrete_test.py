@@ -19,6 +19,8 @@ import itertools
 
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import discrete
+from hackable_diffusion.lib.architecture import dit
+from hackable_diffusion.lib.architecture import dit_blocks
 from hackable_diffusion.lib.architecture import mlp
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -268,6 +270,62 @@ class ConditionalDiscreteBackboneTest(parameterized.TestCase):
           token_embedder=token_embedder,
           token_projector=token_projector,
       )
+
+  def test_conditional_discrete_backbone_with_dit_padding_mask(self):
+    embedding_dim = 16
+    num_categories = 8
+    seq_len = 6
+    tokens = jnp.array(
+        [[[1], [2], [3], [0], [0], [0]], [[4], [5], [0], [0], [0], [0]]],
+        dtype=jnp.int32,
+    )
+    cond = {'adaptive_norm': jnp.ones((2, self.cond_dim))}
+    dit_backbone = dit.DiT(
+        num_blocks=2,
+        block=dit_blocks.DiTBlock(
+            hidden_size=embedding_dim,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=2),
+            norm_strategy=normalization.ConditionalRMSNormStrategy(
+                use_shift=False
+            ),
+            use_gates=False,
+        ),
+    )
+    discrete_module = discrete.ConditionalDiscreteBackbone(
+        base_backbone=dit_backbone,
+        pad_token=0,
+        token_embedder=discrete.DenseTokenEmbedder(
+            process_num_categories=num_categories + 1,
+            embedding_dim=embedding_dim,
+            adapt_to_image_like_data=False,
+        ),
+        token_projector=discrete.DenseProjector(
+            num_categories=num_categories,
+            embedding_dim=embedding_dim,
+            adapt_to_image_like_data=False,
+        ),
+    )
+    variables = discrete_module.init(
+        self.key, tokens, conditioning_embeddings=cond, is_training=False
+    )
+    variables = jax.tree.map(lambda p: p + 0.1, variables)
+    output = discrete_module.apply(
+        variables, tokens, conditioning_embeddings=cond, is_training=False
+    )
+    self.assertEqual(output.shape, (2, seq_len, num_categories))  # pyrefly: ignore[missing-attribute]
+
+    # Explicit `padding_mask` in `conditioning_embeddings` overrides `pad_token`
+    explicit_cond = {
+        **cond,
+        'padding_mask': jnp.ones((2, seq_len), dtype=jnp.bool_),
+    }
+    output_unmasked = discrete_module.apply(
+        variables,
+        tokens,
+        conditioning_embeddings=explicit_cond,
+        is_training=False,
+    )
+    self.assertFalse(jnp.allclose(output, output_unmasked))  # pyrefly: ignore[bad-argument-type]
 
 
 if __name__ == '__main__':

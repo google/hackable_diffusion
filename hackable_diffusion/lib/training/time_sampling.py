@@ -33,27 +33,31 @@ for parts of the data are also possible.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import dataclasses
 import math
-from typing import Protocol
+from typing import Any, Protocol, TYPE_CHECKING, TypeAlias
 
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-PRNGKey = hd_typing.PRNGKey
-PyTree = hd_typing.PyTree
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+typechecked = jax_helpers.typechecked
 
-DataArray = hd_typing.DataArray
-DataTree = hd_typing.DataTree
-TimeArray = hd_typing.TimeArray
-TimeTree = hd_typing.TimeTree
+if TYPE_CHECKING:
+  _ModalityDataMap: TypeAlias = Mapping[str, hd_api.Data[Batch]]
+  _ModalityTimeDict: TypeAlias = dict[str, hd_api.Time[Batch]]
+else:
+  _ModalityDataMap = Mapping[str, jt.Num[jt.Array, "b ?*data"]]
+  _ModalityTimeDict = dict[str, jt.Float[jt.Array, "b ?*#data"]]
 
 
 ################################################################################
@@ -61,10 +65,12 @@ TimeTree = hd_typing.TimeTree
 ################################################################################
 
 
-class TimeSampler(Protocol):
+class TimeSampler[Operand](Protocol):
   """Time sampler protocol operating on arrays or on pytrees."""
 
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def __call__(
+      self, key: PRNGKey, data_spec: hd_api.Data[Operand]
+  ) -> hd_api.Time[Operand]:
     """Returns a time array or a pytree of time arrays.
 
     The assumption is that data_spec is either an array or a pytree. We
@@ -93,7 +99,7 @@ class TimeSampler(Protocol):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class UniformTimeSampler(TimeSampler):
+class UniformTimeSampler(TimeSampler[Batch]):
   """Uniform time sampler for a single data array.
 
   Sample time uniformly from the span (default [0.0, 1.0]).
@@ -118,8 +124,10 @@ class UniformTimeSampler(TimeSampler):
           "axes must include 0. Broadcasting over the batch is not supported."
       )
 
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, key: PRNGKey, data_spec: hd_api.Data[Batch]
+  ) -> hd_api.Time[Batch]:
     shape = jax_helpers.get_broadcastable_shape(data_spec.shape, self.axes)
     minval, maxval = self.span
     return jax.random.uniform(key, shape=shape, minval=minval, maxval=maxval)
@@ -131,7 +139,7 @@ class UniformTimeSampler(TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class LogitNormalTimeSampler(TimeSampler):
+class LogitNormalTimeSampler(TimeSampler[Batch]):
   """Logit normal time sampler for a single data array.
 
   Sample time following a logit normal distribution from the span (default
@@ -162,8 +170,10 @@ class LogitNormalTimeSampler(TimeSampler):
           "axes must include 0. Broadcasting over the batch is not supported."
       )
 
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, key: PRNGKey, data_spec: hd_api.Data[Batch]
+  ) -> hd_api.Time[Batch]:
     shape = jax_helpers.get_broadcastable_shape(data_spec.shape, self.axes)
     minval, maxval = self.span
     out = self.mean + self.scale * jax.random.normal(key, shape=shape)
@@ -176,7 +186,7 @@ class LogitNormalTimeSampler(TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class UniformStratifiedTimeSampler(TimeSampler):
+class UniformStratifiedTimeSampler(TimeSampler[Batch]):
   """Uniform stratified time sampler.
 
   See https://arxiv.org/abs/2107.00630 (I.1).
@@ -198,8 +208,10 @@ class UniformStratifiedTimeSampler(TimeSampler):
           "axes must include 0. Broadcasting over the batch is not supported."
       )
 
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, key: PRNGKey, data_spec: hd_api.Data[Batch]
+  ) -> hd_api.Time[Batch]:
     shape = jax_helpers.get_broadcastable_shape(data_spec.shape, self.axes)
     tensor_dim = math.prod(shape)
 
@@ -213,7 +225,7 @@ class UniformStratifiedTimeSampler(TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class UnbalancedTimestepSampler(TimeSampler):
+class UnbalancedTimestepSampler(TimeSampler[Any]):
   """Unbalanced time sampler from the JointDiT paper.
 
   See https://arxiv.org/abs/2505.00482 (Section 3.1, and A.3).
@@ -234,8 +246,10 @@ class UnbalancedTimestepSampler(TimeSampler):
 
   p_equal: float = 0.5
 
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, key: PRNGKey, data_spec: _ModalityDataMap
+  ) -> _ModalityTimeDict:
     # Check that the keys match the data.
     if set(data_spec.keys()) != {self.key1, self.key2}:
       raise KeyError(

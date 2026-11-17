@@ -22,36 +22,49 @@ These modules do not cover all possible usecases, but rather provide a reference
 """
 
 import dataclasses
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, TYPE_CHECKING, TypeAlias
+
 import flax.linen as nn
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import mlp_blocks
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-Num = hd_typing.Num
+Batch: TypeAlias = hd_api.Batch
+Conditioning: TypeAlias = hd_api.Conditioning
+DType: TypeAlias = hd_typing.DType
+typechecked = jax_helpers.typechecked
+
+if TYPE_CHECKING:
+  BatchEmbedding: TypeAlias = jax.Array
+  BatchFeatures: TypeAlias = jax.Array
+  BatchNum: TypeAlias = jax.Array
+else:
+  BatchEmbedding = jt.Float[jt.Array, 'b *emb']
+  BatchFeatures = jt.Float[jt.Array, 'b f']
+  BatchNum = jt.Num[jt.Array, 'b *emb']
 
 ################################################################################
 # MARK: Time Embedders
 ################################################################################
 
 
-class TimeEmbedder(Protocol):
+class TimeEmbedder[Operand](Protocol):
   """Protocol for a time embedder."""
 
-  def __call__(self, time: hd_typing.TimeTree) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, time: hd_api.Time[Operand]) -> BatchEmbedding:
     ...
 
 
-class SinusoidalTimeEmbedder(nn.Module, TimeEmbedder):
+class SinusoidalTimeEmbedder(nn.Module, TimeEmbedder[Batch]):
   """Sinusoidal time embedder.
 
   This module encodes the time step `t` into a dense embedding.
@@ -81,8 +94,8 @@ class SinusoidalTimeEmbedder(nn.Module, TimeEmbedder):
     self.init_output = nn.linear.default_kernel_init
 
   @nn.compact
-  @kt.typechecked
-  def __call__(self, time: hd_typing.TimeArray) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, time: hd_api.Time[Batch]) -> BatchFeatures:
     t_emb = sequence_embedders.SinusoidalSequenceEmbedding(self.embedding_dim)(
         time
     )
@@ -103,7 +116,7 @@ class SinusoidalTimeEmbedder(nn.Module, TimeEmbedder):
     return t_emb
 
 
-class ZeroTimeEmbedder(nn.Module, TimeEmbedder):
+class ZeroTimeEmbedder(nn.Module, TimeEmbedder[Batch]):
   """Time embedder that returns zeros.
 
   This allows to train models without time conditioning.
@@ -114,16 +127,16 @@ class ZeroTimeEmbedder(nn.Module, TimeEmbedder):
 
   num_features: int
 
-  @kt.typechecked
-  def __call__(self, time: hd_typing.TimeArray) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, time: hd_api.Time[Batch]) -> BatchFeatures:
     return jnp.zeros((time.shape[0], self.num_features))
 
 
-class IdentityTimeEmbedder(nn.Module, TimeEmbedder):
+class IdentityTimeEmbedder(nn.Module, TimeEmbedder[Batch]):
   """Time embedder that returns time without any transformation."""
 
-  @kt.typechecked
-  def __call__(self, time: hd_typing.TimeArray) -> hd_typing.TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return time
 
 
@@ -139,9 +152,7 @@ class ConditioningEmbedder(Protocol):
   def output_shape(self) -> tuple[int, ...]:
     ...
 
-  def __call__(
-      self, conditioning: hd_typing.Conditioning
-  ) -> Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  def __call__(self, conditioning: Conditioning) -> BatchEmbedding:
     ...
 
 
@@ -167,11 +178,11 @@ class LabelEmbedder(nn.Module, ConditioningEmbedder):
     return (self.num_features,)
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      conditioning: hd_typing.Conditioning,
-  ) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning,
+  ) -> BatchFeatures:
     if self.conditioning_key not in conditioning:
       raise ValueError(
           f'Conditioning key {self.conditioning_key} not found in conditioning.'
@@ -209,11 +220,11 @@ class LinearEmbedder(nn.Module, ConditioningEmbedder):
     return (self.num_features,)
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      conditioning: hd_typing.Conditioning,
-  ) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning,
+  ) -> BatchFeatures:
     if self.conditioning_key not in conditioning:
       raise ValueError(
           f'Conditioning key {self.conditioning_key} not found in conditioning.'
@@ -257,11 +268,11 @@ class MLPEmbedder(nn.Module, ConditioningEmbedder):
     return (self.num_features,)
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      conditioning: hd_typing.Conditioning,
-  ) -> Float['batch num_features']:  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning,
+  ) -> BatchFeatures:
     for key in self.conditioning_keys:
       if key not in conditioning:
         raise ValueError(
@@ -303,11 +314,11 @@ class FieldSelector(nn.Module, ConditioningEmbedder):
     return self.data_spec
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      conditioning: hd_typing.Conditioning,
-  ) -> Num['batch ...']:  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning,
+  ) -> BatchNum:
     if self.field_name not in conditioning:
       raise ValueError(
           f'Conditioning key {self.field_name} not found in conditioning.'
@@ -321,13 +332,13 @@ class FieldSelector(nn.Module, ConditioningEmbedder):
 ################################################################################
 
 
-class ConditioningEncoder(Protocol):
+class ConditioningEncoder[Operand](Protocol):
   """Protocol for a conditioning encoder."""
 
   def __call__(
       self,
-      time: hd_typing.TimeArray,  # pyrefly: ignore[not-a-type]
-      conditioning: hd_typing.Conditioning | None,
+      time: hd_api.Time[Operand],
+      conditioning: Conditioning | None,
       is_training: bool,
   ) -> hd_typing.ConditioningEmbeddings:
     ...
@@ -356,7 +367,9 @@ class ConcatEmbeddings:
     return jnp.concatenate([x, y], axis=-1)
 
 
-class StandardConditioningEncoder(nn.Module, ConditioningEncoder):
+class StandardConditioningEncoder[Operand](
+    nn.Module, ConditioningEncoder[Operand]
+):
   """Encodes and combines time and conditioning signals for a diffusion model.
 
   This module orchestrates the transformation of raw time and a dictionary
@@ -413,7 +426,7 @@ class StandardConditioningEncoder(nn.Module, ConditioningEncoder):
       signals.
   """
 
-  time_embedder: TimeEmbedder
+  time_embedder: TimeEmbedder[Operand]
   conditioning_embedders: dict[str, ConditioningEmbedder]
   merge_embeddings_fn: MergeEmbeddingsFn
   conditioning_rules: hd_typing.ConditioningEmbeddings
@@ -441,11 +454,11 @@ class StandardConditioningEncoder(nn.Module, ConditioningEncoder):
       )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: hd_typing.TimeTree,  # pyrefly: ignore[not-a-type]
-      conditioning: hd_typing.Conditioning | None,
+      time: hd_api.Time[Operand],
+      conditioning: Conditioning | None,
       is_training: bool,
   ) -> hd_typing.ConditioningEmbeddings:
     """Encodes and combines time and conditioning signals.
