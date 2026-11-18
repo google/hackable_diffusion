@@ -342,6 +342,7 @@ class AttentionResidualBlock(nn.Module):
   skip_connection_fn: SkipConnectionFn
   attention_heads_spec: attention.AttentionHeadsSpec
   normalize_qk: bool = False
+  dropout_rate: float = 0.0
   dtype: DType = jnp.float32
 
   def setup(self):
@@ -366,8 +367,13 @@ class AttentionResidualBlock(nn.Module):
         normalize_qk=self.normalize_qk,
         rope_positions_fn=self.rope_positions_fn,
         zero_init_output=True,
+        dropout_rate=self.dropout_rate,
         dtype=self.dtype,
-    )(x=x, c=cross_attention_emb if self.cross_attention_bool else None)
+    )(
+        x=x,
+        c=cross_attention_emb if self.cross_attention_bool else None,
+        is_training=is_training,
+    )
     x = x.reshape(b, h, w, channels)
     x = self.skip_connection_fn(x, skip)
     return x

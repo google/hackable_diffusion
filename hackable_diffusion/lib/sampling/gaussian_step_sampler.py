@@ -227,11 +227,14 @@ class AdjustedDDIMStep(SamplerStep):
 
     # Estimation according to page 7 of the paper.
     xt_var = 0.1 / (2 + jnp.square(alpha / sigma))
-    # Ajusted DDIM update.
+    # Adjusted DDIM update.
     next_xt_var = jnp.square(next_alpha - alpha * next_sigma / sigma) * xt_var
-    norm_epsilon = jnp.mean(jnp.square(epsilon), keepdims=True)
+    non_batch_axes = tuple(range(1, epsilon.ndim))
+    norm_epsilon = jnp.mean(
+        jnp.square(epsilon), axis=non_batch_axes, keepdims=True
+    )
     new_xt = (
-        alpha * x0
+        next_alpha * x0
         + jnp.sqrt(jnp.square(next_sigma) + next_xt_var / norm_epsilon)
         * epsilon
     )
@@ -508,6 +511,10 @@ class HeunStep(SamplerStep):
   num_steps: int
 
   def __post_init__(self):
+    if self.num_steps < 2:
+      raise ValueError(
+          f"Number of steps must be at least 2, got {self.num_steps}."
+      )
     if self.num_steps % self.num_internal_steps != 0:
       raise ValueError(
           "The number of steps should be divisible by"

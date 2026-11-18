@@ -124,6 +124,7 @@ import kauldron.ktyping as kt
 ################################################################################
 
 Float = hd_typing.Float
+DType = hd_typing.DType
 
 DataArray = hd_typing.DataArray
 TargetInfo = hd_typing.TargetInfo
@@ -203,7 +204,9 @@ class MaxCappedRemaskingFn(RemaskingFn):
   def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     alpha_s = self.schedule.alpha(s)
     alpha_t = self.schedule.alpha(t)
-    return jnp.minimum((1.0 - alpha_s) / alpha_t, self.max_cap)
+    p_remask = jnp.minimum((1.0 - alpha_s) / alpha_t, self.max_cap)
+    in_window = (t >= self.switch_min) & (t <= self.switch_max)
+    return jnp.where(in_window, p_remask, jnp.zeros_like(p_remask))
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -223,6 +226,11 @@ class RescaledRemaskingFn(RemaskingFn):
     switch_max: The maximum value of the switch function.
   """
 
+  schedule: DiscreteSchedule
+  rescale_factor: float
+  switch_min: float = 0.0
+  switch_max: float = 1.0
+
   def __post_init__(self):
     if self.switch_min > self.switch_max:
       raise ValueError(
@@ -238,16 +246,15 @@ class RescaledRemaskingFn(RemaskingFn):
           f'rescale_factor must be smaller than 1.0, got {self.rescale_factor}'
       )
 
-  schedule: DiscreteSchedule
-  rescale_factor: float
-  switch_min: float = 0.0
-  switch_max: float = 1.0
-
   @kt.typechecked
   def __call__(self, s: TimeArray, t: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
     alpha_s = self.schedule.alpha(s)
     alpha_t = self.schedule.alpha(t)
-    return self.rescale_factor * jnp.minimum((1.0 - alpha_s) / alpha_t, 1.0)
+    p_remask = self.rescale_factor * jnp.minimum(
+        (1.0 - alpha_s) / alpha_t, 1.0
+    )
+    in_window = (t >= self.switch_min) & (t <= self.switch_max)
+    return jnp.where(in_window, p_remask, jnp.zeros_like(p_remask))
 
 
 ################################################################################
@@ -255,8 +262,7 @@ class RescaledRemaskingFn(RemaskingFn):
 ################################################################################
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class CorruptedMaskFn(Protocol):  # pyrefly: ignore[bad-class-definition]
+class CorruptedMaskFn(Protocol):
   """Corrupted mask function protocol.
 
   This function takes the current xt, i.e., the "noisy" data and returns a mask
@@ -373,6 +379,7 @@ def _generate_candidates(
     temperature: float,
 ) -> tuple[DataArray, DataArray, Float['... M']]:  # pyrefly: ignore[not-a-type]
   """Generate candidate x0, x_noise samples and logits."""
+  discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
   logits = corruption_process.convert_predictions(prediction, xt, time_bcast)[
       'logits'
   ]
@@ -380,6 +387,7 @@ def _generate_candidates(
 
   x0_key, noise_key = jax.random.split(key)
   x0 = jax.random.categorical(key=x0_key, logits=logits)[..., None]
+  discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
   x_noise = corruption_process.sample_from_invariant(noise_key, data_spec=xt)
 
   if not (x0.shape == x_noise.shape == xt.shape):
@@ -677,6 +685,57 @@ class EntropyBoundPlanner(RoutingStrategy):
 
 
 ################################################################################
+# MARK: Discrete Step Helpers
+################################################################################
+
+
+def _initialize_discrete_step(
+    initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
+    initial_step_info: StepInfo,
+    *,
+    corruption_process: CategoricalProcess,
+    logits_dtype: DType,
+) -> DiffusionStep:
+  """Initializes a discrete `DiffusionStep` with zeroed `aux['logits']`."""
+  discrete.assert_discrete_shape_is_valid(
+      initial_noise, x_name='initial_noise'
+  )
+  init_logits = jnp.repeat(
+      initial_noise, corruption_process.num_categories, axis=-1
+  )
+  init_logits = jnp.zeros_like(init_logits, dtype=logits_dtype)
+  return DiffusionStep(
+      xt=initial_noise,
+      step_info=initial_step_info,
+      aux={
+          'logits': init_logits,
+          # `logits` need to be passed in `aux` dictionary to avoid a
+          # performance regression on TPU.
+      },
+  )
+
+
+def _post_process_discrete_step(
+    *,
+    new_xt: DataArray,  # pyrefly: ignore[not-a-type]
+    xt: DataArray,  # pyrefly: ignore[not-a-type]
+    logits: jax.Array,
+    next_step_info: StepInfo,
+    corruption_process: CategoricalProcess,
+    logits_dtype: DType,
+) -> DiffusionStep:
+  """Applies post-corruption projection, unused-token masking, and dtype cast."""
+  unused_mask = xt == corruption_process.unused_token
+  new_xt = corruption_process.post_corruption_fn(new_xt)
+  new_xt = jnp.where(unused_mask, corruption_process.unused_token, new_xt)
+  return DiffusionStep(
+      xt=new_xt,
+      step_info=next_step_info,
+      aux={'logits': logits.astype(logits_dtype)},
+  )
+
+
+################################################################################
 # MARK: UnMasking Step
 ################################################################################
 
@@ -712,6 +771,7 @@ class UnMaskingStep(SamplerStep):
       with the default being all tokens corrupted.
     temperature: The temperature to use. This is optional with the default being
       a temperature of 1.0.
+    logits_dtype: Dtype stored for logits in `DiffusionStep.aux`.
   """
 
   corruption_process: CategoricalProcess
@@ -719,13 +779,9 @@ class UnMaskingStep(SamplerStep):
   remasking_fn: RemaskingFn = NoRemaskingFn()
   corruption_mask_fn: CorruptedMaskFn = AllCorruptedMaskFn()
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
+  logits_dtype: DType = jnp.float32
 
   def __post_init__(self):
-    """UnMaskingStep only supports masking processes.
-
-    We refer to update for more details.
-    """
     if not self.corruption_process.is_masking:
       raise ValueError('UnMaskingStep only supports masking processes.')
 
@@ -735,23 +791,11 @@ class UnMaskingStep(SamplerStep):
       initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
-    discrete.assert_discrete_shape_is_valid(
-        initial_noise, x_name='initial_noise'
-    )
-
-    init_logits = jnp.repeat(
-        initial_noise, self.corruption_process.num_categories, axis=-1
-    )
-    init_logits = jnp.zeros_like(init_logits, dtype=self.logits_dtype)
-
-    return DiffusionStep(
-        xt=initial_noise,
-        step_info=initial_step_info,
-        aux={
-            'logits': init_logits,
-            # `logits` need to be passed in `aux` dictionary to a performance
-            # bug when using TPU. Needs to be investigated.
-        },
+    return _initialize_discrete_step(
+        initial_noise,
+        initial_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
 
   @kt.typechecked
@@ -761,22 +805,15 @@ class UnMaskingStep(SamplerStep):
       current_step: DiffusionStep,
       next_step_info: StepInfo,
   ) -> DiffusionStep:
-
-    current_step_info = current_step.step_info
     xt = current_step.xt
-    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
-
-    unused_mask = xt == self.corruption_process.unused_token
-    # The mask is True if the token is unused.
-
-    time = current_step_info.time
+    time = current_step.step_info.time
     next_time = next_step_info.time
     time_bcast = jax_helpers.bcast_right(time, xt.ndim)
     next_time_bcast = jax_helpers.bcast_right(next_time, xt.ndim)
-    key = next_step_info.rng
 
-    # Get model predictions and candidates
-    _, candidate_key, plan_key, route_key = jax.random.split(key, 4)
+    _, candidate_key, plan_key, route_key = jax.random.split(
+        next_step_info.rng, 4
+    )
     x0, x_noise, logits = _generate_candidates(
         corruption_process=self.corruption_process,
         prediction=prediction,
@@ -785,83 +822,43 @@ class UnMaskingStep(SamplerStep):
         key=candidate_key,
         temperature=self.temperature,
     )
-    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
 
-    if xt.shape != x0.shape:
-      raise ValueError(
-          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
-          f' {x0.shape=}.'
-      )
-
-    currently_masked = self.corruption_mask_fn(xt)  # (bsz, seq_len, 1)
-
-    # Denoising rates
+    currently_masked = self.corruption_mask_fn(xt)
     alpha_s = self.corruption_process.schedule.alpha(next_time_bcast)
     alpha_t = self.corruption_process.schedule.alpha(time_bcast)
-
-    # Routing decomposition logic
-    # See docstring for formulae and https://arxiv.org/abs/2503.00307 for
-    # details.
-
     p_st = self.remasking_fn(s=next_time_bcast, t=time_bcast)
 
     p_clean_masked = (alpha_s - (1.0 - p_st) * alpha_t) / (1.0 - alpha_t)
     p_noise_masked = p_st
     p_stay_masked = 1.0 - p_clean_masked - p_noise_masked
-    # Denoising probability following https://arxiv.org/abs/2503.00307
-    # If no remasking (https://arxiv.org/abs/2503.00307), p_st = 0,
-    # so p_clean = (alpha_s - alpha_t) / (1.0 - alpha_t)
-    # These are the routing weights for masked positions xt.
-    # With prob p_clean, we replace xt with the predicted token x0.
-    # With prob p_noise, we replace xt with the invariant token x_noise.
-    # With prob p_stay, we keep the current token xt.
 
-    # Routing weights for unmasked tokens:
     p_stay_unmasked = 1.0 - p_st
     p_noise_unmasked = p_st
     p_clean_unmasked = jnp.zeros_like(p_st)
-    # Same as above, but for unmasked positions.
-    # Note that if p_st = 0, then p_noise = 0, and p_stay = 1, which means
-    # that unmasked tokens are never remasked.
 
-    # Combine based on masking state
-    # See https://arxiv.org/abs/2503.00307 for an example of the combination of
-    # probabilities for masked and unmasked tokens.
-    p_stay = jnp.where(currently_masked, p_stay_masked, p_stay_unmasked)
-    p_noise = jnp.where(currently_masked, p_noise_masked, p_noise_unmasked)
-    p_clean = jnp.where(currently_masked, p_clean_masked, p_clean_unmasked)
+    routing_weights = Routing(
+        stay=jnp.where(currently_masked, p_stay_masked, p_stay_unmasked),
+        noise=jnp.where(currently_masked, p_noise_masked, p_noise_unmasked),
+        clean=jnp.where(currently_masked, p_clean_masked, p_clean_unmasked),
+    )
 
-    routing_weights = Routing(stay=p_stay, noise=p_noise, clean=p_clean)
-
-    # Apply planner transformation (if any)
-    if self.planner:
+    if self.planner is not None:
       routing_weights = self.planner(
           routing_weights, logits, x0, xt, time, next_time, plan_key
       )
-
-    # xt ~ p(x_s|x_0, x_t) (with optional remasking and planning)
     new_xt = _sample_routing(
+        key=route_key,
         weights=routing_weights,
         candidates=Routing(stay=xt, noise=x_noise, clean=x0),
-        key=route_key,
     )
-
-    # This is the new state after sampling using the routing weights.
-
-    new_xt = self.corruption_process.post_corruption_fn(new_xt)
-
-    # Replace the unused tokens with the unused_token.
-    new_xt = jnp.where(
-        unused_mask, self.corruption_process.unused_token, new_xt
+    return _post_process_discrete_step(
+        new_xt=new_xt,
+        xt=xt,
+        logits=logits,
+        next_step_info=next_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
-
-    return DiffusionStep(
-        xt=new_xt,
-        step_info=next_step_info,
-        aux={'logits': logits},
-    )
-    # `logits` need to be passed in `aux` dictionary to a performance
-    # bug when using TPU. Needs to be investigated.
 
   @kt.typechecked
   def finalize(
@@ -870,11 +867,7 @@ class UnMaskingStep(SamplerStep):
       current_step: DiffusionStep,
       last_step_info: StepInfo,
   ) -> DiffusionStep:
-    return self.update(
-        prediction,
-        current_step,
-        last_step_info,
-    )
+    return self.update(prediction, current_step, last_step_info)
 
 
 ################################################################################
@@ -943,18 +936,15 @@ class DiscreteDDIMStep(SamplerStep):
     planner: The planner to use for transforming routing weights. This is
       optional with the default being ``None`` (pure stochastic sampling).
     temperature: The temperature to use.
+    logits_dtype: Dtype stored for logits in `DiffusionStep.aux`.
   """
 
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
+  logits_dtype: DType = jnp.float32
 
   def __post_init__(self):
-    """DiscreteDDIMStep does not support masking processes.
-
-    We refer to update for more details.
-    """
     if self.corruption_process.is_masking:
       raise ValueError('DiscreteDDIMStep does not support masking processes.')
     if 0.0 in self.corruption_process.invariant_probs:
@@ -969,22 +959,12 @@ class DiscreteDDIMStep(SamplerStep):
       initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
-    discrete.assert_discrete_shape_is_valid(
-        initial_noise, x_name='initial_noise'
+    return _initialize_discrete_step(
+        initial_noise,
+        initial_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
-
-    init_logits = jnp.repeat(
-        initial_noise, self.corruption_process.num_categories, axis=-1
-    )
-    init_logits = jnp.zeros_like(init_logits, dtype=self.logits_dtype)
-
-    return DiffusionStep(
-        xt=initial_noise,
-        step_info=initial_step_info,
-        aux={'logits': init_logits},
-    )
-    # `logits` need to be passed in `aux` dictionary to a performance
-    # bug when using TPU. Needs to be investigated.
 
   @kt.typechecked
   def update(
@@ -993,20 +973,15 @@ class DiscreteDDIMStep(SamplerStep):
       current_step: DiffusionStep,
       next_step_info: StepInfo,
   ) -> DiffusionStep:
-
-    current_step_info = current_step.step_info
     xt = current_step.xt
-    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
-    unused_mask = xt == self.corruption_process.unused_token
-
-    time = current_step_info.time
+    time = current_step.step_info.time
     next_time = next_step_info.time
     time_bcast = jax_helpers.bcast_right(time, xt.ndim)
     next_time_bcast = jax_helpers.bcast_right(next_time, xt.ndim)
-    key = next_step_info.rng
 
-    # Get model predictions and candidates
-    _, candidate_key, plan_key, route_key = jax.random.split(key, 4)
+    _, candidate_key, plan_key, route_key = jax.random.split(
+        next_step_info.rng, 4
+    )
     x0, x_noise, logits = _generate_candidates(
         corruption_process=self.corruption_process,
         prediction=prediction,
@@ -1015,62 +990,38 @@ class DiscreteDDIMStep(SamplerStep):
         key=candidate_key,
         temperature=self.temperature,
     )
-    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
-    if xt.shape != x0.shape:
-      raise ValueError(
-          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
-          f' {x0.shape=}.'
-      )
 
-    # Schedule
     alpha_s = self.corruption_process.schedule.alpha(next_time_bcast)
     alpha_t = self.corruption_process.schedule.alpha(time_bcast)
     ratio = alpha_t / alpha_s
-    # (bsz, *seq_len, 1)
-
-    # Routing weights (unnormalized).
-    # See the class docstring for the full derivation of terms T1–T4.
     pi_xt = self.corruption_process.invariant_probs_vec[xt[..., 0]][..., None]
 
-    # T2 → stay, T4 → noise, T3 → clean
     p_stay = ratio * (1.0 - alpha_s) * pi_xt
     p_noise = (1.0 - ratio) * (1.0 - alpha_s) * pi_xt
     p_clean = (1.0 - ratio) * alpha_s * pi_xt
 
-    # When x_0 = x_t, routing to CLEAN produces the same output as STAY.
-    # Merge T1 (r * α_s) and p_clean into p_stay, and zero out p_clean.
-    # This ensures planners see p_clean = 0 for no-op positions.
     x0_eq_xt = (x0 == xt).astype(jnp.float32)
     p_stay = p_stay + x0_eq_xt * (ratio * alpha_s + p_clean)
     p_clean = (1.0 - x0_eq_xt) * p_clean
 
     routing_weights = Routing(stay=p_stay, noise=p_noise, clean=p_clean)
 
-    # Apply planner transformation (if any)
-    if self.planner:
+    if self.planner is not None:
       routing_weights = self.planner(
           routing_weights, logits, x0, xt, time, next_time, plan_key
       )
-
-    # xt ~ p(x_s|x_0, x_t)
-    # This is the new state after sampling using the routing weights.
     new_xt = _sample_routing(
+        key=route_key,
         weights=routing_weights,
         candidates=Routing(stay=xt, noise=x_noise, clean=x0),
-        key=route_key,
     )
-
-    new_xt = self.corruption_process.post_corruption_fn(new_xt)
-
-    # Replace the unused tokens with the unused_token.
-    new_xt = jnp.where(
-        unused_mask, self.corruption_process.unused_token, new_xt
-    )
-
-    return DiffusionStep(
-        xt=new_xt,
-        step_info=next_step_info,
-        aux={'logits': logits},
+    return _post_process_discrete_step(
+        new_xt=new_xt,
+        xt=xt,
+        logits=logits,
+        next_step_info=next_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
 
   @kt.typechecked
@@ -1080,11 +1031,7 @@ class DiscreteDDIMStep(SamplerStep):
       current_step: DiffusionStep,
       last_step_info: StepInfo,
   ) -> DiffusionStep:
-    return self.update(
-        prediction,
-        current_step,
-        last_step_info,
-    )
+    return self.update(prediction, current_step, last_step_info)
 
 
 ################################################################################
@@ -1113,12 +1060,14 @@ class DiscreteFlowMatchingStep(SamplerStep):
     temperature: The temperature to use.
     stoch_coeff: The stochasticity coefficient (default 0.0). Higher values
       introduce more noise during the denoising process.
+    logits_dtype: Dtype stored for logits in `DiffusionStep.aux`.
   """
 
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
   temperature: float = 1.0
   stoch_coeff: float = 0.0
+  logits_dtype: DType = jnp.float32
 
   @kt.typechecked
   def initialize(
@@ -1126,19 +1075,11 @@ class DiscreteFlowMatchingStep(SamplerStep):
       initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
-    discrete.assert_discrete_shape_is_valid(
-        initial_noise, x_name='initial_noise'
-    )
-
-    init_logits = jnp.repeat(
-        initial_noise, self.corruption_process.num_categories, axis=-1
-    )
-    init_logits = jnp.zeros_like(init_logits, dtype=jnp.float32)
-
-    return DiffusionStep(
-        xt=initial_noise,
-        step_info=initial_step_info,
-        aux={'logits': init_logits},
+    return _initialize_discrete_step(
+        initial_noise,
+        initial_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
 
   @kt.typechecked
@@ -1148,21 +1089,15 @@ class DiscreteFlowMatchingStep(SamplerStep):
       current_step: DiffusionStep,
       next_step_info: StepInfo,
   ) -> DiffusionStep:
-
-    current_step_info = current_step.step_info
     xt = current_step.xt
-    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
-
-    unused_mask = xt == self.corruption_process.unused_token
-
-    time = current_step_info.time
+    time = current_step.step_info.time
     next_time = next_step_info.time
     time_bcast = jax_helpers.bcast_right(time, xt.ndim)
     next_time_bcast = jax_helpers.bcast_right(next_time, xt.ndim)
-    key = next_step_info.rng
 
-    # Get model predictions and candidates
-    _, candidate_key, plan_key, route_key = jax.random.split(key, 4)
+    _, candidate_key, plan_key, route_key = jax.random.split(
+        next_step_info.rng, 4
+    )
     x0, x_noise, logits = _generate_candidates(
         corruption_process=self.corruption_process,
         prediction=prediction,
@@ -1171,14 +1106,7 @@ class DiscreteFlowMatchingStep(SamplerStep):
         key=candidate_key,
         temperature=self.temperature,
     )
-    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
-    if xt.shape != x0.shape:
-      raise ValueError(
-          f'Expected xt and x0 to have the same shape, got {xt.shape=} and'
-          f' {x0.shape=}.'
-      )
 
-    # Denoising rates
     alpha_s = self.corruption_process.schedule.alpha(next_time_bcast)
     alpha_t = self.corruption_process.schedule.alpha(time_bcast)
 
@@ -1191,44 +1119,32 @@ class DiscreteFlowMatchingStep(SamplerStep):
         (alpha_s - alpha_t) / jnp.maximum(alpha_t, 1e-12) * self.stoch_coeff
     )
 
-    # Clip and rescale to ensure valid weights
     p_clean_raw = jnp.maximum(p_clean_raw, 0.0)
     p_noise_raw = jnp.maximum(p_noise_raw, 0.0)
-    sum_jumps = p_clean_raw + p_noise_raw
-    scale_factor = jnp.maximum(1.0, sum_jumps)
+    scale_factor = jnp.maximum(1.0, p_clean_raw + p_noise_raw)
 
-    # Compute the probabilities for the three routing options.
-    # This is computed according to https://arxiv.org/abs/2407.15595.
     p_clean = p_clean_raw / scale_factor
     p_noise = p_noise_raw / scale_factor
     p_stay = 1.0 - p_clean - p_noise
 
     routing_weights = Routing(stay=p_stay, noise=p_noise, clean=p_clean)
 
-    # Apply planner transformation (if any)
-    if self.planner:
+    if self.planner is not None:
       routing_weights = self.planner(
           routing_weights, logits, x0, xt, time, next_time, plan_key
       )
-
-    # xt ~ p(x_s|x_0, x_t)
-    # This is the new state after sampling using the routing weights.
     new_xt = _sample_routing(
+        key=route_key,
         weights=routing_weights,
         candidates=Routing(stay=xt, noise=x_noise, clean=x0),
-        key=route_key,
     )
-    new_xt = self.corruption_process.post_corruption_fn(new_xt)
-
-    # Replace the unused tokens with the unused_token.
-    new_xt = jnp.where(
-        unused_mask, self.corruption_process.unused_token, new_xt
-    )
-
-    return DiffusionStep(
-        xt=new_xt,
-        step_info=next_step_info,
-        aux={'logits': logits},
+    return _post_process_discrete_step(
+        new_xt=new_xt,
+        xt=xt,
+        logits=logits,
+        next_step_info=next_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
 
   @kt.typechecked
@@ -1238,11 +1154,7 @@ class DiscreteFlowMatchingStep(SamplerStep):
       current_step: DiffusionStep,
       last_step_info: StepInfo,
   ) -> DiffusionStep:
-    return self.update(
-        prediction,
-        current_step,
-        last_step_info,
-    )
+    return self.update(prediction, current_step, last_step_info)
 
 
 ################################################################################
@@ -1250,7 +1162,7 @@ class DiscreteFlowMatchingStep(SamplerStep):
 ################################################################################
 # Note: IntegratedDiscreteDDIMStep does NOT fit the 3-way routing scheme
 # because it marginalizes over x_0 rather than sampling a single x_0.
-# It is kept as-is with direct categorical sampling.
+# It is kept with direct categorical sampling.
 ################################################################################
 
 
@@ -1293,13 +1205,9 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
 
   corruption_process: CategoricalProcess
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
+  logits_dtype: DType = jnp.float32
 
   def __post_init__(self):
-    """IntegratedDiscreteDDIMStep does not support masking processes.
-
-    We refer to update for more details.
-    """
     if self.corruption_process.is_masking:
       raise ValueError(
           'IntegratedDiscreteDDIMStep does not support masking processes.'
@@ -1316,21 +1224,12 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
       initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
-    discrete.assert_discrete_shape_is_valid(
-        initial_noise, x_name='initial_noise'
+    return _initialize_discrete_step(
+        initial_noise,
+        initial_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
-    init_logits = jnp.repeat(
-        initial_noise, self.corruption_process.num_categories, axis=-1
-    )
-    init_logits = jnp.zeros_like(init_logits, dtype=self.logits_dtype)
-
-    return DiffusionStep(
-        xt=initial_noise,
-        step_info=initial_step_info,
-        aux={'logits': init_logits},
-    )
-    # `logits` need to be passed in `aux` dictionary to a performance
-    # bug when using TPU. Needs to be investigated.
 
   @kt.typechecked
   def update(
@@ -1339,17 +1238,13 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
       current_step: DiffusionStep,
       next_step_info: StepInfo,
   ) -> DiffusionStep:
-
     xt = current_step.xt
     discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
-
-    unused_mask = xt == self.corruption_process.unused_token
 
     time = jax_helpers.bcast_right(current_step.step_info.time, xt.ndim)
     next_time = jax_helpers.bcast_right(next_step_info.time, xt.ndim)
     key = next_step_info.rng
 
-    # Extract predictions.
     pred_converted = self.corruption_process.convert_predictions(
         prediction, xt, time
     )
@@ -1365,66 +1260,38 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
 
     logits = logits / self.temperature
     p_x0 = jax.nn.softmax(logits, axis=-1)
-    # (bsz, *seq_len, M)
 
-    # One-hot encoding for the current state
     xt_oh = jax.nn.one_hot(
         xt[..., 0], num_classes=self.corruption_process.process_num_categories
     )
-    # (bsz, *seq_len, M)
 
-    # Calculate schedule alphas.
     alpha_s = self.corruption_process.schedule.alpha(next_time)
     alpha_t = self.corruption_process.schedule.alpha(time)
     alpha_s = jnp.broadcast_to(alpha_s, xt_oh.shape)
     alpha_t = jnp.broadcast_to(alpha_t, xt_oh.shape)
     ratio = alpha_t / alpha_s
-    # (bsz, *seq_len, M)
 
-    # Extract invariant probabilities.
     pi = self.corruption_process.invariant_probs_vec
-    pi_xt = pi[xt[..., 0]][..., None]  # The prior prob of the current token
-    # (bsz, *seq_len, 1)
+    pi_xt = pi[xt[..., 0]][..., None]
 
-    # Calculate q(x_t | x_s).
     q_xt_given_xs = ratio * xt_oh + (1.0 - ratio) * pi_xt
-    # (bsz, *seq_len, M)
-
-    # Calculate q(x_t | x_0)'
     q_xt_given_x0 = alpha_t * xt_oh + (1.0 - alpha_t) * pi_xt
-    # (bsz, *seq_len, M)
 
-    # Calculate integration weights: W(x_0) = p(x_0 | x_t) / q(x_t | x_0).
     w_x0 = p_x0 / jnp.clip(q_xt_given_x0, min=1e-12)
-    # (bsz, *seq_len, M)
     sum_w = jnp.sum(w_x0, axis=-1, keepdims=True)
-    # (bsz, *seq_len, 1)
-
-    # Compute Sum_{x_0} W(x_0) * q(x_s | x_0).
     expected_xs_given_x0 = alpha_s * w_x0 + (1.0 - alpha_s) * pi * sum_w
-    # (bsz, *seq_len, M)
-
-    # Final marginalized probability p(x_s | x_t).
     p_xs = q_xt_given_xs * expected_xs_given_x0
-    # (bsz, *seq_len, M)
 
-    # Convert to logits and sample.
     total_logit = jnp.log(jnp.clip(p_xs, min=1e-12))
     new_xt = jax.random.categorical(key=key, logits=total_logit)[..., None]
-    new_xt = self.corruption_process.post_corruption_fn(new_xt)
-
-    # Replace the unused tokens with the unused_token.
-    new_xt = jnp.where(
-        unused_mask, self.corruption_process.unused_token, new_xt
+    return _post_process_discrete_step(
+        new_xt=new_xt,
+        xt=xt,
+        logits=logits,
+        next_step_info=next_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
-
-    return DiffusionStep(
-        xt=new_xt,
-        step_info=next_step_info,
-        aux={'logits': logits},
-    )
-    # `logits` need to be passed in `aux` dictionary to a performance
-    # bug when using TPU. Needs to be investigated.
 
   @kt.typechecked
   def finalize(
@@ -1433,11 +1300,7 @@ class IntegratedDiscreteDDIMStep(SamplerStep):
       current_step: DiffusionStep,
       last_step_info: StepInfo,
   ) -> DiffusionStep:
-    return self.update(
-        prediction,
-        current_step,
-        last_step_info,
-    )
+    return self.update(prediction, current_step, last_step_info)
 
 
 ################################################################################
@@ -1474,7 +1337,7 @@ class PriorStep(SamplerStep):
   corruption_process: CategoricalProcess
   planner: RoutingStrategy | None = None
   temperature: float = 1.0
-  logits_dtype: jnp.dtype = jnp.bfloat16  # pyrefly: ignore[bad-assignment]
+  logits_dtype: DType = jnp.bfloat16
 
   @kt.typechecked
   def initialize(
@@ -1482,19 +1345,11 @@ class PriorStep(SamplerStep):
       initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
       initial_step_info: StepInfo,
   ) -> DiffusionStep:
-    discrete.assert_discrete_shape_is_valid(
-        initial_noise, x_name='initial_noise'
-    )
-
-    init_logits = jnp.repeat(
-        initial_noise, self.corruption_process.num_categories, axis=-1
-    )
-    init_logits = jnp.zeros_like(init_logits, dtype=self.logits_dtype)
-
-    return DiffusionStep(
-        xt=initial_noise,
-        step_info=initial_step_info,
-        aux={'logits': init_logits},
+    return _initialize_discrete_step(
+        initial_noise,
+        initial_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
 
   @kt.typechecked
@@ -1504,20 +1359,15 @@ class PriorStep(SamplerStep):
       current_step: DiffusionStep,
       next_step_info: StepInfo,
   ) -> DiffusionStep:
-
-    current_step_info = current_step.step_info
     xt = current_step.xt
-    discrete.assert_discrete_shape_is_valid(xt, x_name='xt')
-    unused_mask = xt == self.corruption_process.unused_token
-
-    time = current_step_info.time
+    time = current_step.step_info.time
     next_time = next_step_info.time
     time_bcast = jax_helpers.bcast_right(time, xt.ndim)
     next_time_bcast = jax_helpers.bcast_right(next_time, xt.ndim)
-    key = next_step_info.rng
 
-    _, candidate_key, plan_key, route_key = jax.random.split(key, 4)
-
+    _, candidate_key, plan_key, route_key = jax.random.split(
+        next_step_info.rng, 4
+    )
     x0, x_noise, logits = _generate_candidates(
         corruption_process=self.corruption_process,
         prediction=prediction,
@@ -1526,41 +1376,30 @@ class PriorStep(SamplerStep):
         key=candidate_key,
         temperature=self.temperature,
     )
-    discrete.assert_discrete_shape_is_valid(x0, x_name='x0')
-    # TODO(vdebortoli): Revisit discrete sampler logic.
 
-    # Forward corruption weights: p(x_s | x_0) = α_s·δ_{x_0} + (1-α_s)·π
     alpha_s = self.corruption_process.schedule.alpha(next_time_bcast)
-    p_stay = jnp.zeros_like(xt, dtype=jnp.float32)
-    p_noise = jnp.broadcast_to(1.0 - alpha_s, xt.shape).astype(jnp.float32)
-    p_clean = jnp.broadcast_to(alpha_s, xt.shape).astype(jnp.float32)
-    routing_weights = Routing(stay=p_stay, noise=p_noise, clean=p_clean)
+    routing_weights = Routing(
+        stay=jnp.zeros_like(xt, dtype=jnp.float32),
+        noise=jnp.broadcast_to(1.0 - alpha_s, xt.shape).astype(jnp.float32),
+        clean=jnp.broadcast_to(alpha_s, xt.shape).astype(jnp.float32),
+    )
 
-    # Apply planner transformation (if any)
-    if self.planner:
+    if self.planner is not None:
       routing_weights = self.planner(
           routing_weights, logits, x0, xt, time, next_time, plan_key
       )
-
-    # Sample next state via 3-way routing
     new_xt = _sample_routing(
+        key=route_key,
         weights=routing_weights,
         candidates=Routing(stay=xt, noise=x_noise, clean=x0),
-        key=route_key,
     )
-
-    new_xt = self.corruption_process.post_corruption_fn(new_xt)
-
-    # Replace unused tokens
-    new_xt = jnp.where(
-        unused_mask, self.corruption_process.unused_token, new_xt
-    )
-    logits = logits.astype(self.logits_dtype)
-
-    return DiffusionStep(
-        xt=new_xt,
-        step_info=next_step_info,
-        aux={'logits': logits},
+    return _post_process_discrete_step(
+        new_xt=new_xt,
+        xt=xt,
+        logits=logits,
+        next_step_info=next_step_info,
+        corruption_process=self.corruption_process,
+        logits_dtype=self.logits_dtype,
     )
 
   @kt.typechecked
@@ -1570,8 +1409,4 @@ class PriorStep(SamplerStep):
       current_step: DiffusionStep,
       last_step_info: StepInfo,
   ) -> DiffusionStep:
-    return self.update(
-        prediction,
-        current_step,
-        last_step_info,
-    )
+    return self.update(prediction, current_step, last_step_info)

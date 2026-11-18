@@ -15,10 +15,10 @@
 """Tests for the DiT backbone."""
 
 from hackable_diffusion.lib import test_helpers
+from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import dit
 from hackable_diffusion.lib.architecture import dit_blocks
 from hackable_diffusion.lib.architecture import normalization
-from hackable_diffusion.lib.architecture import attention
 import jax
 import jax.numpy as jnp
 
@@ -153,10 +153,10 @@ class DiTTest(parameterized.TestCase):
         },
         'ConditionalNorm_MLP': {
             'conditioning': {
-              'Dense_ScaleShift': {
-                  'kernel': (self.cond_dim, self.embedding_dim * 2),
-                  'bias': (self.embedding_dim * 2,),
-              },
+                'Dense_ScaleShift': {
+                    'kernel': (self.cond_dim, self.embedding_dim * 2),
+                    'bias': (self.embedding_dim * 2,),
+                },
             },
         },
         'attention': {
@@ -254,6 +254,41 @@ class DiTTest(parameterized.TestCase):
     )
     self.assertEqual(output.shape, input_shape)  # pyrefly: ignore[missing-attribute]
 
+  def test_dtype_forwarding(self):
+    input_shape = (self.batch_size, self.sequence_length, self.embedding_dim)
+    x = jnp.ones(input_shape, dtype=jnp.float32)
+    conditioning_embeddings = {
+        'adaptive_norm': jnp.ones(
+            (self.batch_size, self.cond_dim), dtype=jnp.float32
+        ),
+    }
+    model = dit.DiT(
+        num_blocks=1,
+        dtype=jnp.bfloat16,
+        cast_to_float32=False,
+        block=dit_blocks.DiTBlock(
+            hidden_size=self.embedding_dim,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+            norm_strategy=normalization.ConditionalRMSNormStrategy(
+                use_shift=False
+            ),
+            use_gates=False,
+        ),
+    )
+    variables = model.init(
+        self.key,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    output = model.apply(
+        variables,
+        x=x,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=self.is_training,
+    )
+    self.assertEqual(output.dtype, jnp.bfloat16)  # pyrefly: ignore[missing-attribute]
+
   def test_missing_adaptive_norm_raises(self):
     x = jnp.ones((self.batch_size, self.sequence_length, self.embedding_dim))
     conditioning_embeddings = {}
@@ -278,6 +313,52 @@ class DiTTest(parameterized.TestCase):
           conditioning_embeddings=conditioning_embeddings,
           is_training=self.is_training,
       )
+
+  def test_padding_mask_from_conditioning_embeddings(self):
+    x_a = jax.random.normal(self.key, (2, 5, self.embedding_dim))
+    x_b = x_a.at[:, 3:, :].set(100.0)
+    padding_mask = jnp.array(
+        [[True, True, True, False, False], [True, True, True, False, False]]
+    )
+    conditioning_embeddings = {
+        'adaptive_norm': jnp.ones((2, self.cond_dim)),
+        'padding_mask': padding_mask,
+    }
+    model = dit.DiT(
+        num_blocks=2,
+        block=dit_blocks.DiTBlock(
+            hidden_size=self.embedding_dim,
+            attention_heads_spec=attention.AttentionHeadsSpec(num_heads=4),
+            norm_strategy=normalization.ConditionalRMSNormStrategy(
+                use_shift=False
+            ),
+            use_gates=False,
+        ),
+    )
+    variables = model.init(
+        self.key,
+        x=x_a,
+        conditioning_embeddings=conditioning_embeddings,
+        is_training=False,
+    )
+    variables = jax.tree.map(lambda p: p + 0.1, variables)
+    out_a = jnp.asarray(
+        model.apply(
+            variables,
+            x=x_a,
+            conditioning_embeddings=conditioning_embeddings,
+            is_training=False,
+        )
+    )
+    out_b = jnp.asarray(
+        model.apply(
+            variables,
+            x=x_b,
+            conditioning_embeddings=conditioning_embeddings,
+            is_training=False,
+        )
+    )
+    self.assertTrue(jnp.allclose(out_a[:, :3], out_b[:, :3], atol=1e-5))
 
 
 if __name__ == '__main__':
