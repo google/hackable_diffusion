@@ -438,10 +438,10 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         DiffusionStep(
             xt=jnp.array(
                 [[
-                    [0.924722, 0.0, 0.0, 0.0],
-                    [0.0, 0.924722, 0.0, 0.0],
-                    [0.0, 0.0, 0.924722, 0.0],
-                    [0.0, 0.0, 0.0, 0.924722],
+                    [1.024722, 0.0, 0.0, 0.0],
+                    [0.0, 1.024722, 0.0, 0.0],
+                    [0.0, 0.0, 1.024722, 0.0],
+                    [0.0, 0.0, 0.0, 1.024722],
                 ]],
                 dtype=jnp.float32,
             ),
@@ -486,10 +486,10 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         DiffusionStep(
             xt=jnp.array(
                 [[
-                    [0.924722, 0.0, 0.0, 0.0],
-                    [0.0, 0.924722, 0.0, 0.0],
-                    [0.0, 0.0, 0.924722, 0.0],
-                    [0.0, 0.0, 0.0, 0.924722],
+                    [1.024722, 0.0, 0.0, 0.0],
+                    [0.0, 1.024722, 0.0, 0.0],
+                    [0.0, 0.0, 1.024722, 0.0],
+                    [0.0, 0.0, 0.0, 1.024722],
                 ]],
                 dtype=jnp.float32,
             ),
@@ -502,6 +502,55 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         ),
         atol=1e-6,
     )
+
+  def test_batch_elements_are_independent(self):
+    xt_a = jnp.stack([jnp.eye(4), jnp.eye(4)], axis=0)
+    xt_b = jnp.stack([jnp.eye(4), 50.0 * jnp.eye(4)], axis=0)
+    init_a = self.adjusted_ddim_step.initialize(
+        initial_noise=xt_a,
+        initial_step_info=StepInfo(
+            step=0, time=jnp.array([0.4, 0.4]), rng=jax.random.PRNGKey(0)
+        ),
+    )
+    init_b = self.adjusted_ddim_step.initialize(
+        initial_noise=xt_b,
+        initial_step_info=StepInfo(
+            step=0, time=jnp.array([0.4, 0.4]), rng=jax.random.PRNGKey(0)
+        ),
+    )
+    next_info = StepInfo(
+        step=1, time=jnp.array([0.1, 0.1]), rng=jax.random.PRNGKey(1)
+    )
+    out_a = self.adjusted_ddim_step.update(
+        prediction={'x0': jnp.zeros_like(xt_a)},
+        current_step=init_a,
+        next_step_info=next_info,
+    )
+    out_b = self.adjusted_ddim_step.update(
+        prediction={'x0': jnp.zeros_like(xt_b)},
+        current_step=init_b,
+        next_step_info=next_info,
+    )
+    chex.assert_trees_all_close(out_a.xt[0], out_b.xt[0], atol=1e-6)
+
+  def test_zero_step_reduces_to_ddim(self):
+    # When next_time == time, next_xt_var == 0 so AdjustedDDIM == DDIM(eta=0).
+    ddim_step = gaussian_step_sampler.DDIMStep(
+        corruption_process=self.process, stoch_coeff=0.0
+    )
+    init = self.adjusted_ddim_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=StepInfo(
+            step=0, time=jnp.array([0.3]), rng=jax.random.PRNGKey(0)
+        ),
+    )
+    same_info = StepInfo(
+        step=1, time=jnp.array([0.3]), rng=jax.random.PRNGKey(1)
+    )
+    pred = {'x0': 0.5 * self.initial_noise}
+    adj_out = self.adjusted_ddim_step.update(pred, init, same_info)
+    ddim_out = ddim_step.update(pred, init, same_info)
+    chex.assert_trees_all_close(adj_out.xt, ddim_out.xt, atol=1e-6)
 
 
 class DDIMStepTest(parameterized.TestCase):
@@ -1130,6 +1179,17 @@ class HeunStepTest(absltest.TestCase):
           time_schedule=self.time_schedule,
           num_steps=3,
       )
+
+  def test_fail_for_invalid_num_steps(self):
+    for bad_steps in (0, -2):
+      with self.assertRaisesRegex(
+          ValueError, 'Number of steps must be at least 2'
+      ):
+        gaussian_step_sampler.HeunStep(
+            corruption_process=self.process,
+            time_schedule=self.time_schedule,
+            num_steps=bad_steps,
+        )
 
   def test_finalize(self):
     # We need to manually get the step infos for the test.
