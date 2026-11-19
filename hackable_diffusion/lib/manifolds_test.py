@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for manifolds."""
+"""Unit tests for Sphere, SO(3), and Torus Riemannian manifolds."""
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -540,6 +540,60 @@ class TorusTest(parameterized.TestCase):
     v_yx = self.manifold.velocity(x=y, y=x, t=t)
 
     self.assertFalse(jnp.allclose(v_xy, v_yx, atol=1e-3))
+
+  def test_product_manifolds_and_1d_time_broadcast(self):
+    key = jax.random.PRNGKey(9)
+    k1, k2 = jax.random.split(key)
+    t_1d = jnp.array([0.25, 0.75])
+    t_3d = t_1d[:, None, None]
+    t_4d = t_1d[:, None, None, None]
+
+    # Torus product (B=2, N=3, D=4)
+    torus = manifolds.Torus()
+    tx = torus.random_uniform(k1, (2, 3, 4))
+    ty = torus.random_uniform(k2, (2, 3, 4))
+    torus_dist = torus.dist(tx, ty)
+    expected_torus_dist = jnp.linalg.norm(
+        jnp.stack([torus.dist(tx[:, i], ty[:, i]) for i in range(3)], axis=-1),
+        axis=-1,
+    )
+    np.testing.assert_allclose(torus_dist, expected_torus_dist, atol=1e-5)
+    np.testing.assert_allclose(
+        manifolds.geodesic(torus, tx, ty, t_1d),
+        manifolds.geodesic(torus, tx, ty, t_3d),
+        atol=1e-5,
+    )
+
+    # SO3 product (B=2, N=3, 3, 3)
+    so3 = manifolds.SO3()
+    rx = so3.random_uniform(k1, (2, 3, 3, 3))
+    ry = so3.random_uniform(k2, (2, 3, 3, 3))
+    so3_dist = so3.dist(rx, ry)
+    expected_so3_dist = jnp.linalg.norm(
+        jnp.stack([so3.dist(rx[:, i], ry[:, i]) for i in range(3)], axis=-1),
+        axis=-1,
+    )
+    np.testing.assert_allclose(so3_dist, expected_so3_dist, atol=1e-5)
+    np.testing.assert_allclose(
+        so3.velocity(rx, ry, t_1d),
+        so3.velocity(rx, ry, t_4d),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        manifolds.geodesic(so3, rx, ry, t_1d),
+        manifolds.geodesic(so3, rx, ry, t_4d),
+        atol=1e-5,
+    )
+
+    # Sphere 1D time broadcast
+    sphere = manifolds.Sphere()
+    sx = sphere.random_uniform(k1, (2, 3, 4))
+    sy = sphere.random_uniform(k2, (2, 3, 4))
+    np.testing.assert_allclose(
+        sphere.velocity(sx, sy, t_1d),
+        sphere.velocity(sx, sy, t_3d),
+        atol=1e-5,
+    )
 
 
 if __name__ == "__main__":

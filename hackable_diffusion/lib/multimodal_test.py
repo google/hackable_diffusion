@@ -707,6 +707,71 @@ class NestedSelfConditioningDiffusionNetworkTest(parameterized.TestCase):
     }
     chex.assert_trees_all_close(output, expected_output)
 
+  def test_nested_self_conditioning_partial_none_rescalers(self):
+    num_categories = 4
+    batch_size = 2
+
+    class FirstHalfBackbone(nn.Module, diffusion_network.ConditionalBackbone):
+
+      @nn.compact
+      def __call__(self, x, conditioning_embeddings, is_training):
+        del conditioning_embeddings, is_training
+        return jax.tree.map(lambda arr: arr[..., : arr.shape[-1] // 2], x)
+
+    class DummyCondEncoder(nn.Module):
+
+      @nn.compact
+      def __call__(self, time, conditioning, is_training):
+        del conditioning, is_training
+        return {'time': time}
+
+    mock_process = mock.create_autospec(
+        discrete.CategoricalProcess, instance=True
+    )
+    mock_process.num_categories = num_categories
+    processes = multimodal.NestedProcess(
+        processes={'a': mock_process, 'b': {'c': mock_process}}
+    )
+    xt = {
+        'a': jnp.ones((batch_size, 3, num_categories)),
+        'b': {'c': jnp.ones((batch_size, num_categories))},
+    }
+    time = {
+        'a': jnp.ones((batch_size, 1)),
+        'b': {'c': jnp.ones((batch_size, 1))},
+    }
+    network = multimodal.NestedSelfConditioningDiffusionNetwork(
+        backbone_network=FirstHalfBackbone(),
+        conditioning_encoder=DummyCondEncoder(),
+        prediction_type={'a': 'logits', 'b': {'c': 'logits'}},
+        processes=processes,
+        self_cond_prob=0.0,
+        time_rescaler={'a': None, 'b': {'c': lambda t: t * 2.0}},  # pyrefly: ignore[bad-argument-type]
+        input_rescaler={'a': lambda t, x: x * 0.5, 'b': {'c': None}},  # pyrefly: ignore[bad-argument-type]
+    )
+    key = jax.random.PRNGKey(0)
+    variables = network.init(
+        {'params': key, 'self_conditioning': key},
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=False,
+    )
+    output = network.apply(
+        variables,
+        time=time,
+        xt=xt,
+        conditioning=None,
+        is_training=False,
+    )
+    chex.assert_trees_all_close(
+        output,
+        {
+            'a': {'logits': 0.5 * xt['a']},
+            'b': {'c': {'logits': xt['b']['c']}},
+        },
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

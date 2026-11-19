@@ -458,6 +458,7 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
           else time,
           time,
           self.time_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       time_rescaled = time
@@ -470,6 +471,7 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
           time,
           xt,
           self.input_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       xt_rescaled = xt

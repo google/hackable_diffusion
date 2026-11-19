@@ -207,8 +207,6 @@ class NestedProcess(hd_api.CorruptionProcess):
     )
 
 
-
-
 ################################################################################
 # MARK: NestedSamplerStep
 ################################################################################
@@ -453,7 +451,7 @@ class NestedGuidanceFn(guidance_lib.GuidanceFn):
   def __call__(
       self,
       xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeTree,  # pyrefly: ignore[not-a-type]
       cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
       uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
@@ -505,7 +503,7 @@ class NestedProjectionFn(projection_lib.ProjectionFn):
   def __call__(
       self,
       xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       time: TimeTree,  # pyrefly: ignore[not-a-type]
       outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
@@ -577,7 +575,8 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
   tree-aware ``NestedGuidanceFn`` / ``NestedProjectionFn``.
 
   The ``base_inference_fn`` is expected to accept tree-valued inputs directly
-  (e.g. a ``NestedFlaxLinenInferenceFn`` wrapping a ``MultiModalDiffusionNetwork``).
+  (e.g. a ``NestedFlaxLinenInferenceFn`` wrapping a
+  ``MultiModalDiffusionNetwork``).
 
   Usage Example:
     ```
@@ -633,7 +632,7 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
     guided_outputs = self.guidance_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         cond_outputs=cond_outputs,
         uncond_outputs=uncond_outputs,
@@ -641,12 +640,11 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         outputs=guided_outputs,
     )
     return projected_outputs
-
 
 
 ################################################################################
@@ -788,7 +786,10 @@ class NestedSelfConditioningDiffusionNetwork(
     # 1. Rescale time and input (handling PyTrees)
     if self.time_rescaler is not None:
       time_rescaled = jax_helpers.lenient_map(
-          lambda t, tr: tr(t) if tr is not None else t, time, self.time_rescaler
+          lambda t, tr: tr(t) if tr is not None else t,
+          time,
+          self.time_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       time_rescaled = time
@@ -799,6 +800,7 @@ class NestedSelfConditioningDiffusionNetwork(
           time,
           xt,
           self.input_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       xt_rescaled = xt

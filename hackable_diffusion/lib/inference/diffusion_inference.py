@@ -96,7 +96,7 @@ class GuidedDiffusionInferenceFn(InferenceFn):
 
     guided_outputs = self.guidance_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         cond_outputs=cond_outputs,
         uncond_outputs=uncond_outputs,
@@ -104,7 +104,7 @@ class GuidedDiffusionInferenceFn(InferenceFn):
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         outputs=guided_outputs,
     )

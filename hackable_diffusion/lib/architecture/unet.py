@@ -16,7 +16,6 @@
 
 from typing import Sequence
 import flax.linen as nn
-from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import attention
@@ -70,6 +69,8 @@ class Unet(nn.Module):
       as in https://arxiv.org/abs/2104.09864.
     attention_rope_positions_fn: The position function of rotary positional
       embeddings.
+    attention_dropout_rate: Dropout rate applied to attention weights inside
+      `AttentionResidualBlock` (defaults to 0.0).
     norm_strategy: Strategy for creating normalization layers.
     activation: Name of the activation function (e.g., 'silu', 'gelu').
     skip_connection_fn: Function for skip connections.
@@ -109,6 +110,7 @@ class Unet(nn.Module):
   skip_connection_fn: unet_blocks.SkipConnectionFn
 
   output_channels: int | None = None
+  attention_dropout_rate: float = 0.0
   zero_init_output: bool = True
   dtype: DType = jnp.float32
 
@@ -130,10 +132,6 @@ class Unet(nn.Module):
 
     self.num_scales = len(self.channels_multiplier)
     self.activation_fn = getattr(jax.nn, self.activation)
-
-    self.post_norm = self.uncond_norm_strategy.build_layer(
-        name="PostNorm"
-    )
 
   @nn.compact
   @kt.typechecked
@@ -197,6 +195,7 @@ class Unet(nn.Module):
               skip_connection_fn=self.skip_connection_fn,
               attention_heads_spec=self.attention_heads_spec,
               normalize_qk=self.attention_normalize_qk,
+              dropout_rate=self.attention_dropout_rate,
               dtype=self.dtype,
               name=f"Down_{i}_AttentionResidualBlock_{j}",
           )(
@@ -242,6 +241,7 @@ class Unet(nn.Module):
         skip_connection_fn=self.skip_connection_fn,
         attention_heads_spec=self.attention_heads_spec,
         normalize_qk=self.attention_normalize_qk,
+        dropout_rate=self.attention_dropout_rate,
         dtype=self.dtype,
         name="Middle_AttentionResidualBlock",
     )(x=x, cross_attention_emb=cross_attention_emb, is_training=is_training)
@@ -281,6 +281,7 @@ class Unet(nn.Module):
               skip_connection_fn=self.skip_connection_fn,
               attention_heads_spec=self.attention_heads_spec,
               normalize_qk=self.attention_normalize_qk,
+              dropout_rate=self.attention_dropout_rate,
               dtype=self.dtype,
               name=f"Up_{i}_AttentionResidualBlock_{j}",
           )(

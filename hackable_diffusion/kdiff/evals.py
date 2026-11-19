@@ -15,7 +15,7 @@
 """Sampling evaluator for Diffusion models."""
 
 import dataclasses
-from typing import Any
+from typing import Any, cast
 from flax import linen as nn
 import flax.struct
 from hackable_diffusion import hd
@@ -29,7 +29,6 @@ import kauldron.data.utils as data_utils
 # MARK: Type Aliases
 ################################################################################
 
-Array = hd_typing.Array
 Conditioning = hd_typing.Conditioning
 DataTree = hd_typing.DataTree
 
@@ -53,6 +52,7 @@ class KDiffInferenceFn:
   def from_model_and_context(
       self, model: nn.Module, context: kd.train.Context
   ) -> hd.inference.InferenceFn:
+    """Builds an InferenceFn from the Kauldron model and eval context."""
     network = kd.kontext.get_by_path(model, self.network_path)
     params = kd.kontext.get_by_path(context.params, self.network_path)
 
@@ -135,10 +135,10 @@ class SamplingEvaluator(kd.evals.Evaluator):
       model: nn.Module,
       context: kd.train.Context,
       key: hd.hd_typing.PRNGKey,
-  ) -> tuple[DataTree, Array["batch *cond_shape"]]:  # pyrefly: ignore[not-a-type, unknown-name]
+  ) -> tuple[DataTree, Conditioning | None]:  # pyrefly: ignore[not-a-type]
     _, kwargs = data_utils.get_model_inputs(model, context)
     x0 = kwargs["x0"]
-    cond = kwargs.get("cond", None)  # cond is optional
+    cond = cast(Conditioning | None, kwargs.get("cond", None))
     x1 = model.corruption_process.sample_from_invariant(key, x0)
     return x1, cond
 

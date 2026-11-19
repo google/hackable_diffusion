@@ -15,9 +15,16 @@
 """API for diffusion losses."""
 
 # pylint: disable=g-importing-member
+from hackable_diffusion.lib.hd_api import DiffusionLoss
+from hackable_diffusion.lib.training import time_sampling
 from hackable_diffusion.lib.training.discrete_loss import MD4Loss
 from hackable_diffusion.lib.training.discrete_loss import NoWeightDiscreteLoss
 from hackable_diffusion.lib.training.gaussian_loss import NoWeightGaussianLoss
 from hackable_diffusion.lib.training.gaussian_loss import SiD2Loss
+from hackable_diffusion.lib.training.time_sampling import LogitNormalTimeSampler
+from hackable_diffusion.lib.training.time_sampling import TimeSampler
+from hackable_diffusion.lib.training.time_sampling import UnbalancedTimestepSampler
+from hackable_diffusion.lib.training.time_sampling import UniformStratifiedTimeSampler
+from hackable_diffusion.lib.training.time_sampling import UniformTimeSampler
 
 # pylint: enable=g-importing-member

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for sampling."""
+"""Unit tests for DiffusionSampler and DiffusionSamplerWithEarlyStopping."""
 
 import dataclasses
 from typing import Callable
@@ -276,21 +276,14 @@ class DiffusionSamplerTest(parameterized.TestCase):
       ('one_step', 1),
   )
   def test_raises_error_for_less_than_two_steps(self, num_steps: int):
-    """Tests that an error is raised for a non-positive number of steps."""
-    sample_fn = sampling.DiffusionSampler(
-        time_schedule=self.time_schedule,
-        stepper=self.stepper,
-        num_steps=num_steps,
-    )
-
+    """Tests that an error is raised at construction for fewer than 2 steps."""
     with self.assertRaisesRegex(
         ValueError, 'Number of steps must be at least 2.*'
     ):
-      sample_fn(
-          inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
-          initial_noise=self.initial_noise,
-          conditioning=self.conditioning,
-          rng=jax.random.PRNGKey(0),
+      sampling.DiffusionSampler(
+          time_schedule=self.time_schedule,
+          stepper=self.stepper,
+          num_steps=num_steps,
       )
 
   def test_sample_one_2_steps(self):
@@ -363,17 +356,17 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
 
   # MARK: Basic sampling
 
-  def test_sample_5_steps_last_step(self):
-    """Test that the final step matches the expected result with 5 steps.
+  def test_sample_6_steps_last_step(self):
+    """Test that the final step matches the expected result with num_steps=6.
 
-    With num_steps=5 the while_loop runs 4 update steps (shift_right).
+    With num_steps=6 the while_loop runs 4 update steps (shift_right).
     shift_right^4 on a 4x4 identity wraps back to identity, then
     finalize=invert gives 1-eye(4).
     """
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=5,
+        num_steps=6,
     )
     last_step, trajectory = sample_fn(
         inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
@@ -403,31 +396,25 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
   @parameterized.named_parameters(
       ('zero_steps', 0),
       ('negative_steps', -1),
+      ('one_step', 1),
   )
-  def test_raises_error_for_less_than_one_step(self, num_steps: int):
-    """Tests that an error is raised for a non-positive number of steps."""
-    sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
-        time_schedule=self.time_schedule,
-        stepper=self.stepper,
-        num_steps=num_steps,
-    )
-
+  def test_raises_error_for_less_than_two_steps(self, num_steps: int):
+    """Tests that an error is raised at construction for fewer than 2 steps."""
     with self.assertRaisesRegex(
-        ValueError, 'Number of steps must be at least 1.*'
+        ValueError, 'Number of steps must be at least 2.*'
     ):
-      sample_fn(
-          inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
-          initial_noise=self.initial_noise,
-          conditioning=self.conditioning,
-          rng=jax.random.PRNGKey(0),
+      sampling.DiffusionSamplerWithEarlyStopping(
+          time_schedule=self.time_schedule,
+          stepper=self.stepper,
+          num_steps=num_steps,
       )
 
-  def test_sample_1_step(self):
-    """With 1 step: init + finalize only (no update steps)."""
+  def test_sample_2_steps(self):
+    """With num_steps=2: init + finalize only (0 updates, 1 transition)."""
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=1,
+        num_steps=2,
     )
     last_step, trajectory = sample_fn(
         inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
@@ -453,12 +440,12 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     )
     chex.assert_trees_all_equal(last_step.xt, expected_last)
 
-  def test_sample_2_steps(self):
-    """With 2 steps: init -> 1 update -> finalize."""
+  def test_sample_3_steps(self):
+    """With num_steps=3: init -> 1 update -> finalize."""
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=2,
+        num_steps=3,
     )
     last_step, trajectory = sample_fn(
         inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
@@ -479,12 +466,12 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     )
     chex.assert_trees_all_equal(last_step.xt, expected_last)
 
-  def test_sample_3_steps(self):
-    """With 3 steps: init -> 2 shift_rights -> finalize."""
+  def test_sample_4_steps(self):
+    """With num_steps=4: init -> 2 shift_rights -> finalize."""
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=3,
+        num_steps=4,
     )
     last_step, _ = sample_fn(
         inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
@@ -520,11 +507,11 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
   # MARK: Step counter
 
   def test_step_counter_without_early_stopping(self):
-    """step_info.step records actual total steps (updates + finalize)."""
+    """step_info.step records actual denoising steps (updates + finalize)."""
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=5,
+        num_steps=6,
     )
     last_step, _ = sample_fn(
         inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
@@ -532,16 +519,15 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
     )
-    # 5 steps: 4 updates + 1 finalize = 5, but step counter = updates + 1
-    # num_steps=5 → 4 intermediate update steps + 1 finalize = 5
+    # num_steps=6 → 4 intermediate update steps + 1 finalize = 5
     self.assertEqual(int(last_step.step_info.step), 5)
 
-  def test_step_counter_1_step(self):
-    """With 1 step: 0 updates + 1 finalize = 1."""
+  def test_step_counter_2_steps(self):
+    """With num_steps=2: 0 updates + 1 finalize = 1."""
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=1,
+        num_steps=2,
     )
     last_step, _ = sample_fn(
         inference_fn=self.dummy_inference_fn,  # pyrefly: ignore[bad-argument-type]
@@ -549,7 +535,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
     )
-    # num_steps=1 → 0 update steps + 1 finalize = 1
+    # num_steps=2 → 0 update steps + 1 finalize = 1
     self.assertEqual(int(last_step.step_info.step), 1)
 
   # MARK: Early stopping
@@ -559,7 +545,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=5,
+        num_steps=6,
         early_stopping_fn=StopAfterNSteps(num_steps=1),
     )
     last_step, _ = sample_fn(
@@ -588,7 +574,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=5,
+        num_steps=6,
         early_stopping_fn=AlwaysStop(),
     )
     last_step, _ = sample_fn(
@@ -614,7 +600,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=5,
+        num_steps=6,
         early_stopping_fn=diffusion_early_stopping.DiffusionNoEarlyStopFn(),
     )
     last_step, _ = sample_fn(
@@ -623,7 +609,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         conditioning=self.conditioning,
         rng=jax.random.PRNGKey(0),
     )
-    # Same as test_sample_5_steps_last_step: 4 shift_rights + invert.
+    # Same as test_sample_6_steps_last_step: 4 shift_rights + invert.
     expected_last = jnp.repeat(
         jnp.expand_dims(
             jnp.array([
@@ -650,7 +636,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=5,
+        num_steps=6,
         early_stopping_fn=PerElementStop(stop_at_step=(0, 2)),
     )
     last_step, _ = sample_fn(
@@ -695,19 +681,7 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
       ('10_steps', 10),
   )
   def test_equivalence_with_scan_sampler(self, num_steps: int):
-    """The while_loop sampler produces the same xt as the scan sampler.
-
-    The scan-based DiffusionSampler with ``num_steps=N`` performs ``N-2``
-    update steps, while DiffusionSamplerWithEarlyStopping with
-    ``num_steps=M`` performs ``M-1`` update steps.  To get the same number
-    of updates we set ``M = N - 1``.
-
-    Because the dummy inference function ignores time, the different time
-    schedules do not affect the result.
-
-    Args:
-      num_steps: Number of diffusion steps for the scan-based sampler.
-    """
+    """The while_loop sampler matches the scan sampler for the same num_steps."""
     rng = jax.random.PRNGKey(42)
 
     scan_sampler = sampling.DiffusionSampler(
@@ -716,11 +690,10 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
         num_steps=num_steps,
         store_trajectory=False,
     )
-    # N-2 updates (scan) == M-1 updates (while_loop) ⇒ M = N-1.
     whileloop_sampler = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=self.stepper,
-        num_steps=num_steps - 1,
+        num_steps=num_steps,
     )
 
     scan_result, _ = scan_sampler(
@@ -737,6 +710,95 @@ class DiffusionSamplerWithEarlyStoppingTest(parameterized.TestCase):
     )
 
     chex.assert_trees_all_close(scan_result.xt, whileloop_result.xt)
+    self.assertEqual(
+        int(scan_result.step_info.step), int(whileloop_result.step_info.step)
+    )
+
+  def test_time_dependent_single_step_and_scan_equivalence(self):
+    """num_steps=2 and multi-step integrate across the full span and match scan."""
+
+    @dataclasses.dataclass(frozen=True, kw_only=True)
+    class EulerVelocityDummyStep(SamplerStep):
+
+      def initialize(self, initial_noise, initial_step_info):
+        return hd_api.DiffusionStep(
+            xt=initial_noise, step_info=initial_step_info, aux={}
+        )
+
+      def update(self, prediction, current_step, next_step_info):
+        dt = current_step.step_info.time - next_step_info.time
+        return hd_api.DiffusionStep(
+            xt=current_step.xt - dt * prediction['velocity'],
+            step_info=next_step_info,
+            aux={},
+        )
+
+      def finalize(self, prediction, current_step, last_step_info):
+        return self.update(prediction, current_step, last_step_info)
+
+    const_vel_fn = lambda xt, conditioning, time: {
+        'velocity': jnp.ones_like(xt) * 2.0
+    }
+    stepper = EulerVelocityDummyStep()
+
+    # 1 denoising transition (num_steps=2) across [start, stop]:
+    # xt_end = xt_0 - (start - stop) * 2
+    stop, start = self.time_schedule.span
+    one_step_sampler = sampling.DiffusionSamplerWithEarlyStopping(
+        time_schedule=self.time_schedule,
+        stepper=stepper,
+        num_steps=2,
+    )
+    out_1, _ = one_step_sampler(
+        inference_fn=const_vel_fn,  # pyrefly: ignore[bad-argument-type]
+        initial_noise=self.initial_noise,
+        conditioning=self.conditioning,
+        rng=jax.random.PRNGKey(0),
+    )
+    chex.assert_trees_all_close(
+        out_1.xt, self.initial_noise - 2.0 * (start - stop), atol=1e-6
+    )
+
+    scan_1_sampler = sampling.DiffusionSampler(
+        time_schedule=self.time_schedule,
+        stepper=stepper,
+        num_steps=2,
+        store_trajectory=False,
+    )
+    scan_1_out, _ = scan_1_sampler(
+        inference_fn=const_vel_fn,  # pyrefly: ignore[bad-argument-type]
+        initial_noise=self.initial_noise,
+        conditioning=self.conditioning,
+        rng=jax.random.PRNGKey(0),
+    )
+    chex.assert_trees_all_close(scan_1_out.xt, out_1.xt, atol=1e-6)
+
+    # Multi-step equivalence with scan-based DiffusionSampler on time-dependent
+    # stepper for the exact same num_steps.
+    scan_sampler = sampling.DiffusionSampler(
+        time_schedule=self.time_schedule,
+        stepper=stepper,
+        num_steps=5,
+        store_trajectory=False,
+    )
+    while_sampler = sampling.DiffusionSamplerWithEarlyStopping(
+        time_schedule=self.time_schedule,
+        stepper=stepper,
+        num_steps=5,
+    )
+    scan_out, _ = scan_sampler(
+        inference_fn=const_vel_fn,  # pyrefly: ignore[bad-argument-type]
+        initial_noise=self.initial_noise,
+        conditioning=self.conditioning,
+        rng=jax.random.PRNGKey(7),
+    )
+    while_out, _ = while_sampler(
+        inference_fn=const_vel_fn,  # pyrefly: ignore[bad-argument-type]
+        initial_noise=self.initial_noise,
+        conditioning=self.conditioning,
+        rng=jax.random.PRNGKey(7),
+    )
+    chex.assert_trees_all_close(scan_out.xt, while_out.xt, atol=1e-6)
 
 
 ################################################################################
@@ -810,7 +872,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=stepper,
-        num_steps=5,
+        num_steps=6,
         early_stopping_fn=(
             diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
                 entropy_threshold=0.05,
@@ -835,7 +897,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
     """
 
     def mixed_logits(xt):
-      b, l, _ = xt.shape
+      _, l, _ = xt.shape
       # Element 0: confident (near one-hot) → low entropy → stops.
       confident = jnp.full((1, l, 4), -100.0).at[:, :, 0].set(100.0)
       # Element 1: uniform → high entropy → continues.
@@ -846,7 +908,7 @@ class EntropyEarlyStopIntegrationTest(parameterized.TestCase):
     sample_fn = sampling.DiffusionSamplerWithEarlyStopping(
         time_schedule=self.time_schedule,
         stepper=stepper,
-        num_steps=5,
+        num_steps=6,
         early_stopping_fn=(
             diffusion_early_stopping.DiffusionEntropyEarlyStopFn(
                 entropy_threshold=0.05,

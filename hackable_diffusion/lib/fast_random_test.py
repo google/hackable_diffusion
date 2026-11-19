@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for fast_random."""
+"""Unit tests for fast Gamma, Dirichlet, and Beta random samplers."""
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -290,6 +290,21 @@ class SampleLogBetaJointTest(parameterized.TestCase):
     )
     self.assertTrue(jnp.all(jnp.isfinite(log_w)))
     self.assertTrue(jnp.all(jnp.isfinite(log_1mw)))
+
+  def test_shape_none_supported(self):
+    key = jax.random.PRNGKey(0)
+    d = fast_random.log_dirichlet_fast(key, jnp.ones((2, 3)), shape=None)
+    self.assertEqual(d.shape, (2, 3))
+    b1, b2 = fast_random.sample_log_beta_joint(
+        key, jnp.ones((2, 3)), jnp.ones((3,)), shape=None
+    )
+    self.assertEqual(b1.shape, (2, 3))
+    self.assertEqual(b2.shape, (2, 3))
+    b1_default, b2_default = fast_random.sample_log_beta_joint(
+        key, jnp.ones((2, 3)), jnp.ones((3,))
+    )
+    self.assertEqual(b1_default.shape, (2, 3))
+    self.assertEqual(b2_default.shape, (2, 3))
 
 
 if __name__ == "__main__":

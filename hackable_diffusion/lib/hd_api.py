@@ -221,6 +221,6 @@ class SampleFn(Protocol):
       inference_fn: InferenceFn,
       rng: PRNGKey,
       initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
+      conditioning: Conditioning | None = None,
   ) -> tuple[DiffusionStep, DiffusionStep | None]:  # pyrefly: ignore[not-a-type]
     ...

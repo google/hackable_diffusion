@@ -103,6 +103,34 @@ class RemaskingFnTest(parameterized.TestCase):
     result = fn(self.s, self.t)
     chex.assert_trees_all_close(result, expected)
 
+  def test_remasking_switch_window(self):
+    s = jnp.array([0.1, 0.2, 0.3, 0.4])
+    t = jnp.array([0.2, 0.4, 0.6, 0.8])
+    max_fn = discrete_step_sampler.MaxCappedRemaskingFn(
+        schedule=self.schedule,
+        max_cap=0.8,
+        switch_min=0.35,
+        switch_max=0.65,
+    )
+    rescaled_fn = discrete_step_sampler.RescaledRemaskingFn(
+        schedule=self.schedule,
+        rescale_factor=0.5,
+        switch_min=0.35,
+        switch_max=0.65,
+    )
+    in_window = jnp.array([False, True, True, False])
+
+    alpha_s = self.schedule.alpha(s)
+    alpha_t = self.schedule.alpha(t)
+    expected_max = jnp.where(
+        in_window, jnp.minimum((1.0 - alpha_s) / alpha_t, 0.8), 0.0
+    )
+    expected_rescaled = jnp.where(
+        in_window, 0.5 * jnp.minimum((1.0 - alpha_s) / alpha_t, 1.0), 0.0
+    )
+    chex.assert_trees_all_close(max_fn(s, t), expected_max)
+    chex.assert_trees_all_close(rescaled_fn(s, t), expected_rescaled)
+
 
 ################################################################################
 # MARK: Corrupted Mask Tests
@@ -2301,6 +2329,70 @@ class GreedyPlannerTest(absltest.TestCase):
     # Selected positions have stay=0, noise=0.
     self.assertEqual(float(jnp.sum(out.stay[out.clean > 0])), 0.0)
     self.assertEqual(float(jnp.sum(out.noise[out.clean > 0])), 0.0)
+
+
+class LogitsDTypeScanCompatibilityTest(parameterized.TestCase):
+  """Regression tests for scan carry dtype consistency across logits dtypes."""
+
+  @parameterized.product(
+      kind=['unmasking', 'ddim', 'dfm', 'integrated_ddim', 'prior'],
+      dtypes=[
+          (jnp.bfloat16, jnp.float32),
+          (jnp.float32, jnp.bfloat16),
+      ],
+  )
+  def test_lax_scan_casts_network_logits_to_logits_dtype(self, kind, dtypes):
+    pred_dtype, logits_dtype = dtypes
+    schedule = discrete.LinearDiscreteSchedule()
+    num_categories = 4
+    if kind in ('unmasking', 'prior'):
+      process = CategoricalProcess.masking_process(
+          schedule=schedule, num_categories=num_categories
+      )
+    else:
+      process = CategoricalProcess.uniform_process(
+          schedule=schedule, num_categories=num_categories
+      )
+
+    stepper_map = {
+        'unmasking': discrete_step_sampler.UnMaskingStep,
+        'ddim': discrete_step_sampler.DiscreteDDIMStep,
+        'dfm': discrete_step_sampler.DiscreteFlowMatchingStep,
+        'integrated_ddim': discrete_step_sampler.IntegratedDiscreteDDIMStep,
+        'prior': discrete_step_sampler.PriorStep,
+    }
+    stepper = stepper_map[kind](
+        corruption_process=process, logits_dtype=logits_dtype
+    )
+
+    xt_init = process.sample_from_invariant(
+        jax.random.PRNGKey(0), data_spec=jnp.zeros((2, 4, 1), dtype=jnp.int32)
+    )
+    init_info = StepInfo(
+        step=jnp.int32(0),
+        time=jnp.ones((2, 1, 1)),
+        rng=jax.random.PRNGKey(1),
+    )
+    init_carry = stepper.initialize(xt_init, init_info)
+
+    next_infos = StepInfo(
+        step=jnp.arange(1, 3, dtype=jnp.int32),
+        time=jnp.array([[[[0.6]], [[0.6]]], [[[0.2]], [[0.2]]]]),
+        rng=jax.random.split(jax.random.PRNGKey(2), 2),
+    )
+    pred = {
+        'logits': jnp.zeros(
+            (2, 4, process.num_categories), dtype=pred_dtype
+        )
+    }
+
+    def scan_body(carry, info):
+      nxt = stepper.update(pred, carry, info)
+      return nxt, nxt
+
+    final_carry, traj = jax.lax.scan(scan_body, init_carry, next_infos)
+    self.assertEqual(final_carry.aux['logits'].dtype, logits_dtype)
+    self.assertEqual(traj.aux['logits'].dtype, logits_dtype)
 
 
 if __name__ == '__main__':

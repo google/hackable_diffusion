@@ -50,7 +50,7 @@ class UpdateConditioningFn(Protocol):
 
   def __call__(
       self,
-      conditioning: Conditioning,
+      conditioning: Conditioning | None,
       step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
   ) -> Conditioning:
     """Update conditioning based on the current diffusion step.

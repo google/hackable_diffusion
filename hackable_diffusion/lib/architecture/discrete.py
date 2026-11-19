@@ -162,8 +162,8 @@ class DenseProjector(nn.Module, TokenProjector):
       x = einops.rearrange(
           x,
           'b ... (c f) -> b ... c f',
-          c=channel_dimension,  # pytype: disable=name-error
-          f=emb_dimension,  # pytype: disable=name-error
+          c=channel_dimension,
+          f=emb_dimension,
       )
 
     # Project the backbone outputs to the output vocabulary size.
@@ -186,14 +186,19 @@ class ConditionalDiscreteBackbone(nn.Module):
 
   Attributes:
     base_backbone: The base backbone to use for the discrete model. Can be any
-      conditional backbone such as MLP or UNet.
+      conditional backbone such as MLP, DiT, or UNet.
     token_embedder: The token embedder to use for the discrete model.
     token_projector: The token projector to use for the discrete model.
+    pad_token: Optional pad token ID. When set and `'padding_mask'` is not
+      already present in `conditioning_embeddings`, populates
+      `conditioning_embeddings['padding_mask']` with `x != pad_token` (squeezed
+      along the trailing axis) prior to token embedding.
   """
 
   base_backbone: 'diffusion_network.ConditionalBackbone'
   token_embedder: TokenEmbedder
   token_projector: TokenProjector
+  pad_token: int | None = None
 
   def __post_init__(self):
     super().__post_init__()
@@ -213,6 +218,15 @@ class ConditionalDiscreteBackbone(nn.Module):
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
   ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
+
+    if (
+        self.pad_token is not None
+        and 'padding_mask' not in conditioning_embeddings
+    ):
+      conditioning_embeddings = {
+          **conditioning_embeddings,
+          'padding_mask': jnp.squeeze(x != self.pad_token, axis=-1),
+      }
 
     # Embed the tokens.
     token_embeddings = self.token_embedder(x, is_training=is_training)
