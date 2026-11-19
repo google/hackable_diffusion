@@ -259,7 +259,9 @@ class DiffusionNetworkTest(parameterized.TestCase):
 ################################################################################
 
 
-class SelfConditioningBackbone(nn.Module, diffusion_network.ConditionalBackbone):
+class SelfConditioningBackbone(
+    nn.Module, diffusion_network.ConditionalBackbone
+):
   """Backbone for self-conditioning tests.
 
   Accepts input of shape (B, ..., input_channels + num_classes) and returns
@@ -297,7 +299,6 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
 
       def convert_predictions(self, prediction, xt, time):
         raise NotImplementedError()
-
 
     self.key = jax.random.PRNGKey(0)
     self.batch_size = 2
@@ -779,7 +780,6 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
         }
     )
 
-
   def test_nested_inference(self):
     layer = diffusion_network.MultiModalDiffusionNetwork(
         backbone_network=self.nested_backbone,
@@ -816,6 +816,47 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
     )
 
     chex.assert_trees_all_equal_structs(output, modified_nested_t)
+
+  def test_nested_partial_none_rescalers(self):
+    time_rescaler = {
+        'data_1': None,
+        'data_2': {'data_3': lambda t: t * 2.0},
+    }
+    input_rescaler = {
+        'data_1': lambda t, x: x * 0.5,
+        'data_2': {'data_3': None},
+    }
+    layer = diffusion_network.MultiModalDiffusionNetwork(
+        backbone_network=self.nested_backbone,
+        conditioning_encoder=self.nested_cond_encoder,
+        prediction_type=self.nested_prediction_type,
+        data_dtype=self.nested_data_dtype,
+        time_rescaler=time_rescaler,  # pyrefly: ignore[bad-argument-type]
+        input_rescaler=input_rescaler,  # pyrefly: ignore[bad-argument-type]
+    )
+    variables = layer.init(
+        self.key,
+        time=self.nested_t,
+        xt=self.nested_xt,
+        conditioning=self.nested_conditioning,
+        is_training=self.is_training,
+    )
+    output = layer.apply(
+        variables,
+        time=self.nested_t,
+        xt=self.nested_xt,
+        conditioning=self.nested_conditioning,
+        is_training=self.is_training,
+    )
+    chex.assert_trees_all_close(
+        output,
+        {
+            'data_1': {'x0': 0.5 * self.nested_xt['data_1']},
+            'data_2': {
+                'data_3': {'velocity': self.nested_xt['data_2']['data_3']}
+            },
+        },
+    )
 
 
 if __name__ == '__main__':

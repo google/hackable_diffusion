@@ -305,7 +305,7 @@ class SimplicialProcess:
     dirichlet_param = self.temperature * dirichlet_param
     xt = fast_random.log_dirichlet_fast(key, alpha=dirichlet_param)
 
-    logits = x0_oh
+    logits = jax.nn.one_hot(x0[..., 0], self.num_categories)
 
     # Apply post-corruption projection (e.g. symmetrisation).
     xt = self.post_corruption_fn(xt)
@@ -313,6 +313,7 @@ class SimplicialProcess:
     target_info = {
         'x0': x0,  # Int[*b 1]; Uncorrupted input data.
         'logits': logits,  # Float[*b K] one-hot encoding of x0.
+        'is_unused': unused_mask,  # Bool[*b 1] mask of the unused tokens.
     }
 
     # Replace the unused probabilities with the unused_token.
@@ -327,7 +328,8 @@ class SimplicialProcess:
       xt: DataArray,  # pyrefly: ignore[not-a-type]
       time: TimeArray,  # pyrefly: ignore[not-a-type]
   ) -> TargetInfo:
-    del time  # Unused
+    """Converts logits prediction to clean argmax token `x0` and raw `logits`."""
+    del xt, time  # Unused
     if len(prediction) != 1 or 'logits' not in prediction:
       raise KeyError(
           f'Only logits prediction is supported. Got: {prediction.keys()=}'

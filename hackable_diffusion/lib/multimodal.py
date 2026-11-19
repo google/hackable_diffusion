@@ -788,7 +788,10 @@ class NestedSelfConditioningDiffusionNetwork(
     # 1. Rescale time and input (handling PyTrees)
     if self.time_rescaler is not None:
       time_rescaled = jax_helpers.lenient_map(
-          lambda t, tr: tr(t) if tr is not None else t, time, self.time_rescaler
+          lambda t, tr: tr(t) if tr is not None else t,
+          time,
+          self.time_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       time_rescaled = time
@@ -799,6 +802,7 @@ class NestedSelfConditioningDiffusionNetwork(
           time,
           xt,
           self.input_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       xt_rescaled = xt
