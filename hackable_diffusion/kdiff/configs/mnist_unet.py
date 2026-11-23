@@ -191,6 +191,7 @@ def get_config():
   cfg.evals = {
       "sample_DDIM": evals.SamplingEvaluator(
           run=kd.evals.EveryNSteps(10_000, skip_first=True),
+          init_transform=kd.optim.UseEmaParams(),
           num_batches=None,
           sampler=hd.sampling.DiffusionSampler(
               time_schedule=hd.sampling.UniformTimeSchedule(),

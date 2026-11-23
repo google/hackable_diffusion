@@ -32,32 +32,23 @@ relevant representation, for instance score, velocity, etc.
 """
 
 import dataclasses
+from typing import TypeAlias
 
 from hackable_diffusion.lib import fast_random
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import simplicial
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-Float = hd_typing.Float
-
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
-
-DiffusionStep = hd_api.DiffusionStep
-StepInfo = hd_api.StepInfo
-SamplerStep = hd_api.SamplerStep
-
-SimplicialProcess = simplicial.SimplicialProcess
-SimplicialSchedule = simplicial.SimplicialSchedule
+Batch: TypeAlias = hd_api.Batch
+SimplicialProcess: TypeAlias = simplicial.SimplicialProcess
+SimplicialSchedule: TypeAlias = simplicial.SimplicialSchedule
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -65,7 +56,7 @@ SimplicialSchedule = simplicial.SimplicialSchedule
 ################################################################################
 
 
-@kt.typechecked
+@typechecked
 def log_beta_shrinkage(
     key: jax.Array,
     log_x: jax.Array,
@@ -119,42 +110,38 @@ def log_beta_shrinkage(
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class SimplicialDDIMStep(SamplerStep):
+class SimplicialDDIMStep(hd_api.SamplerStep[Batch]):
   """This is the simplicial version of the DDIM step."""
 
   corruption_process: SimplicialProcess
   churn: float = 1.0
   safety_epsilon: float = 1e-6
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfo,
-  ) -> DiffusionStep:
-    return DiffusionStep(
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux={'logits': initial_noise},
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
 
     current_step_info = current_step.step_info
     log_xt = current_step.xt  # Input is now logits (log-probabilities)
 
     time = current_step_info.time
     next_time = next_step_info.time
-
-    # Broadcast time to match batch dimensions
-    time = jax_helpers.bcast_right(time, log_xt.ndim)
-    next_time = jax_helpers.bcast_right(next_time, log_xt.ndim)
     key = next_step_info.rng
 
     # Get logits
@@ -243,19 +230,19 @@ class SimplicialDDIMStep(SamplerStep):
     # DiscreteDDIMStep / IntegratedDiscreteDDIMStep do after sampling new_xt.
     new_xt = self.corruption_process.post_corruption_fn(new_xt)
 
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,  # Output is robust logits
         step_info=next_step_info,
         aux={'logits': logits},
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      last_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self.update(
         prediction,
         current_step,

@@ -15,23 +15,20 @@
 """Inference class for diffusion models."""
 
 import dataclasses
+from typing import TypeAlias
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.inference import guidance
 from hackable_diffusion.lib.inference import projection
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-Conditioning = hd_typing.Conditioning
-DataArray = hd_typing.DataArray
-TimeArray = hd_typing.TimeArray
-TargetInfo = hd_typing.TargetInfo
-
-InferenceFn = hd_api.InferenceFn
+Batch: TypeAlias = hd_api.Batch
+Conditioning: TypeAlias = hd_api.Conditioning
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -40,18 +37,18 @@ InferenceFn = hd_api.InferenceFn
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class IdentityInferenceFn(InferenceFn):
+class IdentityInferenceFn(hd_api.InferenceFn[Batch]):
   """Identity inference function that predicts x0 = xt."""
 
-  process: hd_api.CorruptionProcess
+  process: hd_api.CorruptionProcess[Batch]
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Batch]:
     """Returns the model outputs."""
     del conditioning  # unused
     return self.process.convert_predictions(
@@ -67,20 +64,22 @@ class IdentityInferenceFn(InferenceFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class GuidedDiffusionInferenceFn(InferenceFn):
+class GuidedDiffusionInferenceFn(hd_api.InferenceFn[Batch]):
   """Inference function protocol."""
 
-  base_inference_fn: InferenceFn
-  guidance_fn: guidance.GuidanceFn = guidance.ScalarGuidanceFn()
-  projection_fn: projection.ProjectionFn = projection.IdentityProjectionFn()
+  base_inference_fn: hd_api.InferenceFn[Batch]
+  guidance_fn: guidance.GuidanceFn[Batch] = guidance.ScalarGuidanceFn()
+  projection_fn: projection.ProjectionFn[Batch] = (
+      projection.IdentityProjectionFn()
+  )
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Batch]:
     """Returns the model outputs."""
 
     cond_outputs = self.base_inference_fn(
@@ -96,7 +95,7 @@ class GuidedDiffusionInferenceFn(InferenceFn):
 
     guided_outputs = self.guidance_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         cond_outputs=cond_outputs,
         uncond_outputs=uncond_outputs,
@@ -104,7 +103,7 @@ class GuidedDiffusionInferenceFn(InferenceFn):
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         outputs=guided_outputs,
     )

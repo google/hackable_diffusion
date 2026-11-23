@@ -68,7 +68,7 @@ class GuidanceTest(parameterized.TestCase):
   def test_scalar_guidance_fn(self):
     """Tests the ScalarGuidanceFn."""
     guidance_fn = guidance.ScalarGuidanceFn(guidance=self.guidance_val)
-    time = jnp.array([0.5, 0.5])  # Not used, but required by protocol
+    time = jnp.full((self.batch_size, 1, 1, 1), 0.5)
 
     result = guidance_fn(
         self.xt, self.conditioning, time, self.cond_outputs, self.uncond_outputs

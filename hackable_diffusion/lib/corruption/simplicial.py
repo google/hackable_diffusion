@@ -17,16 +17,15 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, TYPE_CHECKING, TypeAlias
 
 from hackable_diffusion.lib import fast_random
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import discrete
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Constants
@@ -39,21 +38,28 @@ LOGITS_INF = 1e9
 # MARK: Type Aliases
 ################################################################################
 
-Float = hd_typing.Float
-PRNGKey = hd_typing.PRNGKey
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+SimplicialSchedule: TypeAlias = discrete.DiscreteSchedule
+typechecked = jax_helpers.typechecked
 
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
-
-CorruptionProcess = hd_api.CorruptionProcess
-PrecisionMode = jax_helpers.PrecisionMode
-SimplicialSchedule = discrete.DiscreteSchedule
+PrecisionMode: TypeAlias = jax_helpers.PrecisionMode
 LinearSimplicialSchedule = discrete.LinearDiscreteSchedule
 CosineSimplicialSchedule = discrete.CosineDiscreteSchedule
 SquareCosineSimplicialSchedule = discrete.SquareCosineDiscreteSchedule
 GeometricSimplicialSchedule = discrete.GeometricDiscreteSchedule
 PolynomialSimplicialSchedule = discrete.PolynomialDiscreteSchedule
+
+if TYPE_CHECKING:
+  _TokenSpec: TypeAlias = jax.Array
+  _TokenInt: TypeAlias = jax.Array
+  _SimplicialTime: TypeAlias = jax.Array
+  _SimplicialData: TypeAlias = jax.Array
+else:
+  _TokenSpec = jt.Num[jt.Array, 'b *spatial 1']
+  _TokenInt = jt.Int[jt.Array, 'b *spatial 1']
+  _SimplicialTime = jt.Float[jt.Array, 'b *#spatial 1']
+  _SimplicialData = jt.Float[jt.Array, 'b *spatial k']
 
 
 ################################################################################
@@ -75,7 +81,7 @@ class SimplicialPostCorruptionFn(Protocol):
   arrays of shape (*batch, num_categories), not integer token arrays.
   """
 
-  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def __call__(self, log_x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     """Project the log-probability array."""
     ...
 
@@ -83,7 +89,8 @@ class SimplicialPostCorruptionFn(Protocol):
 class IdentitySimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
   """Identity post-corruption function (no projection)."""
 
-  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, log_x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     return log_x
 
 
@@ -99,7 +106,8 @@ class SymmetricSimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
   nodes.
   """
 
-  def __call__(self, log_x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, log_x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     """Project the log-probability array to be symmetric."""
 
     if log_x.ndim != 4:
@@ -135,7 +143,7 @@ class SymmetricSimplicialPostCorruptionFn(SimplicialPostCorruptionFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class SimplicialProcess:
+class SimplicialProcess(hd_api.CorruptionProcess[Batch]):
   """Simplicial noise processes that corrupt towards a Dirichlet distribution.
 
   We are mostly using two special cases of this process:
@@ -214,7 +222,7 @@ class SimplicialProcess:
   ##############################################################################
 
   @property
-  def invariant_probs_vec(self) -> Float['M']:  # pyrefly: ignore[not-a-type, unknown-name]
+  def invariant_probs_vec(self) -> jax.Array:
     """Returns the invariant probability distribution as a vector."""
     return jnp.array(self.invariant_probs)
 
@@ -232,19 +240,18 @@ class SimplicialProcess:
     """Returns whether the process is masking."""
     if self.process_num_categories == self.num_categories:
       return False
-    else:
-      invariant_probs_masking = (0.0,) * self.num_categories + (1.0,)
-      invariant_probs_masking_vec = jnp.array(invariant_probs_masking)
-      return jnp.all(
-          self.invariant_probs_vec == invariant_probs_masking_vec
-      ).item()
+    invariant_probs_masking = (0.0,) * self.num_categories + (1.0,)
+    invariant_probs_masking_vec = jnp.array(invariant_probs_masking)
+    return bool(
+        jnp.all(self.invariant_probs_vec == invariant_probs_masking_vec).item()
+    )
 
   ##############################################################################
   # MARK: h-function
   ##############################################################################
 
-  @kt.typechecked
-  def h(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def h(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Returns the h-function of the process."""
     denominator = 1.0 - self.schedule.alpha(time) + self.safety_epsilon
     return self.schedule.alpha(time) / denominator
@@ -253,36 +260,39 @@ class SimplicialProcess:
   # MARK: Methods
   ##############################################################################
 
-  @kt.typechecked
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Batch],
+  ) -> hd_api.Data[Batch]:
     """Sample from the invariant distribution."""
+    return self._sample_from_invariant(key, data_spec)
+
+  @typechecked
+  def _sample_from_invariant(
+      self,
+      key: PRNGKey,
+      data_spec: _TokenSpec,
+  ) -> _SimplicialData:
     invariant_dirichlet_params = self.temperature * self.invariant_probs_vec
-    # data_spec is [B, T, 1]
-    # invariant_dirichlet_params is [B, T, K]
-    # output is [B, T, K]
     return fast_random.log_dirichlet_fast(
         key, alpha=invariant_dirichlet_params, shape=data_spec.shape[:-1]
     )
 
-  @kt.typechecked
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
+      x0: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> tuple[hd_api.Data[Batch], hd_api.TargetInfo[Batch]]:
     """Corrupt the data according to the schedule and invariant probs.
 
     The target information contains:
-    - x0: The uncorrupted data.
-    - logits: The logits of the corrupted data.
-    - mask: The mask of the corruption.
-    Note that the mask is True if the original data is present in x0. The mask
-    is False if the original data is replaced by noise.
+    - x0: The uncorrupted discrete tokens of shape `(*b, 1)`.
+    - logits: One-hot encoding of `x0` over `num_categories` (`K`) of shape
+      `(*b, K)`.
+    - is_unused: Boolean mask of shape `(*b, 1)` that is `True` where `x0 ==
+      unused_token` and `False` otherwise.
 
     Args:
       key: The random key.
@@ -291,43 +301,45 @@ class SimplicialProcess:
 
     Returns:
       xt: The corrupted data.
-      target_info: The target info for the corrupted data.
+      target_info: Dictionary with keys `'x0'`, `'logits'`, and `'is_unused'`.
     """
-    # get the unused mask
+    return self._corrupt(key, x0, time)
+
+  @typechecked
+  def _corrupt(
+      self,
+      key: PRNGKey,
+      x0: _TokenInt,
+      time: _SimplicialTime,
+  ) -> tuple[_SimplicialData, hd_api.TargetInfo[Batch]]:
     unused_mask = x0 == self.unused_token
-
-    # compute one-hot encoding of x0
     x0_oh = jax.nn.one_hot(x0[..., 0], self.process_num_categories)
-    time = jax_helpers.bcast_right(time, x0.ndim)
 
-    # compute Dirichlet parameters
     dirichlet_param = self.invariant_probs_vec + self.h(time) * x0_oh
     dirichlet_param = self.temperature * dirichlet_param
     xt = fast_random.log_dirichlet_fast(key, alpha=dirichlet_param)
 
-    logits = x0_oh
-
-    # Apply post-corruption projection (e.g. symmetrisation).
+    logits = jax.nn.one_hot(x0[..., 0], self.num_categories)
     xt = self.post_corruption_fn(xt)
 
     target_info = {
         'x0': x0,  # Int[*b 1]; Uncorrupted input data.
         'logits': logits,  # Float[*b K] one-hot encoding of x0.
+        'is_unused': unused_mask,  # Bool[*b 1] mask of the unused tokens.
     }
 
-    # Replace the unused probabilities with the unused_token.
     xt = jnp.where(unused_mask, self.unused_token, xt)
-
     return xt, target_info
 
-  @kt.typechecked
+  @typechecked
   def convert_predictions(
       self,
-      prediction: TargetInfo,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:
-    del time  # Unused
+      prediction: hd_api.TargetInfo[Batch],
+      xt: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
+    """Converts logits prediction to clean argmax token `x0` and raw `logits`."""
+    del xt, time  # Unused
     if len(prediction) != 1 or 'logits' not in prediction:
       raise KeyError(
           f'Only logits prediction is supported. Got: {prediction.keys()=}'

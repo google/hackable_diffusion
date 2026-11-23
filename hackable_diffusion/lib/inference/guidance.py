@@ -15,40 +15,38 @@
 """Guidance."""
 
 import dataclasses
-from typing import Protocol
+from typing import Protocol, TypeAlias
 from hackable_diffusion.lib import corruption
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-Conditioning = hd_typing.Conditioning
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
+Batch: TypeAlias = hd_api.Batch
+Conditioning: TypeAlias = hd_api.Conditioning
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: Protocols
 ################################################################################
 
 
-class GuidanceFn(Protocol):
+class GuidanceFn[Operand](Protocol):
   """Guidance function protocol."""
 
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Operand],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Operand],
+      cond_outputs: hd_api.TargetInfo[Operand],
+      uncond_outputs: hd_api.TargetInfo[Operand],
+  ) -> hd_api.TargetInfo[Operand]:
     """Combine conditional and unconditional outputs."""
     ...
 
@@ -59,20 +57,20 @@ class GuidanceFn(Protocol):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class ScalarGuidanceFn(GuidanceFn):
+class ScalarGuidanceFn(GuidanceFn[Batch]):
   """Simple scalar guidance function."""
 
   guidance: float = 0.0
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      cond_outputs: hd_api.TargetInfo[Batch],
+      uncond_outputs: hd_api.TargetInfo[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     """Simple scalar guidance function."""
     del conditioning, time, xt  # unused
     return jax.tree.map(
@@ -83,7 +81,7 @@ class ScalarGuidanceFn(GuidanceFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class LimitedIntervalGuidanceFn(GuidanceFn):
+class LimitedIntervalGuidanceFn(GuidanceFn[Batch]):
   """Limited interval guidance function.
 
   This follows the guidance function from https://arxiv.org/abs/2404.07724.
@@ -99,22 +97,21 @@ class LimitedIntervalGuidanceFn(GuidanceFn):
           "Lower bound must be strictly smaller than the upper bound."
       )
 
-  def _interval_mask(self, time: TimeArray) -> jax.Array:
+  def _interval_mask(self, time: hd_api.Time[Batch]) -> jax.Array:
     """Returns a boolean mask indicating whether time/metric is within bounds."""
     return jnp.logical_and(time >= self.lower, time <= self.upper)
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Batch],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Batch],
+      cond_outputs: hd_api.TargetInfo[Batch],
+      uncond_outputs: hd_api.TargetInfo[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     """Limited interval guidance function."""
-    del conditioning  # unused
-    time = jax_helpers.bcast_right(time, xt.ndim)
+    del conditioning, xt  # unused
 
     local_guidance = jnp.where(
         self._interval_mask(time),
@@ -135,7 +132,7 @@ class LogSnrLimitedIntervalGuidanceFn(LimitedIntervalGuidanceFn):
 
   noise_schedule: corruption.GaussianSchedule
 
-  def _interval_mask(self, time: TimeArray) -> jax.Array:
+  def _interval_mask(self, time: hd_api.Time[Batch]) -> jax.Array:
     """Returns a boolean mask indicating whether time/metric is within bounds."""
     logsnr = self.noise_schedule.logsnr(time)
     return jnp.logical_and(logsnr >= self.lower, logsnr <= self.upper)

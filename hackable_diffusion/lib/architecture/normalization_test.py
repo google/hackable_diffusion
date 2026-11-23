@@ -16,21 +16,15 @@
 
 import dataclasses
 import flax.linen as nn
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.architecture import normalization
 import jax
 from jax import lax
 import jax.numpy as jnp
+import jaxtyping as jt
 import numpy as np
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
-################################################################################
-# MARK: Type Aliases
-################################################################################
-
-PyTree = hd_typing.PyTree
 
 ################################################################################
 # MARK: Helpers
@@ -48,7 +42,7 @@ def _pad_to_shape(
   )
 
 
-def _perturb_params(params: PyTree, key: jax.Array) -> PyTree:  # pyrefly: ignore[not-a-type]
+def _perturb_params(params: jt.PyTree, key: jax.Array) -> jt.PyTree:
   leaves, treedef = jax.tree_util.tree_flatten(params)
   keys_list = jax.random.split(key, len(leaves))
   key_tree = jax.tree_util.tree_unflatten(treedef, keys_list)

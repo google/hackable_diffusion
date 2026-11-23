@@ -17,14 +17,12 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, TypeAlias
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 import numpy as np
 
 ################################################################################
@@ -37,15 +35,10 @@ UNUSED_TOKEN = -1
 # MARK: Type Aliases
 ################################################################################
 
-Float = hd_typing.Float
-PRNGKey = hd_typing.PRNGKey
-
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
-
-CorruptionProcess = hd_api.CorruptionProcess
-PrecisionMode = jax_helpers.PrecisionMode
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+PrecisionMode: TypeAlias = jax_helpers.PrecisionMode
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -53,15 +46,15 @@ PrecisionMode = jax_helpers.PrecisionMode
 ################################################################################
 
 
-class DiscreteSchedule(hd_api.CorruptionSchedule, Protocol):
+class DiscreteSchedule(hd_api.CorruptionSchedule[Batch], Protocol):
   """Protocol for discrete schedules (just an alpha)."""
 
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """The probability of keeping the original value."""
     ...
 
-  @kt.typechecked
-  def evaluate(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def evaluate(self, time: hd_api.Time[Batch]) -> hd_api.ScheduleInfo[Batch]:
     return {
         'time': time,
         'alpha': self.alpha(time),
@@ -71,16 +64,16 @@ class DiscreteSchedule(hd_api.CorruptionSchedule, Protocol):
 class LinearDiscreteSchedule(DiscreteSchedule):
   """Linear schedule for alpha for discrete corruption processes."""
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return 1.0 - time
 
 
 class CosineDiscreteSchedule(DiscreteSchedule):
   """Cosine schedule for alpha for discrete corruption processes."""
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.cos(0.5 * jnp.pi * time)
 
 
@@ -98,8 +91,8 @@ class SquareCosineDiscreteSchedule(DiscreteSchedule):
 
   s: float = 0.0
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     out = jnp.square(jnp.cos(0.5 * jnp.pi * (time + self.s) / (1.0 + self.s)))
     return out / jnp.square(jnp.cos(0.5 * jnp.pi * self.s / (1.0 + self.s)))
 
@@ -114,8 +107,8 @@ class GeometricDiscreteSchedule(DiscreteSchedule):
   beta_min: float
   beta_max: float
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.exp(-self.beta_min ** (1 - time) * self.beta_max**time)
 
 
@@ -125,8 +118,8 @@ class PolynomialDiscreteSchedule(DiscreteSchedule):
 
   degree: float = 1.0
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return 1 - time**self.degree
 
 
@@ -144,7 +137,7 @@ class PostCorruptionFn(Protocol):
   in DiGress https://arxiv.org/abs/2209.14734u
   """
 
-  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def __call__(self, x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     """Project the labels."""
     ...
 
@@ -152,7 +145,8 @@ class PostCorruptionFn(Protocol):
 class IdentityPostCorruptionFn(PostCorruptionFn):
   """Identity post corruption function."""
 
-  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     """Project the labels."""
     return x
 
@@ -165,7 +159,8 @@ class SymmetricPostCorruptionFn(PostCorruptionFn):
   removing any self-loop.
   """
 
-  def __call__(self, x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     """Project the labels."""
     if x.ndim != 4:
       raise ValueError(f'Expected 4D input, got {x.ndim=}.')
@@ -190,7 +185,7 @@ class SymmetricPostCorruptionFn(PostCorruptionFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class CategoricalProcess:
+class CategoricalProcess(hd_api.CorruptionProcess[Batch]):
   """Discrete noise processes that corrupt towards a categorical distribution.
 
   We are mostly using two special cases of this process:
@@ -248,7 +243,7 @@ class CategoricalProcess:
   ##############################################################################
 
   @property
-  def invariant_probs_vec(self) -> Float['M']:  # pyrefly: ignore[not-a-type, unknown-name]
+  def invariant_probs_vec(self) -> jax.Array:
     """Returns the invariant probability distribution as a vector."""
     return jnp.array(self.invariant_probs)
 
@@ -266,23 +261,22 @@ class CategoricalProcess:
     """Returns whether the process is masking."""
     if self.process_num_categories == self.num_categories:
       return False
-    else:
-      invariant_probs_masking = (0.0,) * self.num_categories + (1.0,)
-      invariant_probs_masking_vec = np.array(invariant_probs_masking)
-      return np.all(  # pyrefly: ignore[bad-return]
-          np.array(self.invariant_probs) == invariant_probs_masking_vec
-      )
+    invariant_probs_masking = (0.0,) * self.num_categories + (1.0,)
+    invariant_probs_masking_vec = np.array(invariant_probs_masking)
+    return bool(
+        np.all(np.array(self.invariant_probs) == invariant_probs_masking_vec)
+    )
 
   ##############################################################################
   # MARK: Methods
   ##############################################################################
 
-  @kt.typechecked
+  @typechecked
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Batch],
+  ) -> hd_api.Data[Batch]:
     """Sample from the invariant distribution."""
     return jax.random.choice(
         key,
@@ -292,13 +286,13 @@ class CategoricalProcess:
         mode=self.precision_mode,
     )
 
-  @kt.typechecked
+  @typechecked
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
+      x0: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> tuple[hd_api.Data[Batch], hd_api.TargetInfo[Batch]]:
     """Corrupt the data according to the schedule and invariant probs.
 
     The target information contains:
@@ -326,9 +320,6 @@ class CategoricalProcess:
         `unused_token`, False otherwise. The shape of both masks is (*b, 1).
     """
     assert_discrete_shape_is_valid(x0, x_name='x0')
-
-    # Broadcast the time to a shape compatible with x0.
-    time = jax_helpers.bcast_right(time, x0.ndim)
 
     # compute alpha
     alpha = self.schedule.alpha(time)
@@ -375,14 +366,14 @@ class CategoricalProcess:
 
     return xt, target_info
 
-  @kt.typechecked
+  @typechecked
   def convert_predictions(
       self,
-      prediction: TargetInfo,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:
-    del time  # Unused
+      prediction: hd_api.TargetInfo[Batch],
+      xt: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
+    del xt, time  # Unused
     if len(prediction) != 1 or 'logits' not in prediction:
       raise KeyError(
           f'Only logits prediction is supported. Got: {prediction.keys()=}'
@@ -454,7 +445,9 @@ class CategoricalProcess:
 ################################################################################
 
 
-def assert_discrete_shape_is_valid(x: DataArray, x_name: str = 'x0'):  # pyrefly: ignore[not-a-type]
+def assert_discrete_shape_is_valid(
+    x: hd_api.Data[Batch], x_name: str = 'x0'
+) -> None:
   """Asserts that the discrete shape is valid."""
   if x.shape[-1] != 1:
     raise ValueError(

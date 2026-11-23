@@ -15,22 +15,20 @@
 """Conditioning update protocols and implementations for the sampling loop."""
 
 import dataclasses
-from typing import Protocol
+from typing import Any, Protocol, TypeAlias
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 import jax
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-PyTree = hd_typing.PyTree
-Conditioning = hd_typing.Conditioning
-DiffusionStep = hd_api.DiffusionStep
+Conditioning: TypeAlias = hd_api.Conditioning
 
 
-def _is_diffusion_leaf(x: PyTree) -> bool:  # pyrefly: ignore[not-a-type]
+def _is_diffusion_leaf(x: jt.PyTree) -> bool:
   """Returns True if the leaf is a DiffusionStep."""
   return isinstance(x, hd_api.DiffusionStep)
 
@@ -40,7 +38,7 @@ def _is_diffusion_leaf(x: PyTree) -> bool:  # pyrefly: ignore[not-a-type]
 ################################################################################
 
 
-class UpdateConditioningFn(Protocol):
+class UpdateConditioningFn[Operand](Protocol):
   """Protocol for updating conditioning during the sampling loop.
 
   This allows injecting step-dependent information back into the conditioning
@@ -50,8 +48,8 @@ class UpdateConditioningFn(Protocol):
 
   def __call__(
       self,
-      conditioning: Conditioning,
-      step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+      conditioning: Conditioning | None,
+      step_carry: jt.PyTree[hd_api.DiffusionStep[Operand]],
   ) -> Conditioning:
     """Update conditioning based on the current diffusion step.
 
@@ -71,7 +69,7 @@ class UpdateConditioningFn(Protocol):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class PropagateSelfConditioningFn(UpdateConditioningFn):
+class PropagateSelfConditioningFn(UpdateConditioningFn[Any]):
   """Propagates predicted logits into the conditioning dict across sampling steps.
 
   Extracts ``step_carry.aux['logits']`` from the previous diffusion step and
@@ -85,7 +83,7 @@ class PropagateSelfConditioningFn(UpdateConditioningFn):
   def __call__(
       self,
       conditioning: Conditioning | None,
-      step_carry: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+      step_carry: jt.PyTree[hd_api.DiffusionStep[Any]],
   ) -> Conditioning:
     sc_logits = jax.tree.map(
         lambda step: step.aux['logits'],

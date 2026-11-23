@@ -80,7 +80,7 @@ class SimplicialProcessTest(parameterized.TestCase):
       raise ValueError(f'Unknown process type: {process_type}')
 
     x0 = jnp.ones((2, 2, 1), dtype=jnp.int32) * 2
-    time_05 = jnp.ones((1,)) * 0.5
+    time_05 = jnp.full((2, 1, 1), 0.5)
     xt, _ = process.corrupt(self.key, x0, time_05)
     self.assertFalse(jnp.array_equal(xt[0], xt[1]))
 
@@ -90,7 +90,7 @@ class SimplicialProcessTest(parameterized.TestCase):
         schedule=self.schedule, num_categories=self.num_categories
     )
     x0 = jnp.ones((2, 2, 10, 1), dtype=jnp.int32) * 2
-    time_05 = jnp.ones((2,)) * 0.5
+    time_05 = jnp.full((2, 1, 1, 1), 0.5)
     xt, _ = process.corrupt(self.key, x0, time_05)
     expected_val_0 = jnp.ones((2, 10, 1), dtype=jnp.int32) * xt[0, 0, 0, 0]
     expected_val_1 = jnp.ones((2, 10, 1), dtype=jnp.int32) * xt[1, 0, 0, 0]
@@ -225,7 +225,7 @@ class SimplicialProcessTest(parameterized.TestCase):
   def test_convert_predictions_raises_for_wrong_prediction_key(self):
     prediction = {'bad_key': jnp.zeros((self.batch_size, self.num_categories))}
     xt = jnp.empty_like(self.x0)
-    time = jnp.empty((self.batch_size, 1))
+    time = jnp.empty((self.batch_size, 1, 1))
     with self.assertRaises(KeyError):
       self.process.convert_predictions(prediction, xt, time)
 
@@ -349,7 +349,7 @@ class SimplicialProcessTest(parameterized.TestCase):
     Returns:
       None
     """
-    # h() requires at least a 1D array (ktyping constraint).
+    # h() requires at least a 1D array (jaxtyping constraint).
     t = jnp.array([time])
     h_val = self.process.h(t)
     self.assertAlmostEqual(float(h_val[0]), expected_h, places=4)
@@ -420,7 +420,7 @@ class SimplicialProcessTest(parameterized.TestCase):
     unused_positions = [False, True, False, True, False, False]
 
     for t_val in [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
-      time = jnp.ones((1,)) * t_val
+      time = jnp.ones((1, 1, 1)) * t_val
       xt, _ = process.corrupt(self.key, x0, time)
       # Shape is [1, 6, K]; check each position individually.
       for i, is_unused in enumerate(unused_positions):
@@ -582,7 +582,7 @@ class SimplicialPostCorruptionTest(parameterized.TestCase):
     x0 = jax.random.randint(
         jax.random.PRNGKey(7), shape=(1, 3, 3, 1), minval=0, maxval=4
     )
-    time = jnp.array([0.3])
+    time = jnp.full((1, 1, 1, 1), 0.3)
     xt, _ = process.corrupt(jax.random.PRNGKey(1), x0, time)
     # xt has shape (1, 3, 3, 4) -- log-prob array.
     xt_transpose = jnp.swapaxes(xt, 1, 2)
@@ -592,6 +592,21 @@ class SimplicialPostCorruptionTest(parameterized.TestCase):
         jnp.where(off_diag_mask, xt, 0.0),
         jnp.where(off_diag_mask, xt_transpose, 0.0),
         atol=1e-5,
+    )
+
+  def test_masking_corrupt_target_info_logits_and_unused_mask(self):
+    schedule = simplicial.LinearSimplicialSchedule()
+    process = simplicial.SimplicialProcess.masking_process(
+        schedule=schedule, num_categories=4, unused_token=-1
+    )
+    x0 = jnp.array([[[0], [2], [-1]]], dtype=jnp.int32)
+    xt, target_info = process.corrupt(
+        jax.random.PRNGKey(0), x0, jnp.full((1, 1, 1), 0.4)
+    )
+    self.assertEqual(xt.shape, (1, 3, 5))
+    self.assertEqual(target_info['logits'].shape, (1, 3, 4))
+    chex.assert_trees_all_equal(
+        target_info['is_unused'], jnp.array([[[False], [False], [True]]])
     )
 
 

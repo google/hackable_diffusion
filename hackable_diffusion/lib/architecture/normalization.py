@@ -24,19 +24,20 @@ so we insert singleton spatial dims to broadcast over spatial axes.
 """
 
 import dataclasses
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 import flax.linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
+DType: TypeAlias = jax_helpers.DType
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: Private Modules
@@ -99,14 +100,14 @@ class _NormalizationLayer(nn.Module):
   conditioning: nn.Module | None = None
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: jax.Array,
-      c: jax.Array | None = None,
+      x: jt.Float[jt.Array, "b *spatial ch"],
+      c: jt.Float[jt.Array, "b *cond"] | None = None,
       *,
-      mask: jax.Array | None = None,
-  ) -> jax.Array:
+      mask: jt.Shaped[jt.Array, "b *mask_dims"] | None = None,
+  ) -> jt.Float[jt.Array, "b *spatial ch"]:
     x = self.base_norm(x, mask=mask)
 
     if self.conditioning is not None:
@@ -127,7 +128,9 @@ class _NormalizationLayer(nn.Module):
 class NormStrategy(Protocol):
   """Protocol for both conditional and unconditional normalization strategies."""
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
     ...
 
 
@@ -139,12 +142,15 @@ class RMSNormStrategy(NormStrategy):
   use_scale: bool = True
   dtype: DType = jnp.float32
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
+    layer_dtype = self.dtype if dtype is None else dtype
     return _NormalizationLayer(
         base_norm=nn.RMSNorm(
             epsilon=self.epsilon,
             use_scale=self.use_scale,
-            dtype=self.dtype,
+            dtype=layer_dtype,
         ),
         conditioning=None,
         name=name or "RMSNorm",
@@ -159,15 +165,18 @@ class ConditionalRMSNormStrategy(NormStrategy):
   use_shift: bool = True
   dtype: DType = jnp.float32
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
+    layer_dtype = self.dtype if dtype is None else dtype
     return _NormalizationLayer(
         base_norm=nn.RMSNorm(
             epsilon=self.epsilon,
             use_scale=False,
-            dtype=self.dtype,
+            dtype=layer_dtype,
         ),
         conditioning=_ConditioningWithTransform(
-            use_shift=self.use_shift, dtype=self.dtype
+            use_shift=self.use_shift, dtype=layer_dtype
         ),
         name=name or "ConditionalRMSNorm",
     )
@@ -182,7 +191,10 @@ class LayerNormStrategy(NormStrategy):
   use_scale: bool = True
   dtype: DType = jnp.float32
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
+    layer_dtype = self.dtype if dtype is None else dtype
     return _NormalizationLayer(
         base_norm=nn.LayerNorm(
             epsilon=self.epsilon,
@@ -190,7 +202,7 @@ class LayerNormStrategy(NormStrategy):
             use_scale=self.use_scale,
             reduction_axes=-1,
             feature_axes=-1,
-            dtype=self.dtype,
+            dtype=layer_dtype,
         ),
         conditioning=None,
         name=name or "LayerNorm",
@@ -205,7 +217,10 @@ class ConditionalLayerNormStrategy(NormStrategy):
   use_shift: bool = True
   dtype: DType = jnp.float32
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
+    layer_dtype = self.dtype if dtype is None else dtype
     return _NormalizationLayer(
         base_norm=nn.LayerNorm(
             epsilon=self.epsilon,
@@ -213,10 +228,10 @@ class ConditionalLayerNormStrategy(NormStrategy):
             use_scale=False,
             reduction_axes=-1,
             feature_axes=-1,
-            dtype=self.dtype,
+            dtype=layer_dtype,
         ),
         conditioning=_ConditioningWithTransform(
-            use_shift=self.use_shift, dtype=self.dtype
+            use_shift=self.use_shift, dtype=layer_dtype
         ),
         name=name or "ConditionalLayerNorm",
     )
@@ -232,7 +247,10 @@ class GroupNormStrategy(NormStrategy):
   use_scale: bool = True
   dtype: DType = jnp.float32
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
+    layer_dtype = self.dtype if dtype is None else dtype
     return _NormalizationLayer(
         base_norm=_SafeGroupNorm(
             num_groups=self.num_groups,
@@ -240,7 +258,7 @@ class GroupNormStrategy(NormStrategy):
             use_bias=self.use_bias,
             use_scale=self.use_scale,
             reduction_axes=None,
-            dtype=self.dtype,
+            dtype=layer_dtype,
         ),
         conditioning=None,
         name=name or "GroupNorm",
@@ -256,7 +274,10 @@ class ConditionalGroupNormStrategy(NormStrategy):
   use_shift: bool = True
   dtype: DType = jnp.float32
 
-  def build_layer(self, name: str | None = None) -> nn.Module:
+  def build_layer(
+      self, name: str | None = None, dtype: DType | None = None
+  ) -> nn.Module:
+    layer_dtype = self.dtype if dtype is None else dtype
     return _NormalizationLayer(
         base_norm=_SafeGroupNorm(
             num_groups=self.num_groups,
@@ -264,10 +285,10 @@ class ConditionalGroupNormStrategy(NormStrategy):
             use_bias=False,
             use_scale=False,
             reduction_axes=None,
-            dtype=self.dtype,
+            dtype=layer_dtype,
         ),
         conditioning=_ConditioningWithTransform(
-            use_shift=self.use_shift, dtype=self.dtype
+            use_shift=self.use_shift, dtype=layer_dtype
         ),
         name=name or "ConditionalGroupNorm",
     )

@@ -14,9 +14,12 @@
 
 """Tests for the conditioning encoder."""
 
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import conditioning_encoder
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
+import typeguard
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -81,7 +84,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -153,7 +156,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -225,7 +228,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -300,7 +303,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -338,7 +341,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=0.0,
@@ -359,16 +362,16 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     self.assertIn('cross_attention', output)
     self.assertEqual(
-        output['cross_attention'].shape,  # pyrefly: ignore[bad-index]
+        output['cross_attention'].shape,
         (self.batch_size,) + image_shape,
     )
     self.assertTrue(
-        jnp.all(output['cross_attention'] == c['image'])  # pyrefly: ignore[bad-index]
+        jnp.all(output['cross_attention'] == c['image'])
     )
 
     self.assertIn('adaptive_norm', output)
     self.assertEqual(
-        output['adaptive_norm'].shape,  # pyrefly: ignore[bad-index]
+        output['adaptive_norm'].shape,
         (self.batch_size, self.num_features),
     )
 
@@ -393,7 +396,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=0.0,
@@ -443,7 +446,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -531,7 +534,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -620,7 +623,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=merge_embeddings_fn,
         conditioning_rules=conditioning_rules,
         conditioning_dropout_rate=self.conditioning_dropout_rate,
@@ -667,7 +670,7 @@ class EncodeConditioningTest(parameterized.TestCase):
 
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=SumEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
@@ -693,7 +696,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         {'params': params['time_embedder']}, t
     )
     self.assertTrue(
-        jnp.all(output_train['adaptive_norm'] == time_embedding_train)  # pyrefly: ignore[bad-index]
+        jnp.all(output_train['adaptive_norm'] == time_embedding_train)
     )
 
     # With is_training=False, the label embedding should not be dropped.
@@ -705,7 +708,7 @@ class EncodeConditioningTest(parameterized.TestCase):
         rngs={'dropout': self.rng},
     )
     self.assertFalse(
-        jnp.all(output_eval['adaptive_norm'] == time_embedding_train)  # pyrefly: ignore[bad-index]
+        jnp.all(output_eval['adaptive_norm'] == time_embedding_train)
     )
 
   def _make_mask_test_encoder(self, conditioning_dropout_rate=0.5):
@@ -723,7 +726,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     }
     return conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=SumEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
@@ -789,7 +792,7 @@ class EncodeConditioningTest(parameterized.TestCase):
     }
     encoder = conditioning_encoder.StandardConditioningEncoder(
         time_embedder=time_encoder,
-        conditioning_embedders=conditioning_encoders,  # pyrefly: ignore[bad-argument-type]
+        conditioning_embedders=conditioning_encoders,
         merge_embeddings_fn=SumEmbeddings(),
         conditioning_rules={
             'time': 'adaptive_norm',
@@ -806,6 +809,23 @@ class EncodeConditioningTest(parameterized.TestCase):
         "'conditioning_mask' is a reserved key",
     ):
       encoder.init(self.rng, t, c, is_training=False)
+
+  def test_conditioning_embeddings_typed_dict_runtime_checks(self):
+    @jax_helpers.typechecked
+    def consume(emb: conditioning_encoder.ConditioningEmbeddings) -> None:
+      del emb
+
+    consume({
+        'adaptive_norm': jnp.ones((2, 8)),
+        'cross_attention': jnp.ones((2, 4, 8)),
+        'conditioning_mask': jnp.ones((2,), dtype=jnp.bool_),
+        'custom_channel': jnp.ones((2, 3)),
+    })
+    with self.assertRaises((typeguard.TypeCheckError, jt.TypeCheckError)):
+      consume({
+          'adaptive_norm': jnp.ones((2, 8)),
+          'cross_attention': jnp.ones((3, 4, 8)),
+      })
 
 
 if __name__ == '__main__':

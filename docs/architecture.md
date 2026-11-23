@@ -149,16 +149,16 @@ positional encoding.
 
 Key parameters:
 
-  * `num_blocks`: Number of DiT blocks.
+*   `num_blocks`: Number of DiT blocks.
 *   `block`: A DiT block module (e.g., `DiTBlockAdaLNZero`).
-    *   `encoder`: Optional encoder (e.g., `Patchify` for image inputs).
-    *   `decoder`: Optional decoder (e.g., `DePatchify` for image outputs).
-    *   `absolute_posenc`: Optional positional encoding module.
-    *   `use_padding_mask`: Whether to mask out padding tokens (for tokenized
-        inputs).
+*   `encoder`: Optional encoder (e.g., `Patchify` for image inputs).
+*   `decoder`: Optional decoder (e.g., `DePatchify` for image outputs).
+*   `absolute_posenc`: Optional positional encoding module.
 
-The `DiT` expects an `ADAPTIVE_NORM` conditioning embedding. The `mnist_dit`
-notebook demonstrates its usage.
+The `DiT` expects an `'adaptive_norm'` conditioning embedding and forwards any
+optional `'padding_mask'` in `conditioning_embeddings` (such as the mask
+populated by `ConditionalDiscreteBackbone(..., pad_token=...)`) to each
+`DiTBlock`. The `mnist_dit` notebook demonstrates its usage.
 
 ## Diffusion Network
 

@@ -14,29 +14,26 @@
 
 """DiT building blocks."""
 
-from typing import Any, Literal  # pylint: disable=unused-import
+from typing import Any, Literal, TypeAlias  # pylint: disable=unused-import
 import dataclasses
 import einops
 from flax import linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import mlp_blocks
-from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import normalization
+from hackable_diffusion.lib.architecture import sequence_embedders
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-Bool = hd_typing.Bool
-Num = hd_typing.Num
-
-RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+DType: TypeAlias = jax_helpers.DType
+RoPEPositionsFn: TypeAlias = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -48,16 +45,20 @@ class PositionalEmbedding(nn.Module):
   """Learnable additive sequence positional embedding."""
 
   init_stddev: float = 0.02
+  param_dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
-  def __call__(self, x: Num["batch *data_shape"]) -> Float["batch *data_shape"]:  # pyrefly: ignore[not-a-type, unknown-name]
+  @typechecked
+  def __call__(
+      self, x: jt.Num[jt.Array, 'b *data_shape']
+  ) -> jt.Float[jt.Array, 'b *data_shape']:
     pos_embed = self.param(
         "PositionalEmbeddingTensor",
         nn.initializers.normal(stddev=self.init_stddev),
         (1, *x.shape[1:]),
-        x.dtype,
+        self.param_dtype,
     )
+    pos_embed = jnp.asarray(pos_embed, dtype=x.dtype)
 
     # Broadcast (1, seq, dim) to (batch, seq, dim) to satisfy jaxtyping
     return jnp.broadcast_to(pos_embed, x.shape)
@@ -186,11 +187,12 @@ class DiTBlock(nn.Module):
     )
 
     # Conditional normalization.
+    norm_dtype = self.dtype if self.dtype != jnp.float32 else None
     self.conditional_norm_attention = self.norm_strategy.build_layer(
-        name='ConditionalNorm_Attention'
+        name='ConditionalNorm_Attention', dtype=norm_dtype
     )
     self.conditional_norm_mlp = self.norm_strategy.build_layer(
-        name='ConditionalNorm_MLP'
+        name='ConditionalNorm_MLP', dtype=norm_dtype
     )
 
     # Gates.
@@ -199,25 +201,27 @@ class DiTBlock(nn.Module):
           self.hidden_size,
           kernel_init=nn.initializers.zeros_init(),
           bias_init=nn.initializers.zeros_init(),
+          dtype=self.dtype,
           name='Dense_Gate_MSA',
       )
       self.gate_mlp = nn.Dense(
           self.hidden_size,
           kernel_init=nn.initializers.zeros_init(),
           bias_init=nn.initializers.zeros_init(),
+          dtype=self.dtype,
           name='Dense_Gate_MLP',
       )
 
-  @kt.typechecked
   @nn.compact
+  @typechecked
   def __call__(
       self,
-      x: Float['*batch seq_dim emb_dim'],  # pyrefly: ignore[not-a-type]
-      cond: Float['*#batch cond_dim'],  # pyrefly: ignore[not-a-type]
+      x: jt.Float[jt.Array, 'b seq_dim emb_dim'],
+      cond: jt.Float[jt.Array, '#b cond_dim'],
       *,
       is_training: bool,
-      mask: Bool['batch seq_dim'] | None = None,
-  ) -> Float['*batch seq_dim emb_dim']:  # pyrefly: ignore[not-a-type]
+      mask: jt.Bool[jt.Array, 'b seq_dim'] | None = None,
+  ) -> jt.Float[jt.Array, 'b seq_dim emb_dim']:
     """Calls the DiT block.
 
     Args:
@@ -273,7 +277,8 @@ class DiTBlockFlux(DiTBlock):  # pyrefly: ignore[bad-class-definition]
 
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalRMSNormStrategy(
-        use_shift=False
+        use_shift=False,
+        dtype=self.dtype,
     )
     super().__post_init__()
 
@@ -294,6 +299,7 @@ class DiTBlockSD3(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalRMSNormStrategy(
         use_shift=True,
+        dtype=self.dtype,
     )
     super().__post_init__()
 
@@ -314,6 +320,7 @@ class DiTBlockAdaLNZero(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalLayerNormStrategy(
         use_shift=True,
+        dtype=self.dtype,
     )
     super().__post_init__()
 
@@ -332,16 +339,18 @@ class Patchify(nn.Module):
   Attributes:
     patch_size: The size of the patches.
     embedding_dim: The dimension of the embedding.
+    dtype: The data type of the module.
   """
 
   patch_size: tuple[int, int]
   embedding_dim: int
+  dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float['*batch height width channels']  # pyrefly: ignore[not-a-type]
-  ) -> Float['*batch seq_dim emb_dim']:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, '*b height width channels']
+  ) -> jt.Float[jt.Array, '*b seq_dim emb_dim']:
     hp, wp = self.patch_size
     _, h, w, _ = x.shape
     if h % hp != 0 or w % wp != 0:
@@ -356,9 +365,9 @@ class Patchify(nn.Module):
         hp=hp,
         wp=wp,
     )
-    reshaped = nn.Dense(features=self.embedding_dim, name="Dense_Project")(
-        reshaped
-    )
+    reshaped = nn.Dense(
+        features=self.embedding_dim, dtype=self.dtype, name="Dense_Project"
+    )(reshaped)
     return reshaped
 
 
@@ -392,12 +401,12 @@ class DePatchify(nn.Module):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float['*batch seq_dim emb_dim'],  # pyrefly: ignore[not-a-type]
-      cond: Float['*#batch cond_dim'] | None = None,
-  ) -> Float['*batch height width channels']:  # pyrefly: ignore[not-a-type]
+      x: jt.Float[jt.Array, '*b seq_dim emb_dim'],
+      cond: jt.Float[jt.Array, '*#b cond_dim'] | None = None,
+  ) -> jt.Float[jt.Array, '*b height width channels']:
     del cond  # Unused.
     h, w, c = self.output_shape
     hp, wp = self.patch_size
