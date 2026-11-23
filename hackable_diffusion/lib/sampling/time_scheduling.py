@@ -24,40 +24,34 @@ the diffusion literature.
 """
 
 import dataclasses
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
-PRNGKey = hd_typing.PRNGKey
-PyTree = hd_typing.PyTree
-
-DataArray = hd_typing.DataArray
-Conditioning = hd_typing.Conditioning
-
-StepInfo = hd_api.StepInfo
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: Protocols
 ################################################################################
 
 
-class TimeSchedule(Protocol):
+class TimeSchedule[Operand](Protocol):
   """A protocol defining a time schedule."""
 
   def all_step_infos(
       self,
       rng: PRNGKey,
       num_steps: int,
-      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
-  ) -> StepInfo:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Operand],
+  ) -> hd_api.StepInfo[Operand]:
     """Returns all the step infos for a given number of steps.
 
     We refer to sampling.py for the more details on the use of all the step
@@ -85,17 +79,17 @@ class TimeSchedule(Protocol):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class UniformTimeSchedule(TimeSchedule):
+class UniformTimeSchedule(TimeSchedule[Batch]):
   """Creates a schedule with uniformly spaced time steps in [ε, 1-ε]."""
 
   span: jax_helpers.SafeSpan = jax_helpers.SafeSpan(
       _minval=0.0, _maxval=1.0, safety_epsilon=1e-6
   )
 
-  @kt.typechecked
+  @typechecked
   def all_step_infos(
-      self, rng: PRNGKey, num_steps: int, data_spec: DataArray  # pyrefly: ignore[not-a-type]
-  ) -> StepInfo:
+      self, rng: PRNGKey, num_steps: int, data_spec: hd_api.Data[Batch]
+  ) -> hd_api.StepInfo[Batch]:
     bsz, *data_shape = data_spec.shape
     stop, start = self.span
     steps = jnp.linspace(start, stop, num_steps)
@@ -113,7 +107,7 @@ class UniformTimeSchedule(TimeSchedule):
           f"Expected steps to have shape {expected_steps_shape}, got"
           f" {steps.shape}"
       )
-    return StepInfo(
+    return hd_api.StepInfo(
         step=jnp.arange(num_steps),
         time=steps,
         rng=jax.random.split(rng, num_steps),
@@ -126,7 +120,7 @@ class UniformTimeSchedule(TimeSchedule):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class EDMTimeSchedule(TimeSchedule):
+class EDMTimeSchedule(TimeSchedule[Batch]):
   """Creates a schedule with non-uniformly spaced time steps in [ε, 1-ε].
 
   The implementation is based on https://arxiv.org/abs/2206.00364.
@@ -151,10 +145,10 @@ class EDMTimeSchedule(TimeSchedule):
           " zero in the schedule computation."
       )
 
-  @kt.typechecked
+  @typechecked
   def all_step_infos(
-      self, rng: PRNGKey, num_steps: int, data_spec: DataArray  # pyrefly: ignore[not-a-type]
-  ) -> StepInfo:
+      self, rng: PRNGKey, num_steps: int, data_spec: hd_api.Data[Batch]
+  ) -> hd_api.StepInfo[Batch]:
     bsz, *data_shape = data_spec.shape
     stop, start = self.span
     start_inv_rho = start ** (1.0 / self.rho)
@@ -170,7 +164,7 @@ class EDMTimeSchedule(TimeSchedule):
           f"Expected steps to have shape {expected_steps_shape}, got"
           f" {steps.shape}"
       )
-    return StepInfo(
+    return hd_api.StepInfo(
         step=jnp.arange(num_steps),
         time=steps,
         rng=jax.random.split(rng, num_steps),

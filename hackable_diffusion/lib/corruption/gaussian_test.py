@@ -17,8 +17,9 @@
 import dataclasses
 import functools
 import itertools
+from typing import TypeAlias
 
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import gaussian
 import jax
@@ -28,7 +29,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 
-TimeArray = hd_typing.TimeArray
+Batch: TypeAlias = hd_api.Batch
 
 ################################################################################
 # MARK: Constants
@@ -101,11 +102,13 @@ class PredictionConverterTest(parameterized.TestCase):
 ################################################################################
 
 
-def _identity_logsnr(schedule: gaussian.GaussianSchedule, x: TimeArray):
+def _identity_logsnr(
+    schedule: gaussian.GaussianSchedule, x: hd_api.Time[Batch]
+):
   return schedule.logsnr(schedule.inverse_logsnr(x))
 
 
-def _identity_time(schedule: gaussian.ShiftedSchedule, x: TimeArray):
+def _identity_time(schedule: gaussian.ShiftedSchedule, x: hd_api.Time[Batch]):
   return schedule.time_change(schedule.inverse_time_change(x))
 
 
@@ -429,8 +432,12 @@ class NumericalGaussianScheduleTest(parameterized.TestCase):
     )
 
     t_0, t_1 = jnp.array([0.0]), jnp.array([1.0])
-    self.assertAlmostEqual(clamped_schedule.logsnr(t_0), max_logsnr, places=5)
-    self.assertAlmostEqual(clamped_schedule.logsnr(t_1), min_logsnr, places=5)
+    self.assertAlmostEqual(
+        float(clamped_schedule.logsnr(t_0)[0]), max_logsnr, places=5
+    )
+    self.assertAlmostEqual(
+        float(clamped_schedule.logsnr(t_1)[0]), min_logsnr, places=5
+    )
 
     t = jnp.linspace(0.0, 1.0, 50)
     recovered_t = clamped_schedule.inverse_logsnr(clamped_schedule.logsnr(t))
@@ -463,7 +470,7 @@ class NumericalGaussianScheduleTest(parameterized.TestCase):
         target_resolution=128,
         base_resolution=32,
     )
-    expected_offset = -2.0 * (jnp.log(128) - jnp.log(32))
+    expected_offset = float(-2.0 * (jnp.log(128) - jnp.log(32)))
     self.assertAlmostEqual(res_schedule.logsnr_offset, expected_offset, places=5)
 
   def test_shifted_schedule_composition_equivalence(self):

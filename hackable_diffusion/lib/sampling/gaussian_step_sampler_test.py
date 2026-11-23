@@ -15,10 +15,10 @@
 """Tests for Gaussian step sampler."""
 
 import itertools
+from typing import TypeAlias
 
 import chex
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.sampling import gaussian_step_sampler
 from hackable_diffusion.lib.sampling import time_scheduling
@@ -32,10 +32,10 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
+Batch: TypeAlias = hd_api.Batch
+GaussianProcess: TypeAlias = gaussian.GaussianProcess
 DiffusionStep = hd_api.DiffusionStep
 StepInfo = hd_api.StepInfo
-GaussianProcess = gaussian.GaussianProcess
-TargetInfo = hd_typing.TargetInfo
 
 ################################################################################
 # MARK: Helper functions
@@ -46,7 +46,7 @@ dummy_inference_fn = lambda xt, conditioning, time: {'x0': xt}
 
 def _sde_update(
     xt: jnp.ndarray,
-    prediction: TargetInfo,
+    prediction: hd_api.TargetInfo[Batch],
     time: jnp.ndarray,
     next_time: jnp.ndarray,
     stochasticity_level: float,
@@ -72,7 +72,7 @@ def _sde_update(
 
 def _ddim_update(
     xt: jnp.ndarray,
-    prediction: TargetInfo,
+    prediction: hd_api.TargetInfo[Batch],
     time: jnp.ndarray,
     next_time: jnp.ndarray,
     stochasticity_level: float,
@@ -115,7 +115,7 @@ def _ddim_update(
 
 def _velocity_update(
     xt: jnp.ndarray,
-    prediction: TargetInfo,
+    prediction: hd_api.TargetInfo[Batch],
     time: jnp.ndarray,
     next_time: jnp.ndarray,
     stoch_coeff: float,
@@ -172,7 +172,7 @@ class SdeStepTest(parameterized.TestCase):
     initial_step = sde_step.initialize(
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
-            step=0, time=jnp.array([0.0]), rng=jax.random.PRNGKey(0)
+            step=0, time=jnp.array([[[0.0]]]), rng=jax.random.PRNGKey(0)
         ),
     )
 
@@ -182,7 +182,7 @@ class SdeStepTest(parameterized.TestCase):
             xt=jnp.expand_dims(jnp.eye(4), axis=0),
             step_info=StepInfo(
                 step=0,
-                time=jnp.array([0.0]),
+                time=jnp.array([[[0.0]]]),
                 rng=jax.random.PRNGKey(0),
             ),
             aux=dict(),
@@ -204,7 +204,7 @@ class SdeStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -217,7 +217,7 @@ class SdeStepTest(parameterized.TestCase):
 
     next_step_info = StepInfo(
         step=1,
-        time=jnp.array([0.1]),
+        time=jnp.array([[[0.1]]]),
         rng=jax.random.PRNGKey(1),
     )
 
@@ -243,7 +243,7 @@ class SdeStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -265,7 +265,7 @@ class SdeStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -278,7 +278,7 @@ class SdeStepTest(parameterized.TestCase):
 
     last_step_info = StepInfo(
         step=1,
-        time=jnp.array([0.1]),
+        time=jnp.array([[[0.1]]]),
         rng=jax.random.PRNGKey(1),
     )
 
@@ -308,7 +308,7 @@ class SdeStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -327,7 +327,7 @@ class SdeStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -343,7 +343,7 @@ class SdeStepTest(parameterized.TestCase):
         current_step=initial_step,
         next_step_info=StepInfo(
             step=1,
-            time=jnp.array([0.1]),
+            time=jnp.array([[[0.1]]]),
             rng=jax.random.PRNGKey(1),
         ),
     )
@@ -362,7 +362,7 @@ class SdeStepTest(parameterized.TestCase):
             ),
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -389,7 +389,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
     initial_step = self.adjusted_ddim_step.initialize(
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
-            step=0, time=jnp.array([0.0]), rng=jax.random.PRNGKey(0)
+            step=0, time=jnp.array([[[0.0]]]), rng=jax.random.PRNGKey(0)
         ),
     )
 
@@ -399,7 +399,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
             xt=jnp.expand_dims(jnp.eye(4), axis=0),
             step_info=StepInfo(
                 step=0,
-                time=jnp.array([0.0]),
+                time=jnp.array([[[0.0]]]),
                 rng=jax.random.PRNGKey(0),
             ),
             aux=dict(),
@@ -412,7 +412,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -428,7 +428,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         current_step=initial_step,
         next_step_info=StepInfo(
             step=1,
-            time=jnp.array([0.1]),
+            time=jnp.array([[[0.1]]]),
             rng=jax.random.PRNGKey(1),
         ),
     )
@@ -438,16 +438,16 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         DiffusionStep(
             xt=jnp.array(
                 [[
-                    [0.924722, 0.0, 0.0, 0.0],
-                    [0.0, 0.924722, 0.0, 0.0],
-                    [0.0, 0.0, 0.924722, 0.0],
-                    [0.0, 0.0, 0.0, 0.924722],
+                    [1.024722, 0.0, 0.0, 0.0],
+                    [0.0, 1.024722, 0.0, 0.0],
+                    [0.0, 0.0, 1.024722, 0.0],
+                    [0.0, 0.0, 0.0, 1.024722],
                 ]],
                 dtype=jnp.float32,
             ),
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -460,7 +460,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -476,7 +476,7 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         current_step=initial_step,
         last_step_info=StepInfo(
             step=1,
-            time=jnp.array([0.1]),
+            time=jnp.array([[[0.1]]]),
             rng=jax.random.PRNGKey(1),
         ),
     )
@@ -486,22 +486,75 @@ class AdjustedDDIMStepTest(absltest.TestCase):
         DiffusionStep(
             xt=jnp.array(
                 [[
-                    [0.924722, 0.0, 0.0, 0.0],
-                    [0.0, 0.924722, 0.0, 0.0],
-                    [0.0, 0.0, 0.924722, 0.0],
-                    [0.0, 0.0, 0.0, 0.924722],
+                    [1.024722, 0.0, 0.0, 0.0],
+                    [0.0, 1.024722, 0.0, 0.0],
+                    [0.0, 0.0, 1.024722, 0.0],
+                    [0.0, 0.0, 0.0, 1.024722],
                 ]],
                 dtype=jnp.float32,
             ),
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
         ),
         atol=1e-6,
     )
+
+  def test_batch_elements_are_independent(self):
+    xt_a = jnp.stack([jnp.eye(4), jnp.eye(4)], axis=0)
+    xt_b = jnp.stack([jnp.eye(4), 50.0 * jnp.eye(4)], axis=0)
+    init_a = self.adjusted_ddim_step.initialize(
+        initial_noise=xt_a,
+        initial_step_info=StepInfo(
+            step=0,
+            time=jnp.array([[[0.4]], [[0.4]]]),
+            rng=jax.random.PRNGKey(0),
+        ),
+    )
+    init_b = self.adjusted_ddim_step.initialize(
+        initial_noise=xt_b,
+        initial_step_info=StepInfo(
+            step=0,
+            time=jnp.array([[[0.4]], [[0.4]]]),
+            rng=jax.random.PRNGKey(0),
+        ),
+    )
+    next_info = StepInfo(
+        step=1, time=jnp.array([[[0.1]], [[0.1]]]), rng=jax.random.PRNGKey(1)
+    )
+    out_a = self.adjusted_ddim_step.update(
+        prediction={'x0': jnp.zeros_like(xt_a)},
+        current_step=init_a,
+        next_step_info=next_info,
+    )
+    out_b = self.adjusted_ddim_step.update(
+        prediction={'x0': jnp.zeros_like(xt_b)},
+        current_step=init_b,
+        next_step_info=next_info,
+    )
+    chex.assert_trees_all_close(out_a.xt[0], out_b.xt[0], atol=1e-6)
+
+  def test_zero_step_reduces_to_ddim(self):
+    # When next_time == time, next_xt_var == 0 so AdjustedDDIM == DDIM(eta=0).
+    ddim_step = gaussian_step_sampler.DDIMStep(
+        corruption_process=self.process, stoch_coeff=0.0
+    )
+    init = self.adjusted_ddim_step.initialize(
+        initial_noise=self.initial_noise,
+        initial_step_info=StepInfo(
+            step=0, time=jnp.array([[[0.3]]]), rng=jax.random.PRNGKey(0)
+        ),
+    )
+    same_info = StepInfo(
+        step=1, time=jnp.array([[[0.3]]]), rng=jax.random.PRNGKey(1)
+    )
+    pred = {'x0': 0.5 * self.initial_noise}
+    adj_out = self.adjusted_ddim_step.update(pred, init, same_info)
+    ddim_out = ddim_step.update(pred, init, same_info)
+    chex.assert_trees_all_close(adj_out.xt, ddim_out.xt, atol=1e-6)
 
 
 class DDIMStepTest(parameterized.TestCase):
@@ -528,7 +581,7 @@ class DDIMStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.0]),
+            time=jnp.array([[[0.0]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -539,7 +592,7 @@ class DDIMStepTest(parameterized.TestCase):
             xt=jnp.expand_dims(jnp.eye(4), axis=0),
             step_info=StepInfo(
                 step=0,
-                time=jnp.array([0.0]),
+                time=jnp.array([[[0.0]]]),
                 rng=jax.random.PRNGKey(0),
             ),
             aux=dict(),
@@ -561,7 +614,7 @@ class DDIMStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -576,7 +629,7 @@ class DDIMStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         next_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -600,7 +653,7 @@ class DDIMStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -627,7 +680,7 @@ class DDIMStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -642,7 +695,7 @@ class DDIMStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         next_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -667,7 +720,7 @@ class DDIMStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -689,7 +742,7 @@ class DDIMStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -704,7 +757,7 @@ class DDIMStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         last_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -732,7 +785,7 @@ class DDIMStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -751,7 +804,7 @@ class DDIMStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -766,7 +819,7 @@ class DDIMStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         next_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -784,7 +837,7 @@ class DDIMStepTest(parameterized.TestCase):
             ),
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -817,7 +870,7 @@ class VelocityStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.0]),
+            time=jnp.array([[[0.0]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -828,7 +881,7 @@ class VelocityStepTest(parameterized.TestCase):
             xt=jnp.expand_dims(jnp.eye(4), axis=0),
             step_info=StepInfo(
                 step=0,
-                time=jnp.array([0.0]),
+                time=jnp.array([[[0.0]]]),
                 rng=jax.random.PRNGKey(0),
             ),
             aux=dict(),
@@ -850,7 +903,7 @@ class VelocityStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -865,7 +918,7 @@ class VelocityStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         next_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -889,7 +942,7 @@ class VelocityStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -911,7 +964,7 @@ class VelocityStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -926,7 +979,7 @@ class VelocityStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         last_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -954,7 +1007,7 @@ class VelocityStepTest(parameterized.TestCase):
             xt=expected_xt,
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -974,7 +1027,7 @@ class VelocityStepTest(parameterized.TestCase):
         initial_noise=self.initial_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[0.2]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -989,7 +1042,7 @@ class VelocityStepTest(parameterized.TestCase):
         prediction=prediction,
         current_step=initial_step,
         next_step_info=StepInfo(
-            step=1, time=jnp.array([0.1]), rng=jax.random.PRNGKey(1)
+            step=1, time=jnp.array([[[0.1]]]), rng=jax.random.PRNGKey(1)
         ),
     )
 
@@ -1007,7 +1060,7 @@ class VelocityStepTest(parameterized.TestCase):
             ),
             step_info=StepInfo(
                 step=1,
-                time=jnp.array([0.1]),
+                time=jnp.array([[[0.1]]]),
                 rng=jax.random.PRNGKey(1),
             ),
             aux={},
@@ -1035,7 +1088,7 @@ class HeunStepTest(absltest.TestCase):
 
   def test_initialize(self):
     initial_step_info = StepInfo(
-        step=0, time=jnp.array([1.0]), rng=jax.random.PRNGKey(0)
+        step=0, time=jnp.array([[[1.0]]]), rng=jax.random.PRNGKey(0)
     )
     initial_step = self.heun_step.initialize(
         initial_noise=self.initial_noise,
@@ -1130,6 +1183,17 @@ class HeunStepTest(absltest.TestCase):
           time_schedule=self.time_schedule,
           num_steps=3,
       )
+
+  def test_fail_for_invalid_num_steps(self):
+    for bad_steps in (0, -2):
+      with self.assertRaisesRegex(
+          ValueError, 'Number of steps must be at least 2'
+      ):
+        gaussian_step_sampler.HeunStep(
+            corruption_process=self.process,
+            time_schedule=self.time_schedule,
+            num_steps=bad_steps,
+        )
 
   def test_finalize(self):
     # We need to manually get the step infos for the test.

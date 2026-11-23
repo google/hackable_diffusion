@@ -14,22 +14,22 @@
 
 """Backbones for discrete data."""
 
-from typing import Protocol
+from typing import Protocol, TypeAlias
 import einops
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
+from hackable_diffusion.lib.architecture import conditioning_encoder
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-Int = hd_typing.Int
+ConditioningEmbeddings: TypeAlias = conditioning_encoder.ConditioningEmbeddings
+DType: TypeAlias = jax_helpers.DType
+typechecked = jax_helpers.typechecked
 
 
 # MARK: Token Embedder
@@ -42,8 +42,10 @@ class TokenEmbedder(Protocol):
   embedding_dim: int
 
   def __call__(
-      self, x: Int['batch *other_input 1'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Int[jt.Array, 'b *other_input 1'],
+      is_training: bool,
+  ) -> jt.Float[jt.Array, 'b *other_embedding f']:
     ...
 
 
@@ -71,10 +73,12 @@ class DenseTokenEmbedder(nn.Module, TokenEmbedder):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Int['batch *other_input 1'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Int[jt.Array, 'b *other_input 1'],
+      is_training: bool,
+  ) -> jt.Float[jt.Array, 'b *other_embedding f']:
     """Embeds the tokens into a hidden dimension.
 
     It assumes that `x` has a shape <B,...,1>, it then embeds it into
@@ -122,8 +126,10 @@ class TokenProjector(Protocol):
   embedding_dim: int
 
   def __call__(
-      self, x: Float['batch *other_embedding F'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_input V']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Float[jt.Array, 'b *other_embedding f'],
+      is_training: bool,
+  ) -> jt.Float[jt.Array, 'b *other_input v']:
     ...
 
 
@@ -149,10 +155,12 @@ class DenseProjector(nn.Module, TokenProjector):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float['batch *other_embedding F'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_input V']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Float[jt.Array, 'b *other_embedding f'],
+      is_training: bool,
+  ) -> jt.Float[jt.Array, 'b *other_input v']:
     """Projects the token embeddings to the output vocabulary size."""
     del is_training  # Unused.
 
@@ -162,8 +170,8 @@ class DenseProjector(nn.Module, TokenProjector):
       x = einops.rearrange(
           x,
           'b ... (c f) -> b ... c f',
-          c=channel_dimension,  # pytype: disable=name-error
-          f=emb_dimension,  # pytype: disable=name-error
+          c=channel_dimension,
+          f=emb_dimension,
       )
 
     # Project the backbone outputs to the output vocabulary size.
@@ -186,14 +194,19 @@ class ConditionalDiscreteBackbone(nn.Module):
 
   Attributes:
     base_backbone: The base backbone to use for the discrete model. Can be any
-      conditional backbone such as MLP or UNet.
+      conditional backbone such as MLP, DiT, or UNet.
     token_embedder: The token embedder to use for the discrete model.
     token_projector: The token projector to use for the discrete model.
+    pad_token: Optional pad token ID. When set and `'padding_mask'` is not
+      already present in `conditioning_embeddings`, populates
+      `conditioning_embeddings['padding_mask']` with `x != pad_token` (squeezed
+      along the trailing axis) prior to token embedding.
   """
 
   base_backbone: 'diffusion_network.ConditionalBackbone'
   token_embedder: TokenEmbedder
   token_projector: TokenProjector
+  pad_token: int | None = None
 
   def __post_init__(self):
     super().__post_init__()
@@ -206,13 +219,22 @@ class ConditionalDiscreteBackbone(nn.Module):
       )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Int['batch *other 1'],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
+      x: jt.Int[jt.Array, 'b *other 1'],
+      conditioning_embeddings: ConditioningEmbeddings,
       is_training: bool,
-  ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
+  ) -> jt.Float[jt.Array, 'b *other v']:
+
+    if (
+        self.pad_token is not None
+        and 'padding_mask' not in conditioning_embeddings
+    ):
+      conditioning_embeddings = {
+          **conditioning_embeddings,
+          'padding_mask': jnp.squeeze(x != self.pad_token, axis=-1),
+      }
 
     # Embed the tokens.
     token_embeddings = self.token_embedder(x, is_training=is_training)

@@ -15,18 +15,23 @@
 """Early stopping strategies for the diffusion sampler with early stopping."""
 
 import dataclasses
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, TYPE_CHECKING, TypeAlias
 
 from hackable_diffusion.lib import hd_api
 import jax
 import jax.numpy as jnp
-from kauldron.ktyping import Bool
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DiffusionStep = hd_api.DiffusionStep
+Batch: TypeAlias = hd_api.Batch
+
+if TYPE_CHECKING:
+  BatchBool: TypeAlias = jax.Array
+else:
+  BatchBool = jt.Bool[jt.Array, 'b']
 
 
 ################################################################################
@@ -46,9 +51,9 @@ class DiffusionEarlyStoppingFn(Protocol):
       self,
       *,
       step: jax.Array,
-      current_step: DiffusionStep,
-      previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
+      current_step: hd_api.DiffusionStep[Batch],
+      previous_step: hd_api.DiffusionStep[Batch],
+  ) -> BatchBool:
     """Returns a bool array of shape ``[batch_size]``.
 
     Args:
@@ -75,9 +80,9 @@ class DiffusionNoEarlyStopFn(DiffusionEarlyStoppingFn):
       self,
       *,
       step: jax.Array,
-      current_step: DiffusionStep,
-      previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
+      current_step: hd_api.DiffusionStep[Batch],
+      previous_step: hd_api.DiffusionStep[Batch],
+  ) -> BatchBool:
     del step, previous_step
     batch_size = current_step.xt.shape[0]
     return jnp.zeros(batch_size, dtype=jnp.bool_)
@@ -118,9 +123,9 @@ class DiffusionEntropyEarlyStopFn(DiffusionEarlyStoppingFn):
       self,
       *,
       step: jax.Array,
-      current_step: DiffusionStep,
-      previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
+      current_step: hd_api.DiffusionStep[Batch],
+      previous_step: hd_api.DiffusionStep[Batch],
+  ) -> BatchBool:
     del step, previous_step
     xt = current_step.xt
     if len(xt.shape) != 3:
@@ -164,9 +169,9 @@ class DiffusionTokenStabilityEarlyStopFn(DiffusionEarlyStoppingFn):
       self,
       *,
       step: jax.Array,
-      current_step: DiffusionStep,
-      previous_step: DiffusionStep,
-  ) -> Bool['B']:  # pyrefly: ignore[not-a-type, unknown-name]
+      current_step: hd_api.DiffusionStep[Batch],
+      previous_step: hd_api.DiffusionStep[Batch],
+  ) -> BatchBool:
     del step
     prev_tokens = previous_step.xt
     if len(prev_tokens.shape) != 3:
@@ -215,9 +220,9 @@ class DiffusionChainedEarlyStopFn(DiffusionEarlyStoppingFn):
       self,
       *,
       step: jax.Array,
-      current_step: DiffusionStep,
-      previous_step: DiffusionStep,
-  ) -> Bool['']:  # pyrefly: ignore[not-a-type]
+      current_step: hd_api.DiffusionStep[Batch],
+      previous_step: hd_api.DiffusionStep[Batch],
+  ) -> BatchBool:
     results = jnp.stack([
         fn.should_stop(
             step=step,

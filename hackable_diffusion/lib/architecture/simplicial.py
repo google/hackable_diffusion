@@ -36,27 +36,25 @@ simplex vertices. So, in practice, we have:
   * Simplicial: `V = process.process_num_categories`
 """
 
-from typing import Protocol
+from typing import Protocol, TypeAlias
 import einops
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
+from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.architecture import discrete
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-Int = hd_typing.Int
-
-
-TokenProjector = discrete.TokenProjector
+ConditioningEmbeddings: TypeAlias = conditioning_encoder.ConditioningEmbeddings
+DType: TypeAlias = jax_helpers.DType
+TokenProjector: TypeAlias = discrete.TokenProjector
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: Probability Embedder
@@ -69,8 +67,10 @@ class LogitEmbedder(Protocol):
   embedding_dim: int
 
   def __call__(
-      self, x: Float['batch *other_input V'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Float[jt.Array, 'b *other_input v'],
+      is_training: bool,
+  ) -> jt.Float[jt.Array, 'b *other_embedding f']:
     ...
 
 
@@ -96,10 +96,12 @@ class DenseLogitEmbedder(nn.Module, LogitEmbedder):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float['batch *other_input V'], is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_embedding F']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Float[jt.Array, 'b *other_input v'],
+      is_training: bool,
+  ) -> jt.Float[jt.Array, 'b *other_embedding f']:
     del is_training  # Unused.
 
     x = jax.nn.softmax(x, axis=-1)
@@ -156,13 +158,13 @@ class ConditionalSimplicialBackbone(nn.Module):
       )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float['batch *other V'],  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
+      x: jt.Float[jt.Array, 'b *other v_in'],
+      conditioning_embeddings: ConditioningEmbeddings,
       is_training: bool,
-  ) -> Float['batch *other V']:  # pyrefly: ignore[not-a-type]
+  ) -> jt.Float[jt.Array, 'b *other v_out']:
 
     # Embed the probability distributions.
     logit_embeddings = self.logit_embedder(x, is_training=is_training)

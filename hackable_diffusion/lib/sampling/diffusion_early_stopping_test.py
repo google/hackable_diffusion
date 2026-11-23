@@ -42,7 +42,7 @@ def _make_step_info():
 def _make_diffusion_step(
     xt: jax.Array,
     aux: dict | None = None,
-) -> hd_api.DiffusionStep:
+) -> hd_api.DiffusionStep[hd_api.Batch]:
   """Creates a DiffusionStep with a dummy StepInfo."""
   return hd_api.DiffusionStep(
       xt=xt,
@@ -94,7 +94,7 @@ class DiffusionEntropyEarlyStopFnTest(parameterized.TestCase):
       self,
       logits: jax.Array,
       logits_key: str = 'logits',
-  ) -> hd_api.DiffusionStep:
+  ) -> hd_api.DiffusionStep[hd_api.Batch]:
     """Helper: creates a DiffusionStep with logits in aux."""
     batch_size, seq_len = logits.shape[:2]
     return _make_diffusion_step(

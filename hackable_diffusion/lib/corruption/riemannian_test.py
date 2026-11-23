@@ -20,10 +20,18 @@ from hackable_diffusion.lib import manifolds
 from hackable_diffusion.lib.corruption import riemannian
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
 import numpy as np
+import typeguard
+
+_CHECK_ERRORS = (
+    typeguard.TypeCheckError,
+    jt.TypeCheckError,
+    TypeError,
+)
 
 
-def _make_process(manifold):
+def _make_process(manifold: manifolds.Manifold) -> riemannian.RiemannianProcess:
   return riemannian.RiemannianProcess(
       manifold=manifold,
       schedule=riemannian.LinearRiemannianSchedule(),
@@ -39,7 +47,7 @@ class SphereCorruptionTest(absltest.TestCase):
 
     batch_size = 8
     x0 = manifold.random_uniform(key, (batch_size, 3))
-    time = jnp.linspace(0, 1, batch_size)
+    time = jnp.linspace(0, 1, batch_size)[:, None]
 
     xt, target_info = process.corrupt(key, x0, time)
 
@@ -53,6 +61,16 @@ class SphereCorruptionTest(absltest.TestCase):
     inner_products = jnp.sum(xt * vel, axis=-1)
     np.testing.assert_allclose(inner_products, 0.0, atol=1e-5)
 
+  def test_corrupt_rejects_1d_time_for_2d_data(self):
+    manifold = manifolds.Sphere()
+    process = _make_process(manifold)
+    key = jax.random.PRNGKey(0)
+    x0 = manifold.random_uniform(key, (4, 3))
+    with self.assertRaises(_CHECK_ERRORS + (ValueError,)):
+      process.corrupt(key, x0, jnp.linspace(0.0, 1.0, 4))
+    with self.assertRaises(_CHECK_ERRORS):
+      process.corrupt(key, x0, jnp.ones((4, 2)))
+
   def test_velocity_at_t1(self):
     """At t=1, alpha=0 so xt = x1 and velocity = -log(x1, x0)."""
     manifold = manifolds.Sphere()
@@ -60,7 +78,7 @@ class SphereCorruptionTest(absltest.TestCase):
     key = jax.random.PRNGKey(0)
 
     x0 = jnp.array([[1.0, 0.0, 0.0]])
-    t1 = jnp.array([1.0])
+    t1 = jnp.array([[1.0]])
     xt1, target1 = process.corrupt(key, x0, t1)
     x1_sampled = target1['x1']
     # At t=1, alpha=0: geodesic(x1, x0, 0) = x1.
@@ -78,7 +96,7 @@ class SphereCorruptionTest(absltest.TestCase):
     key = jax.random.PRNGKey(0)
 
     x0 = jnp.array([[1.0, 0.0, 0.0]])
-    t0 = jnp.array([0.0])
+    t0 = jnp.array([[0.0]])
     xt0, _ = process.corrupt(key, x0, t0)
     # At t=0, alpha=1: geodesic(x1, x0, 1) = x0.
     np.testing.assert_allclose(xt0, x0, atol=1e-5)
@@ -93,7 +111,7 @@ class SO3CorruptionTest(absltest.TestCase):
 
     batch_size = 8
     x0 = manifold.random_uniform(key, (batch_size, 3, 3))
-    time = jnp.linspace(0, 1, batch_size)
+    time = jnp.linspace(0, 1, batch_size)[:, None, None]
 
     xt, target_info = process.corrupt(key, x0, time)
 
@@ -169,7 +187,7 @@ class LinearRiemannianScheduleTest(absltest.TestCase):
     key = jax.random.PRNGKey(1)
 
     x0 = jnp.eye(3)[None, ...]  # (1, 3, 3)
-    t1 = jnp.array([1.0])
+    t1 = jnp.array([[[1.0]]])
     xt1, target1 = process.corrupt(key, x0, t1)
     x1_sampled = target1['x1']
     # At t=1, alpha=0: geodesic(x1, x0, 0) = x1.
@@ -187,7 +205,7 @@ class LinearRiemannianScheduleTest(absltest.TestCase):
     key = jax.random.PRNGKey(1)
 
     x0 = jnp.eye(3)[None, ...]  # (1, 3, 3)
-    t0 = jnp.array([0.0])
+    t0 = jnp.array([[[0.0]]])
     xt0, _ = process.corrupt(key, x0, t0)
     # At t=0, alpha=1: geodesic(x1, x0, 1) = x0.
     np.testing.assert_allclose(xt0, x0, atol=1e-5)
@@ -203,7 +221,7 @@ class TorusCorruptionTest(absltest.TestCase):
     batch_size = 8
     dim = 4
     x0 = manifold.random_uniform(key, (batch_size, dim))
-    time = jnp.linspace(0, 1, batch_size)
+    time = jnp.linspace(0, 1, batch_size)[:, None]
 
     xt, target_info = process.corrupt(key, x0, time)
 
@@ -221,7 +239,7 @@ class TorusCorruptionTest(absltest.TestCase):
     key = jax.random.PRNGKey(2)
 
     x0 = jnp.array([[0.1, 0.5, 0.9]])
-    t1 = jnp.array([1.0])
+    t1 = jnp.array([[1.0]])
     xt1, target1 = process.corrupt(key, x0, t1)
     x1_sampled = target1['x1']
     # At t=1, alpha=0: geodesic(x1, x0, 0) = x1.
@@ -239,7 +257,7 @@ class TorusCorruptionTest(absltest.TestCase):
     key = jax.random.PRNGKey(2)
 
     x0 = jnp.array([[0.1, 0.5, 0.9]])
-    t0 = jnp.array([0.0])
+    t0 = jnp.array([[0.0]])
     xt0, _ = process.corrupt(key, x0, t0)
     # At t=0, alpha=1: geodesic(x1, x0, 1) = x0.
     np.testing.assert_allclose(xt0, x0, atol=1e-5)
