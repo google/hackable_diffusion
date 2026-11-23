@@ -17,6 +17,7 @@
 import chex
 import flax.linen as nn
 from hackable_diffusion import hd
+from hackable_diffusion import kdiff
 from hackable_diffusion.kdiff import core
 import jax
 import jax.numpy as jnp
@@ -99,6 +100,16 @@ class KauldronLossWrapperTest(absltest.TestCase):
     # When stop_gradient_on_targets is True, gradient wrt targets is zero.
     grad_stop = jax.grad(loss_fn, argnums=0)(targets_val, True)
     chex.assert_trees_all_close(grad_stop, jnp.zeros_like(targets_val))
+
+  def test_barrel_exports_smoke(self):
+    self.assertTrue(hasattr(hd.architecture, "DenseTokenEmbedder"))
+    self.assertTrue(hasattr(hd.architecture, "PositionalEmbedding"))
+    self.assertTrue(hasattr(hd.training, "UniformTimeSampler"))
+    self.assertTrue(hasattr(hd.training, "time_sampling"))
+    self.assertTrue(hasattr(hd.sampling, "DiffusionEarlyStoppingFn"))
+    self.assertTrue(hasattr(hd.sampling, "DiffusionTokenStabilityEarlyStopFn"))
+    self.assertTrue(hasattr(kdiff, "SamplingEvaluator"))
+    self.assertTrue(hasattr(kdiff, "KauldronLossWrapper"))
 
 
 if __name__ == "__main__":

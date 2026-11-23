@@ -52,7 +52,7 @@ The module provides the following wrappers:
 from __future__ import annotations
 
 import dataclasses
-from typing import cast
+from typing import Any, TYPE_CHECKING, TypeAlias, cast
 
 import flax.linen as nn
 from hackable_diffusion.lib import diffusion_network
@@ -66,29 +66,33 @@ from hackable_diffusion.lib.sampling import time_scheduling
 from hackable_diffusion.lib.training import time_sampling
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-PRNGKey = hd_typing.PRNGKey
-PyTree = hd_typing.PyTree
+typechecked = jax_helpers.typechecked
 
-Conditioning = hd_typing.Conditioning
-DataTree = hd_typing.DataTree
-LossOutputTree = hd_typing.LossOutputTree
-ScheduleInfoTree = hd_typing.ScheduleInfoTree
-TargetInfoTree = hd_typing.TargetInfoTree
-TimeArray = hd_typing.TimeArray
-TimeTree = hd_typing.TimeTree
-ShapeTree = hd_typing.ShapeTree
-ConditioningShape = hd_typing.ConditioningShape
+Batch: TypeAlias = hd_api.Batch
+DType: TypeAlias = hd_typing.DType
+PRNGKey: TypeAlias = hd_api.PRNGKey
+Conditioning: TypeAlias = hd_api.Conditioning
 
+if TYPE_CHECKING:
+  Tree: TypeAlias = jt.PyTree[jax.Array]
+  # TODO(b/493016456): Consolidate NestedSamplerStep and NestedTimeSchedule to a
+  # single outer StepInfo[Tree] / DiffusionStep[Tree].
+  StepInfoTree: TypeAlias = jt.PyTree[hd_api.StepInfo[Batch]]
+  DiffusionStepTree: TypeAlias = jt.PyTree[hd_api.DiffusionStep[Batch]]
+else:
 
-StepInfoTree = PyTree[hd_api.StepInfo]
-DiffusionStepTree = PyTree[hd_api.DiffusionStep]
+  def Tree(dtype: Any, shape: str = '') -> Any:  # pylint: disable=invalid-name
+    """Multimodal PyTree operand (`Data[Tree]`, `Time[Tree]`, `Loss[Tree]`)."""
+    return jt.PyTree[dtype[jt.Array, f'b ?{shape}' if shape else 'b'], 'T']
+
+  StepInfoTree = jt.PyTree[hd_api.StepInfo[Batch], 'T']
+  DiffusionStepTree = jt.PyTree[hd_api.DiffusionStep[Batch], 'T']
 
 
 ################################################################################
@@ -97,15 +101,16 @@ DiffusionStepTree = PyTree[hd_api.DiffusionStep]
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedSchedule(hd_api.CorruptionSchedule):
+class NestedSchedule(hd_api.CorruptionSchedule[Tree]):
   """Wrapper for a pytree of corruption schedules.
 
   Enables using different corruption schedules for different input modalities.
   """
 
-  schedules: PyTree[hd_api.CorruptionSchedule]  # pyrefly: ignore[not-a-type]
+  schedules: jt.PyTree[hd_api.CorruptionSchedule[Batch]]
 
-  def evaluate(self, time: TimeTree) -> ScheduleInfoTree:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def evaluate(self, time: hd_api.Time[Tree]) -> hd_api.ScheduleInfo[Tree]:
     """Evaluate the schedule for a given time. Return a dictionary of info."""
     return jax.tree.map(
         lambda schedule, t: schedule.evaluate(t),
@@ -115,7 +120,7 @@ class NestedSchedule(hd_api.CorruptionSchedule):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedProcess(hd_api.CorruptionProcess):
+class NestedProcess(hd_api.CorruptionProcess[Tree]):
   """Wrapper for a pytree of corruption processes mapped over the data.
 
   Enables using different corruption processes for different input modalities.
@@ -137,20 +142,20 @@ class NestedProcess(hd_api.CorruptionProcess):
       data.
   """
 
-  processes: PyTree[hd_api.CorruptionProcess]  # pyrefly: ignore[not-a-type]
+  processes: jt.PyTree[hd_api.CorruptionProcess[Batch]]
 
   @property
-  def schedule(self) -> hd_api.CorruptionSchedule:
+  def schedule(self) -> hd_api.CorruptionSchedule[Tree]:
     return NestedSchedule(
         schedules=jax.tree.map(lambda p: p.schedule, self.processes)
     )
 
-  @kt.typechecked
+  @typechecked
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataTree,  # pyrefly: ignore[not-a-type]
-  ) -> DataTree:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Tree],
+  ) -> hd_api.Data[Tree]:
     """Sample from the invariant distribution."""
     return jax_helpers.tree_map_with_key(
         lambda k, process, data: process.sample_from_invariant(k, data),
@@ -159,13 +164,13 @@ class NestedProcess(hd_api.CorruptionProcess):
         data_spec,
     )
 
-  @kt.typechecked
+  @typechecked
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataTree,  # pyrefly: ignore[not-a-type]
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-  ) -> tuple[DataTree, TargetInfoTree]:  # pyrefly: ignore[not-a-type]
+      x0: hd_api.Data[Tree],
+      time: hd_api.Time[Tree],
+  ) -> tuple[hd_api.Data[Tree], hd_api.TargetInfo[Tree]]:
     x0_structure = jax.tree.structure(x0)
     time_structure = jax.tree.structure(time)
     if x0_structure != time_structure:
@@ -188,13 +193,13 @@ class NestedProcess(hd_api.CorruptionProcess):
     )
     return xt, target_info
 
-  @kt.typechecked
+  @typechecked
   def convert_predictions(
       self,
-      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      prediction: hd_api.TargetInfo[Tree],
+      xt: hd_api.Data[Tree],
+      time: hd_api.Time[Tree],
+  ) -> hd_api.TargetInfo[Tree]:
     """Convert the prediction to the target type."""
     return jax.tree.map(
         lambda process, pred, xt, time: process.convert_predictions(
@@ -215,7 +220,7 @@ class NestedProcess(hd_api.CorruptionProcess):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NestedSamplerStep(hd_api.SamplerStep):
+class NestedSamplerStep(hd_api.SamplerStep[Tree]):
   """Wrapper for a pytree of sampler steps mapped over the data.
 
   Usage Example:
@@ -232,14 +237,14 @@ class NestedSamplerStep(hd_api.SamplerStep):
     sampler_steps: A pytree of sampler steps matching the structure of the data.
   """
 
-  sampler_steps: PyTree[hd_api.SamplerStep]  # pyrefly: ignore[not-a-type]
+  sampler_steps: jt.PyTree[hd_api.SamplerStep[Batch]]
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      initial_noise: hd_api.Data[Tree],
+      initial_step_info: StepInfoTree,
+  ) -> DiffusionStepTree:
     return jax.tree.map(
         lambda stepper, init_noise, init_step_info: stepper.initialize(
             initial_noise=init_noise,
@@ -250,13 +255,13 @@ class NestedSamplerStep(hd_api.SamplerStep):
         initial_step_info,
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      current_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
-      next_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      prediction: hd_api.TargetInfo[Tree],
+      current_step: DiffusionStepTree,
+      next_step_info: StepInfoTree,
+  ) -> DiffusionStepTree:
     return jax.tree.map(
         lambda stepper, pred, current, next_info: stepper.update(
             prediction=pred,
@@ -269,13 +274,13 @@ class NestedSamplerStep(hd_api.SamplerStep):
         next_step_info,
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      current_step: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
-      last_step_info: StepInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> DiffusionStepTree:  # pyrefly: ignore[not-a-type]
+      prediction: hd_api.TargetInfo[Tree],
+      current_step: DiffusionStepTree,
+      last_step_info: StepInfoTree,
+  ) -> DiffusionStepTree:
     return jax.tree.map(
         lambda stepper, pred, current, last_info: stepper.finalize(
             prediction=pred,
@@ -295,7 +300,7 @@ class NestedSamplerStep(hd_api.SamplerStep):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedTimeSchedule(time_scheduling.TimeSchedule):
+class NestedTimeSchedule(time_scheduling.TimeSchedule[Tree]):
   """Wrapper to support a nested pytree of time schedules.
 
   The structure of the time schedule should match the structure of the data.
@@ -315,15 +320,15 @@ class NestedTimeSchedule(time_scheduling.TimeSchedule):
       data.
   """
 
-  time_schedules: PyTree[time_scheduling.TimeSchedule]  # pyrefly: ignore[not-a-type]
+  time_schedules: jt.PyTree[time_scheduling.TimeSchedule[Batch]]
 
-  @kt.typechecked
+  @typechecked
   def all_step_infos(
       self,
       rng: PRNGKey,
       num_steps: int,
-      data_spec: DataTree,  # pyrefly: ignore[not-a-type]
-  ) -> StepInfoTree:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Tree],
+  ) -> StepInfoTree:
     def _call_schedule(rng, time_schedule, data_spec):
       return time_schedule.all_step_infos(rng, num_steps, data_spec)
 
@@ -338,7 +343,7 @@ class NestedTimeSchedule(time_scheduling.TimeSchedule):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedDiffusionLoss(hd_api.DiffusionLoss):
+class NestedDiffusionLoss(hd_api.DiffusionLoss[Tree]):
   """Wrapper for a pytree of loss functions mapped over the data.
 
   Enables using different loss functions for different input modalities.
@@ -357,15 +362,15 @@ class NestedDiffusionLoss(hd_api.DiffusionLoss):
     losses: A pytree of loss functions matching the structure of the data.
   """
 
-  losses: PyTree[hd_api.DiffusionLoss]  # pyrefly: ignore[not-a-type]
+  losses: jt.PyTree[hd_api.DiffusionLoss[Batch]]
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      preds: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      targets: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-  ) -> LossOutputTree:  # pyrefly: ignore[not-a-type]
+      preds: hd_api.TargetInfo[Tree],
+      targets: hd_api.TargetInfo[Tree],
+      time: hd_api.Time[Tree],
+  ) -> hd_api.Loss[Tree]:
     return jax.tree.map(
         lambda loss, pred, target, t: loss(
             preds=pred,
@@ -384,7 +389,7 @@ class NestedDiffusionLoss(hd_api.DiffusionLoss):
 ################################################################################
 
 
-class NestedTimeEmbedder(nn.Module, conditioning_encoder.TimeEmbedder):
+class NestedTimeEmbedder(nn.Module, conditioning_encoder.TimeEmbedder[Tree]):
   """Wrapper for a pytree of time embedders mapped over the time tree.
 
   Per-modality time embeddings are summed to produce a single embedding.
@@ -408,11 +413,11 @@ class NestedTimeEmbedder(nn.Module, conditioning_encoder.TimeEmbedder):
       data.
   """
 
-  time_embedders: PyTree[conditioning_encoder.TimeEmbedder]  # pyrefly: ignore[not-a-type]
+  time_embedders: jt.PyTree[conditioning_encoder.TimeEmbedder[Batch]]
 
   @nn.compact
-  @kt.typechecked
-  def __call__(self, time: hd_typing.TimeTree) -> kt.Float['batch ...']:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, time: hd_api.Time[Tree]) -> jt.Float[jt.Array, 'b ...']:
     t_emb_tree = jax_helpers.lenient_map(
         lambda x, time_embedder: cast(nn.Module, time_embedder).copy()(x),
         time,
@@ -429,7 +434,7 @@ class NestedTimeEmbedder(nn.Module, conditioning_encoder.TimeEmbedder):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedGuidanceFn(guidance_lib.GuidanceFn):
+class NestedGuidanceFn(guidance_lib.GuidanceFn[Tree]):
   """Wrapper for a pytree of guidance functions mapped over the data.
 
   Usage Example:
@@ -447,17 +452,17 @@ class NestedGuidanceFn(guidance_lib.GuidanceFn):
       data.
   """
 
-  guidance_fns: PyTree[guidance_lib.GuidanceFn]  # pyrefly: ignore[not-a-type]
+  guidance_fns: jt.PyTree[guidance_lib.GuidanceFn[Batch]]
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      cond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-      uncond_outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Tree],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Tree],
+      cond_outputs: hd_api.TargetInfo[Tree],
+      uncond_outputs: hd_api.TargetInfo[Tree],
+  ) -> hd_api.TargetInfo[Tree]:
     """Combine conditional and unconditional outputs."""
     return jax.tree.map(
         lambda guidance_fn, xt, time, cond_out, uncond_out: guidance_fn(
@@ -481,7 +486,7 @@ class NestedGuidanceFn(guidance_lib.GuidanceFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedProjectionFn(projection_lib.ProjectionFn):
+class NestedProjectionFn(projection_lib.ProjectionFn[Tree]):
   """Wrapper for a pytree of projection functions mapped over the data.
 
   Usage Example:
@@ -499,16 +504,16 @@ class NestedProjectionFn(projection_lib.ProjectionFn):
       the data.
   """
 
-  projection_fns: PyTree[projection_lib.ProjectionFn]  # pyrefly: ignore[not-a-type]
+  projection_fns: jt.PyTree[projection_lib.ProjectionFn[Batch]]
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      outputs: TargetInfoTree,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Tree],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Tree],
+      outputs: hd_api.TargetInfo[Tree],
+  ) -> hd_api.TargetInfo[Tree]:
     """Nested projection function."""
     return jax.tree.map(
         lambda projection_fn, xt, time, output: projection_fn(
@@ -530,12 +535,12 @@ class NestedProjectionFn(projection_lib.ProjectionFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedFlaxLinenInferenceFn(hd_api.InferenceFn):
+class NestedFlaxLinenInferenceFn(hd_api.InferenceFn[Tree]):
   """Inference function for multimodal (nested/PyTree) data with nn.Module.
 
   This is the multimodal counterpart of ``wrappers.FlaxLinenInferenceFn``.
-  It uses ``DataTree`` / ``TimeTree`` type annotations so that
-  ``@kt.typechecked`` accepts PyTree inputs.
+  It uses ``Data[Tree]`` / ``Time[Tree]`` type annotations so that
+  ``@typechecked`` accepts PyTree inputs.
 
   Attributes:
     network: The Flax Linen module (e.g. ``MultiModalDiffusionNetwork``).
@@ -543,17 +548,17 @@ class NestedFlaxLinenInferenceFn(hd_api.InferenceFn):
   """
 
   network: nn.Module
-  params: PyTree  # pyrefly: ignore[not-a-type]
+  params: jt.PyTree
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Tree],
+      xt: hd_api.Data[Tree],
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Tree]:
     """Returns the model outputs."""
-    return self.network.apply(
+    return self.network.apply(  # pyrefly: ignore[bad-return]
         {'params': self.params},
         time=time,
         xt=xt,
@@ -568,7 +573,7 @@ class NestedFlaxLinenInferenceFn(hd_api.InferenceFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
+class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn[Tree]):
   """Guided diffusion inference function for multimodal (nested/PyTree) data.
 
   This is the multimodal counterpart of
@@ -611,13 +616,13 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
   guidance_fn: NestedGuidanceFn
   projection_fn: NestedProjectionFn
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Tree],
+      xt: hd_api.Data[Tree],
       conditioning: Conditioning | None,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Tree]:
     """Returns the model outputs with guidance and projection."""
 
     cond_outputs = self.base_inference_fn(
@@ -633,7 +638,7 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
     guided_outputs = self.guidance_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         cond_outputs=cond_outputs,
         uncond_outputs=uncond_outputs,
@@ -641,7 +646,7 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
     projected_outputs = self.projection_fn(
         xt=xt,
-        conditioning=conditioning,  # pyrefly: ignore[bad-argument-type]
+        conditioning=conditioning,
         time=time,
         outputs=guided_outputs,
     )
@@ -655,7 +660,7 @@ class NestedGuidedDiffusionInferenceFn(hd_api.InferenceFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class NestedTimeSampler(time_sampling.TimeSampler):
+class NestedTimeSampler(time_sampling.TimeSampler[Tree]):
   """Wrapper to support a nested pytree of time samplers.
 
   The structure of the samplers should match the structure of the data.
@@ -674,10 +679,12 @@ class NestedTimeSampler(time_sampling.TimeSampler):
     samplers: A pytree of time samplers matching the structure of the data.
   """
 
-  samplers: PyTree[time_sampling.TimeSampler]  # pyrefly: ignore[not-a-type]
+  samplers: jt.PyTree[time_sampling.TimeSampler[Batch]]
 
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, key: PRNGKey, data_spec: hd_api.Data[Tree]
+  ) -> hd_api.Time[Tree]:
     def _call_sampler(key, sampler, data_spec):
       return sampler(key, data_spec)
 
@@ -687,7 +694,7 @@ class NestedTimeSampler(time_sampling.TimeSampler):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class JointNestedTimeSampler(time_sampling.TimeSampler):
+class JointNestedTimeSampler(time_sampling.TimeSampler[Tree]):
   """Wrapper to support a nested pytree of time samplers.
 
   The structure of the samplers should match the structure of the data.
@@ -707,10 +714,12 @@ class JointNestedTimeSampler(time_sampling.TimeSampler):
     samplers: A pytree of time samplers matching the structure of the data.
   """
 
-  samplers: PyTree[time_sampling.TimeSampler]  # pyrefly: ignore[not-a-type]
+  samplers: jt.PyTree[time_sampling.TimeSampler[Batch]]
 
-  @kt.typechecked
-  def __call__(self, key: PRNGKey, data_spec: DataTree) -> TimeTree:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, key: PRNGKey, data_spec: hd_api.Data[Tree]
+  ) -> hd_api.Time[Tree]:
     def _call_sampler(sampler, data_spec):
       return sampler(jax.random.clone(key), data_spec)
 
@@ -723,7 +732,7 @@ class JointNestedTimeSampler(time_sampling.TimeSampler):
 
 
 class NestedSelfConditioningDiffusionNetwork(
-    nn.Module, diffusion_network.DiffusionNetwork
+    nn.Module, diffusion_network.DiffusionNetwork[Tree]
 ):
   """Multi-modal DiffusionNetwork with self-conditioning on predicted logits.
 
@@ -753,14 +762,16 @@ class NestedSelfConditioningDiffusionNetwork(
   """
 
   backbone_network: diffusion_network.ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.ConditioningEncoder
-  prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder[Tree]
+  prediction_type: jt.PyTree[str]
   processes: NestedProcess
   self_cond_prob: float = 0.5
   self_conditioning_key: str = 'self_conditioning_logits'
-  data_dtype: PyTree[DType] = jnp.float32  # pyrefly: ignore[not-a-type]
-  input_rescaler: PyTree[diffusion_network.InputRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
-  time_rescaler: PyTree[diffusion_network.TimeRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
+  data_dtype: jt.PyTree[DType] = jnp.float32
+  input_rescaler: (
+      jt.PyTree[diffusion_network.InputRescaler | None] | None
+  ) = None
+  time_rescaler: jt.PyTree[diffusion_network.TimeRescaler | None] | None = None
   rng_collection: str = 'self_conditioning'
 
   def __post_init__(self):
@@ -776,19 +787,22 @@ class NestedSelfConditioningDiffusionNetwork(
     jax.tree.map(_check_logits, self.prediction_type)
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Tree],
+      xt: hd_api.Data[Tree],
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Tree]:
 
     # 1. Rescale time and input (handling PyTrees)
     if self.time_rescaler is not None:
       time_rescaled = jax_helpers.lenient_map(
-          lambda t, tr: tr(t) if tr is not None else t, time, self.time_rescaler
+          lambda t, tr: tr(t) if tr is not None else t,
+          time,
+          self.time_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       time_rescaled = time
@@ -799,6 +813,7 @@ class NestedSelfConditioningDiffusionNetwork(
           time,
           xt,
           self.input_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       xt_rescaled = xt

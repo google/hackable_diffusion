@@ -14,9 +14,8 @@
 
 """Unet with conditional signal."""
 
-from typing import Sequence
+from typing import Sequence, TypeAlias
 import flax.linen as nn
-from hackable_diffusion.lib import diffusion_network
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import attention
@@ -26,16 +25,15 @@ from hackable_diffusion.lib.architecture import sequence_embedders
 from hackable_diffusion.lib.architecture import unet_blocks
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-
-RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+DType: TypeAlias = jax_helpers.DType
+RoPEPositionsFn: TypeAlias = sequence_embedders.RoPEPositionsFn
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -70,6 +68,8 @@ class Unet(nn.Module):
       as in https://arxiv.org/abs/2104.09864.
     attention_rope_positions_fn: The position function of rotary positional
       embeddings.
+    attention_dropout_rate: Dropout rate applied to attention weights inside
+      `AttentionResidualBlock` (defaults to 0.0).
     norm_strategy: Strategy for creating normalization layers.
     activation: Name of the activation function (e.g., 'silu', 'gelu').
     skip_connection_fn: Function for skip connections.
@@ -109,6 +109,7 @@ class Unet(nn.Module):
   skip_connection_fn: unet_blocks.SkipConnectionFn
 
   output_channels: int | None = None
+  attention_dropout_rate: float = 0.0
   zero_init_output: bool = True
   dtype: DType = jnp.float32
 
@@ -131,19 +132,15 @@ class Unet(nn.Module):
     self.num_scales = len(self.channels_multiplier)
     self.activation_fn = getattr(jax.nn, self.activation)
 
-    self.post_norm = self.uncond_norm_strategy.build_layer(
-        name="PostNorm"
-    )
-
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
+      x: jt.Float[jt.Array, "b height width channels"],
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> Float["batch height width output_channels"]:  # pyrefly: ignore[not-a-type]
+  ) -> jt.Float[jt.Array, "b height width output_channels"]:
 
     # Extract conditioning embeddings to use with adaptive normalization.
     adaptive_norm_emb = conditioning_embeddings.get(
@@ -197,6 +194,7 @@ class Unet(nn.Module):
               skip_connection_fn=self.skip_connection_fn,
               attention_heads_spec=self.attention_heads_spec,
               normalize_qk=self.attention_normalize_qk,
+              dropout_rate=self.attention_dropout_rate,
               dtype=self.dtype,
               name=f"Down_{i}_AttentionResidualBlock_{j}",
           )(
@@ -242,6 +240,7 @@ class Unet(nn.Module):
         skip_connection_fn=self.skip_connection_fn,
         attention_heads_spec=self.attention_heads_spec,
         normalize_qk=self.attention_normalize_qk,
+        dropout_rate=self.attention_dropout_rate,
         dtype=self.dtype,
         name="Middle_AttentionResidualBlock",
     )(x=x, cross_attention_emb=cross_attention_emb, is_training=is_training)
@@ -281,6 +280,7 @@ class Unet(nn.Module):
               skip_connection_fn=self.skip_connection_fn,
               attention_heads_spec=self.attention_heads_spec,
               normalize_qk=self.attention_normalize_qk,
+              dropout_rate=self.attention_dropout_rate,
               dtype=self.dtype,
               name=f"Up_{i}_AttentionResidualBlock_{j}",
           )(

@@ -451,7 +451,7 @@ class SimplicialStepSamplerTest(parameterized.TestCase):
         initial_noise=log_noise,
         initial_step_info=StepInfo(
             step=0,
-            time=jnp.array([0.5]),
+            time=jnp.array([[[[0.5]]]]),
             rng=jax.random.PRNGKey(0),
         ),
     )
@@ -462,7 +462,7 @@ class SimplicialStepSamplerTest(parameterized.TestCase):
         current_step=initial_step,
         next_step_info=StepInfo(
             step=1,
-            time=jnp.array([0.2]),
+            time=jnp.array([[[[0.2]]]]),
             rng=jax.random.PRNGKey(1),
         ),
     )

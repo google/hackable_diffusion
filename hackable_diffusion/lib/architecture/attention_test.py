@@ -14,7 +14,7 @@
 
 """Tests for the attention strategies and layers."""
 
-from hackable_diffusion.lib import hd_typing
+from typing import TypeAlias
 from hackable_diffusion.lib import test_helpers
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import sequence_embedders
@@ -22,8 +22,9 @@ import jax
 from jax.experimental.pallas import tpu as pltpu
 import jax.experimental.pallas.ops.tpu.flash_attention as flash
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 import numpy as np
+import typeguard
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -32,10 +33,9 @@ from absl.testing import parameterized
 # MARK: Type aliases
 ################################################################################
 
-Float = hd_typing.Float
 LinearRoPEPositions = sequence_embedders.LinearRoPEPositions
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
-RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+RoPEPositionsFn: TypeAlias = sequence_embedders.RoPEPositionsFn
 
 ################################################################################
 # MARK: Attention Tests
@@ -244,7 +244,7 @@ class AttentionTest(parameterized.TestCase):
   )
   def test_multi_head_attention_output_shape(
       self,
-      context: Float["batch sequence2 dim1"] | None,
+      context: str | None,
       use_rope: bool,
       rope_positions_fn: RoPEPositionsFn,
   ):
@@ -349,7 +349,8 @@ class AttentionTest(parameterized.TestCase):
           pass_context=True,
           invalid_seq_len=42,
           expected_regex=(
-              "is not shape-compatible with 'batch sequence1|sequence2'"
+              r"In cross-attention, mask shape \(\d+, \d+\) does not match"
+              r" expected shape \(\d+, \d+\)"
           ),
       ),
       dict(
@@ -367,7 +368,9 @@ class AttentionTest(parameterized.TestCase):
   ):
     """Tests that an invalid mask shape raises a ValueError."""
     module = attention.MultiHeadAttention(
-        attention_heads_spec=attention.AttentionHeadsSpec(num_heads=self.num_heads)
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        )
     )
 
     c = self.c if pass_context else None
@@ -376,10 +379,19 @@ class AttentionTest(parameterized.TestCase):
     invalid_mask = jnp.ones((self.batch_size, invalid_seq_len), dtype=jnp.bool_)
 
     # Verify that calling the module with this mask triggers the shape exception
-    with self.assertRaisesRegex(
-        (ValueError, kt.KTypeCheckError), expected_regex
-    ):
+    with self.assertRaisesRegex(ValueError, expected_regex):
       module.init(self.rng, self.x, c, mask=invalid_mask)
+
+  def test_multi_head_attention_batch_mismatch_raises_typecheck_error(self):
+    """Tests runtime jaxtyping batch-size check on MultiHeadAttention."""
+    module = attention.MultiHeadAttention(
+        attention_heads_spec=attention.AttentionHeadsSpec(
+            num_heads=self.num_heads
+        )
+    )
+    bad_c = jnp.ones((self.batch_size + 1, self.seq_len_kv, self.dim))
+    with self.assertRaises((typeguard.TypeCheckError, jt.TypeCheckError)):
+      module.init(self.rng, self.x, bad_c)
 
   # MARK: Dropout Tests
 

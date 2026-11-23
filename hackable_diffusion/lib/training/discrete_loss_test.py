@@ -90,7 +90,7 @@ class DiscreteLossTest(parameterized.TestCase):
 
     masks = [masks_1, masks_2, masks_3]
 
-    time = jnp.array([0.5])
+    time = jnp.full((1, 1, 1), 0.5)
 
     log_softmax_a = -jnp.log(
         jnp.exp(logits_a) / (jnp.exp(logits_a) + jnp.exp(logits_b))
@@ -131,7 +131,7 @@ class DiscreteLossTest(parameterized.TestCase):
 
     masks = [masks_1, masks_2, masks_3]
 
-    time = jnp.array([0.5])
+    time = jnp.full((1, 1, 1), 0.5)
 
     log_softmax_a = -jnp.log(
         jnp.exp(logits_a) / (jnp.exp(logits_a) + jnp.exp(logits_b))
@@ -173,7 +173,7 @@ class DiscreteLossTest(parameterized.TestCase):
 
     masks = [masks_1, masks_2, masks_3, masks_4, masks_5, masks_6, masks_7]
 
-    time = jnp.array([0.5])
+    time = jnp.full((1, 1, 1), 0.5)
 
     log_softmax_a = -jnp.log(
         jnp.exp(logits_a) / (jnp.exp(logits_a) + jnp.exp(logits_b))

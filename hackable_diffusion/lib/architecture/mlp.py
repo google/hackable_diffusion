@@ -17,24 +17,23 @@
 We only recommend using this backbone for very simple datasets.
 """
 
-from typing import Literal, Sequence
+from typing import Literal, Sequence, TypeAlias
+
 from flax import linen as nn
-from hackable_diffusion.lib import diffusion_network
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import mlp_blocks
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 import numpy as np
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-
-DataArray = hd_typing.DataArray
+Batch: TypeAlias = hd_api.Batch
+DType: TypeAlias = hd_typing.DType
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -71,14 +70,14 @@ class ConditionalMLP(nn.Module):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: DataArray,  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[Batch],
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.Data[Batch]:
     x_emb = jnp.reshape(x, shape=(x.shape[0], -1))
     # Input preprocessing.
     if self.hidden_sizes_preprocess:

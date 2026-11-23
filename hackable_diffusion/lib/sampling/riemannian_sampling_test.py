@@ -47,10 +47,10 @@ class RiemannianFlowSamplerStepTest(absltest.TestCase):
 
     current_step = hd_api.DiffusionStep(
         xt=xt,
-        step_info=hd_api.StepInfo(step=0, time=jnp.array([0.0]), rng=key),
+        step_info=hd_api.StepInfo(step=0, time=jnp.array([[0.0]]), rng=key),
         aux={},
     )
-    next_step_info = hd_api.StepInfo(step=1, time=jnp.array([0.1]), rng=key)
+    next_step_info = hd_api.StepInfo(step=1, time=jnp.array([[0.1]]), rng=key)
 
     prediction = {"velocity": v}
     next_step = sampler.update(prediction, current_step, next_step_info)
@@ -72,10 +72,10 @@ class RiemannianFlowSamplerStepTest(absltest.TestCase):
 
     current_step = hd_api.DiffusionStep(
         xt=xt,
-        step_info=hd_api.StepInfo(step=0, time=jnp.array([0.0]), rng=key),
+        step_info=hd_api.StepInfo(step=0, time=jnp.array([[[0.0]]]), rng=key),
         aux={},
     )
-    next_step_info = hd_api.StepInfo(step=1, time=jnp.array([0.1]), rng=key)
+    next_step_info = hd_api.StepInfo(step=1, time=jnp.array([[[0.1]]]), rng=key)
 
     prediction = {"velocity": v}
     next_step = sampler.update(prediction, current_step, next_step_info)
@@ -96,10 +96,10 @@ class RiemannianFlowSamplerStepTest(absltest.TestCase):
 
     current_step = hd_api.DiffusionStep(
         xt=xt,
-        step_info=hd_api.StepInfo(step=0, time=jnp.array([0.0]), rng=key),
+        step_info=hd_api.StepInfo(step=0, time=jnp.array([[0.0]]), rng=key),
         aux={},
     )
-    next_step_info = hd_api.StepInfo(step=1, time=jnp.array([1.0]), rng=key)
+    next_step_info = hd_api.StepInfo(step=1, time=jnp.array([[1.0]]), rng=key)
 
     prediction = {"velocity": v}
     next_step = sampler.update(prediction, current_step, next_step_info)
@@ -117,7 +117,9 @@ class RiemannianFlowSamplerStepTest(absltest.TestCase):
     key = jax.random.PRNGKey(0)
 
     initial_noise = manifold.random_uniform(key, (4, 3))
-    initial_step_info = hd_api.StepInfo(step=0, time=jnp.array([0.0]), rng=key)
+    initial_step_info = hd_api.StepInfo(
+        step=0, time=jnp.zeros((4, 1)), rng=key
+    )
 
     step = sampler.initialize(initial_noise, initial_step_info)
 
@@ -125,22 +127,25 @@ class RiemannianFlowSamplerStepTest(absltest.TestCase):
     self.assertEqual(step.step_info.step, 0)
 
   def test_finalize(self):
-    """Finalize returns the current step unchanged."""
+    """Finalize integrates the final interval and updates step_info."""
     manifold = manifolds.Sphere()
     sampler = _make_sampler(manifold)
     key = jax.random.PRNGKey(0)
 
     xt = jnp.array([[1.0, 0.0, 0.0]])
+    v = jnp.array([[0.0, 1.0, 0.0]])
     current_step = hd_api.DiffusionStep(
         xt=xt,
-        step_info=hd_api.StepInfo(step=5, time=jnp.array([1.0]), rng=key),
+        step_info=hd_api.StepInfo(step=5, time=jnp.array([[0.8]]), rng=key),
         aux={},
     )
-    last_step_info = hd_api.StepInfo(step=6, time=jnp.array([1.0]), rng=key)
-    prediction = {"velocity": jnp.zeros_like(xt)}
+    last_step_info = hd_api.StepInfo(step=6, time=jnp.array([[1.0]]), rng=key)
+    prediction = {"velocity": v}
 
     result = sampler.finalize(prediction, current_step, last_step_info)
-    np.testing.assert_array_equal(result.xt, xt)
+    expected_xt = jnp.array([[jnp.cos(0.2), jnp.sin(0.2), 0.0]])
+    np.testing.assert_allclose(result.xt, expected_xt, atol=1e-5)
+    self.assertEqual(result.step_info.step, 6)
 
 
 if __name__ == "__main__":

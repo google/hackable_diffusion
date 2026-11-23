@@ -15,19 +15,16 @@
 """Riemannian Flow Matching corruption process."""
 
 import dataclasses
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib import manifolds
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
-PRNGKey = hd_typing.PRNGKey
-DataArray = hd_typing.DataArray
-TimeArray = hd_typing.TimeArray
-TargetInfo = hd_typing.TargetInfo
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -35,7 +32,7 @@ TargetInfo = hd_typing.TargetInfo
 ################################################################################
 
 
-class RiemannianSchedule(hd_api.CorruptionSchedule, Protocol):
+class RiemannianSchedule(hd_api.CorruptionSchedule[Batch], Protocol):
   """Protocol for Riemannian schedules.
 
   Controls the geodesic interpolation via alpha(t):
@@ -45,16 +42,16 @@ class RiemannianSchedule(hd_api.CorruptionSchedule, Protocol):
   Subclasses must implement `alpha`.
   """
 
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """The geodesic interpolation parameter at time t."""
     ...
 
-  def alpha_dot(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def alpha_dot(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Time derivative of alpha. Defaults to autodiff."""
     return jax_helpers.egrad(self.alpha)(time)
 
-  @kt.typechecked
-  def evaluate(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def evaluate(self, time: hd_api.Time[Batch]) -> hd_api.ScheduleInfo[Batch]:
     return {
         'time': time,
         'alpha': self.alpha(time),
@@ -74,17 +71,17 @@ class LinearRiemannianSchedule(RiemannianSchedule):
   alpha(t) = t, and alpha_dot(t) = 1.0.
   """
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return 1.0 - time
 
-  @kt.typechecked
-  def alpha_dot(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha_dot(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return -jnp.ones_like(time)
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class RiemannianProcess:
+class RiemannianProcess(hd_api.CorruptionProcess[Batch]):
   """Riemannian Flow Matching corruption process.
 
   This is based on https://arxiv.org/abs/2302.03660.
@@ -97,27 +94,27 @@ class RiemannianProcess:
   manifold: manifolds.Manifold
   schedule: RiemannianSchedule
 
-  @kt.typechecked
+  @typechecked
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Batch],
+  ) -> hd_api.Data[Batch]:
     """Sample from the base distribution (uniform) on the manifold."""
     return self.manifold.random_uniform(key, data_spec.shape)
 
-  @kt.typechecked
+  @typechecked
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
+      x0: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> tuple[hd_api.Data[Batch], hd_api.TargetInfo[Batch]]:
     x1 = self.sample_from_invariant(key, data_spec=x0)
 
     # Evaluate schedule: alpha(t) is the geodesic interpolation parameter.
-    alpha_t = jax_helpers.bcast_right(self.schedule.alpha(time), x0.ndim)
-    alpha_dot_t = jax_helpers.bcast_right(self.schedule.alpha_dot(time), x0.ndim)
+    alpha_t = self.schedule.alpha(time)
+    alpha_dot_t = self.schedule.alpha_dot(time)
 
     # x_t = geodesic(x1, x0, alpha(t)).
     xt = manifolds.geodesic(self.manifold, x=x1, y=x0, t=alpha_t)
@@ -133,14 +130,15 @@ class RiemannianProcess:
 
     return xt, target_info
 
-  @kt.typechecked
+  @typechecked
   def convert_predictions(
       self,
-      prediction: TargetInfo,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:
+      prediction: hd_api.TargetInfo[Batch],
+      xt: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     """Convert predictions to velocity parameterization."""
+    del xt, time
     if 'velocity' in prediction:
       return prediction
     raise NotImplementedError(
