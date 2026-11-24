@@ -16,30 +16,28 @@
 
 import dataclasses
 import math
-from typing import Literal
+from typing import Literal, TypeAlias
 import warnings
 
 import flax.linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
 import jax.experimental.pallas.ops.tpu.flash_attention as flash
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-Float = hd_typing.Float
-Bool = hd_typing.Bool
-DType = hd_typing.DType
-
-RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+DType: TypeAlias = jax_helpers.DType
+RoPEPositionsFn: TypeAlias = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
+typechecked = jax_helpers.typechecked
 
-AttnQKNormMethod = Literal["l2", "rms_norm"]
+AttnQKNormMethod: TypeAlias = Literal["l2", "rms_norm"]
 
 ################################################################################
 # MARK: Constants
@@ -98,18 +96,19 @@ class AttentionHeadsSpec:
         )
       return self.head_dim, embedding_dim // self.head_dim
 
-    if embedding_dim % self.num_heads != 0:  # pyrefly: ignore[unsupported-operation]
+    assert self.num_heads is not None
+    if embedding_dim % self.num_heads != 0:
       raise ValueError(
           f"Embedding dim {embedding_dim} is not divisible by"
           f" num_heads {self.num_heads}."
       )
-    return embedding_dim // self.num_heads, self.num_heads  # pyrefly: ignore[bad-return, unsupported-operation]
+    return embedding_dim // self.num_heads, self.num_heads
 
 
-@kt.typechecked
+@typechecked
 def _stable_softmax(
-    logits: Float["*sequence dim"],  # pyrefly: ignore[not-a-type]
-) -> Float["*sequence dim"]:  # pyrefly: ignore[not-a-type]
+    logits: jt.Float[jt.Array, "*seq dim"],
+) -> jt.Float[jt.Array, "*seq dim"]:
   """Numerically stable softmax for (potential) bfloat 16."""
   if logits.dtype == jnp.float32:
     output = jax.nn.softmax(logits)
@@ -128,17 +127,17 @@ def _stable_softmax(
   return output
 
 
-@kt.typechecked
+@typechecked
 def _dot_product_attention(
-    q: Float["batch head sequence_query dim"],  # pyrefly: ignore[not-a-type]
-    k: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
-    v: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
-    rescale: float | Float["..."],  # pyrefly: ignore[bad-index, not-a-type]
+    q: jt.Float[jt.Array, "b head seq_q dim"],
+    k: jt.Float[jt.Array, "b head seq_k dim"],
+    v: jt.Float[jt.Array, "b head seq_k dim"],
+    rescale: float | jt.Float[jt.Array, "*#bcast"],
     *,
-    mask: Bool["batch sequence_key"] | None = None,
+    mask: jt.Bool[jt.Array, "b seq_k"] | None = None,
     dropout_rate: float = 0.0,
     is_training: bool = True,
-) -> Float["batch sequence_query head*dim"]:  # pyrefly: ignore[not-a-type]
+) -> jt.Float[jt.Array, "b seq_q head*dim"]:
   """Performs dot product attention.
 
   Args:
@@ -185,16 +184,16 @@ def _dot_product_attention(
   return attention_output
 
 
-@kt.typechecked
+@typechecked
 def _flash_dot_product_attention(
-    q: Float["batch head sequence_query dim"],  # pyrefly: ignore[not-a-type]
-    k: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
-    v: Float["batch head sequence_key dim"],  # pyrefly: ignore[not-a-type]
-    rescale: float | Float["..."],  # pyrefly: ignore[bad-index, not-a-type]
+    q: jt.Float[jt.Array, "b head seq_q dim"],
+    k: jt.Float[jt.Array, "b head seq_k dim"],
+    v: jt.Float[jt.Array, "b head seq_k dim"],
+    rescale: float | jt.Float[jt.Array, "*#bcast"],
     *,
-    mask: Bool["batch sequence_key"] | None = None,
+    mask: jt.Bool[jt.Array, "b seq_k"] | None = None,
     block_sizes: flash.BlockSizes | None = None,
-) -> Float["batch sequence_query head_dim_concat"]:
+) -> jt.Float[jt.Array, "b seq_q head*dim"]:
   """Broadcasts mask to SegmentIds and performs flash attention.
 
   Prevents quadratic attention memory usage and full intermediate and mask
@@ -310,15 +309,15 @@ class MultiHeadAttention(nn.Module):
       self.init_output = nn.linear.default_kernel_init
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float["batch sequence1 dim1"],  # pyrefly: ignore[not-a-type]
-      c: Float["batch sequence2 dim2"] | None,
+      x: jt.Float[jt.Array, "b seq_q dim_q"],
+      c: jt.Float[jt.Array, "b seq_kv dim_kv"] | None,
       *,
-      mask: Bool["batch sequence1|sequence2"] | None = None,
+      mask: jt.Bool[jt.Array, "b seq_mask"] | None = None,
       is_training: bool = True,
-  ) -> Float["batch sequence1 dim1"]:  # pyrefly: ignore[not-a-type]
+  ) -> jt.Float[jt.Array, "b seq_q dim_q"]:
     """Computes multi-head attention.
 
     Args:

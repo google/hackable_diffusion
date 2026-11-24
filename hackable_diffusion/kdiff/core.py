@@ -49,32 +49,35 @@ See also https://kauldron.readthedocs.io/en/latest/kontext.html#use-case
 """
 
 import dataclasses
-from typing import Optional
+from typing import Optional, TypeAlias, TypedDict
+
 import flax.linen as nn
 from hackable_diffusion import hd
-from hackable_diffusion.lib import hd_typing
 import jax
 from kauldron import kd
 
 ################################################################################
-# MARK: Type Aliases
+# MARK: Type Aliases & Schemas
 ################################################################################
 
-Array = hd_typing.Array
-Conditioning = hd_typing.Conditioning
-DataTree = hd_typing.DataTree
-LossOutput = hd_typing.LossOutput
-PyTree = hd_typing.PyTree
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
-typechecked = hd_typing.typechecked
+Conditioning: TypeAlias = hd.hd_api.Conditioning
+typechecked = hd.jax_helpers.typechecked
+
+
+class DiffusionOutput[Operand](TypedDict):
+  """Structured training-step output returned by `Diffusion`."""
+
+  output: hd.hd_api.TargetInfo[Operand]
+  target: hd.hd_api.TargetInfo[Operand]
+  xt: hd.hd_api.Data[Operand]
+  noise_info: hd.hd_api.ScheduleInfo[Operand]
 
 ################################################################################
 # MARK: Diffusion
 ################################################################################
 
 
-class Diffusion(nn.Module, kw_only=True):
+class Diffusion[Operand](nn.Module, kw_only=True):
   """Basic setup for training a diffusion model.
 
   This is the main entry point for training a diffusion model with
@@ -101,8 +104,8 @@ class Diffusion(nn.Module, kw_only=True):
   """
 
   network: nn.Module
-  corruption_process: hd.corruption.CorruptionProcess
-  time_sampler: hd.training.time_sampling.TimeSampler
+  corruption_process: hd.corruption.CorruptionProcess[Operand]
+  time_sampler: hd.training.time_sampling.TimeSampler[Operand]
 
   x0: kd.kontext.Key = kd.kontext.REQUIRED  # E.g. 'batch.image'.
   cond: Optional[kd.kontext.KeyTree] = None  # e.g. 'batch.label'
@@ -112,9 +115,9 @@ class Diffusion(nn.Module, kw_only=True):
   @typechecked
   def __call__(
       self,
-      x0: DataTree,  # pyrefly: ignore[not-a-type]
+      x0: hd.hd_api.Data[Operand],
       cond: Conditioning | None = None,
-  ) -> dict[str, PyTree]:  # pyrefly: ignore[not-a-type]
+  ) -> DiffusionOutput[Operand]:
     """Run the diffusion training step.
 
     Samples timesteps, corrupts the input data according to the corruption
@@ -166,10 +169,10 @@ class Diffusion(nn.Module, kw_only=True):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class KauldronLossWrapper(kd.losses.Loss):
+class KauldronLossWrapper[Operand](kd.losses.Loss):
   """Wrapper for hackable diffusion loss functions.
 
-  Args:
+  Attributes:
     preds: Key into the context for the predictions. E.g. 'preds.output'.
     targets: Key into the context for the targets. E.g. 'preds.target'.
     time: Key into the context for the time array. E.g. 'preds.noise_info.time'.
@@ -187,17 +190,17 @@ class KauldronLossWrapper(kd.losses.Loss):
 
   # Implicitly supports `weight` and `mask` as well (see `kd.losses.Loss`).
 
-  loss: hd.hd_api.DiffusionLoss
+  loss: hd.hd_api.DiffusionLoss[Operand]
 
   stop_gradient_on_targets: bool = False
 
   @typechecked
   def get_values(
       self,
-      preds: TargetInfo,
-      targets: TargetInfo,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
+      preds: hd.hd_api.TargetInfo[Operand],
+      targets: hd.hd_api.TargetInfo[Operand],
+      time: hd.hd_api.Time[Operand],
+  ) -> hd.hd_api.Loss[Operand]:
     return self.loss(
         preds=preds,
         targets=jax.lax.stop_gradient(targets)

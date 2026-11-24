@@ -15,23 +15,20 @@
 """Losses for discrete diffusion."""
 
 import dataclasses
+from typing import TypeAlias
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import discrete
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 import optax
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-LossOutput = hd_typing.LossOutput
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
-
-DiscreteSchedule = discrete.DiscreteSchedule
+Batch: TypeAlias = hd_api.Batch
+DiscreteSchedule: TypeAlias = discrete.DiscreteSchedule
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -39,21 +36,19 @@ DiscreteSchedule = discrete.DiscreteSchedule
 ################################################################################
 
 
-@kt.typechecked
+@typechecked
 def _compute_discrete_diffusion_loss(
-    preds: TargetInfo,
-    targets: TargetInfo,
-    time: TimeArray,  # pyrefly: ignore[not-a-type]
+    preds: hd_api.TargetInfo[Batch],
+    targets: hd_api.TargetInfo[Batch],
+    time: hd_api.Time[Batch],
     *,
     use_mask: bool = False,
     mask_key: str = 'is_corrupted',
     normalize_by_mask: bool = True,
-) -> LossOutput:  # pyrefly: ignore[not-a-type]
+) -> hd_api.Loss[Batch]:
   """Compute the discrete diffusion loss."""
 
   # The last dimension of preds and targets is a vocabulary dimension.
-  time = jax_helpers.bcast_right(time, targets['x0'].ndim)
-
   bsz = time.shape[0]
 
   labels = jnp.squeeze(targets['x0'], axis=-1)
@@ -116,20 +111,20 @@ def _compute_discrete_diffusion_loss(
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NoWeightDiscreteLoss(hd_api.DiffusionLoss):
+class NoWeightDiscreteLoss(hd_api.DiffusionLoss[Batch]):
   """Discrete loss without weight."""
 
   use_mask: bool = False
   mask_key: str = 'is_corrupted'
   normalize_by_mask: bool = True
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      preds: TargetInfo,
-      targets: TargetInfo,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
+      preds: hd_api.TargetInfo[Batch],
+      targets: hd_api.TargetInfo[Batch],
+      time: hd_api.Time[Batch],
+  ) -> hd_api.Loss[Batch]:
 
     return _compute_discrete_diffusion_loss(
         preds=preds,
@@ -142,7 +137,7 @@ class NoWeightDiscreteLoss(hd_api.DiffusionLoss):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class MD4Loss(hd_api.DiffusionLoss):
+class MD4Loss(hd_api.DiffusionLoss[Batch]):
   """MD4 loss as in https://arxiv.org/abs/2406.04329, Eq 5."""
 
   schedule: DiscreteSchedule
@@ -150,16 +145,15 @@ class MD4Loss(hd_api.DiffusionLoss):
   mask_key: str = 'is_corrupted'
   normalize_by_mask: bool = True
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      preds: TargetInfo,
-      targets: TargetInfo,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> LossOutput:  # pyrefly: ignore[not-a-type]
-    time_b = jax_helpers.bcast_right(time, targets['x0'].ndim)
-    alpha = self.schedule.alpha(time_b)
-    alpha_der = jax_helpers.egrad(self.schedule.alpha)(time_b)
+      preds: hd_api.TargetInfo[Batch],
+      targets: hd_api.TargetInfo[Batch],
+      time: hd_api.Time[Batch],
+  ) -> hd_api.Loss[Batch]:
+    alpha = self.schedule.alpha(time)
+    alpha_der = jax_helpers.egrad(self.schedule.alpha)(time)
     alpha = jax_helpers.flatten_non_batch_dims(alpha)
     alpha_der = jax_helpers.flatten_non_batch_dims(alpha_der)
     weight = -1.0 * alpha_der / jnp.clip(1.0 - alpha, min=1e-12)

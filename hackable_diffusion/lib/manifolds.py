@@ -14,8 +14,10 @@
 
 """Manifolds."""
 
-from typing import Protocol
-from hackable_diffusion.lib import hd_typing
+from typing import Protocol, TypeAlias
+
+from hackable_diffusion.lib import hd_api
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
 
@@ -23,11 +25,8 @@ import jax.numpy as jnp
 # MARK: Type Aliases
 ################################################################################
 
-DataArray = hd_typing.DataArray
-TimeArray = hd_typing.TimeArray
-PRNGKey = hd_typing.PRNGKey
-LossOutput = hd_typing.LossOutput
-Array = hd_typing.Array
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
 
 ################################################################################
 # MARK: Constants
@@ -41,15 +40,15 @@ EPSILON = 1e-6
 
 
 def unnormalized_sinc(
-    x: Array['*batch'],  # pyrefly: ignore[not-a-type]
-) -> Array['*batch']:  # pyrefly: ignore[not-a-type]
+    x: jax.Array,
+) -> jax.Array:
   """Safe sinc(x)."""
   return jnp.sinc(x / jnp.pi)
 
 
 def unnormalized_cosc(
-    x: Array['*batch'],  # pyrefly: ignore[not-a-type]
-) -> Array['*batch']:  # pyrefly: ignore[not-a-type]
+    x: jax.Array,
+) -> jax.Array:
   """Safe (1-cos(x))/x^2.
 
   Leverages the sinc trick to compute (1-cos(x))/x^2 safely. Using the identity
@@ -66,11 +65,11 @@ def unnormalized_cosc(
 
 
 def safe_norm(
-    x: Array,  # pyrefly: ignore[not-a-type]
+    x: jax.Array,
     axis: tuple[int, ...] = (-1,),
     keepdims: bool = True,
     eps: float = 1e-9,
-) -> Array:  # pyrefly: ignore[not-a-type]
+) -> jax.Array:
   """Computes norm safely to avoid NaN gradients at zero.
 
   Uses ``sqrt(max(sum(x^2), eps^2))`` instead of the standard ``norm``.
@@ -88,7 +87,7 @@ def safe_norm(
   return jnp.sqrt(jnp.maximum(sq, eps * eps))
 
 
-def transpose(x: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+def transpose(x: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
   """Transpose of a tensor on the last two dimensions."""
   return jnp.swapaxes(x, -1, -2)
 
@@ -135,32 +134,42 @@ class Manifold(Protocol):
   Flow Matching.
   """
 
-  def exp(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def exp(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Exponential map."""
     ...
 
-  def log(self, x: DataArray, y: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def log(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Logarithm map."""
     ...
 
-  def dist(self, x: DataArray, y: DataArray) -> LossOutput:  # pyrefly: ignore[not-a-type]
+  def dist(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Loss[Batch]:
     """Riemannian distance."""
     ...
 
-  def project(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def project(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Project vector v to tangent space at x."""
     ...
 
-  def random_uniform(self, key: PRNGKey, shape: tuple[int, ...]) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def random_uniform(
+      self, key: PRNGKey, shape: tuple[int, ...]
+  ) -> hd_api.Data[Batch]:
     """Sample from uniform distribution on the manifold."""
     ...
 
   def velocity(
       self,
-      x: DataArray,  # pyrefly: ignore[not-a-type]
-      y: DataArray,  # pyrefly: ignore[not-a-type]
-      t: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[Batch],
+      y: hd_api.Data[Batch],
+      t: hd_api.Time[Batch],
+  ) -> hd_api.Data[Batch]:
     """Velocity of the geodesic between x and y at time t."""
     ...
 
@@ -170,17 +179,19 @@ class Manifold(Protocol):
 ################################################################################
 
 
-def dist_sq(manifold: Manifold, x: DataArray, y: DataArray) -> LossOutput:  # pyrefly: ignore[not-a-type]
+def dist_sq(
+    manifold: Manifold, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+) -> hd_api.Loss[Batch]:
   """Squared Riemannian distance."""
   return jnp.square(manifold.dist(x, y))
 
 
 def geodesic(
     manifold: Manifold,
-    x: DataArray,  # pyrefly: ignore[not-a-type]
-    y: DataArray,  # pyrefly: ignore[not-a-type]
-    t: TimeArray,  # pyrefly: ignore[not-a-type]
-) -> DataArray:  # pyrefly: ignore[not-a-type]
+    x: hd_api.Data[Batch],
+    y: hd_api.Data[Batch],
+    t: hd_api.Time[Batch],
+) -> hd_api.Data[Batch]:
   """Geodesic between x and y at time t in [0, 1].
 
   A geodesic is the generalization of a straight line to a curved manifold.
@@ -205,6 +216,7 @@ def geodesic(
   Returns:
     Geodesic between x and y at time t.
   """
+  t = jax_helpers.bcast_right(t, x.ndim)
   return manifold.exp(x, t * manifold.log(x, y))
 
 
@@ -237,7 +249,9 @@ class Sphere(Manifold):
   more details.
   """
 
-  def exp(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def exp(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Exponential map on S^d.
 
     Compute the exponential map on the sphere according to the formula:
@@ -256,7 +270,9 @@ class Sphere(Manifold):
     # recall that unnormalized_sinc(x) = sin(x) / x
     return jnp.cos(v_norm) * x + unnormalized_sinc(v_norm) * v
 
-  def log(self, x: DataArray, y: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def log(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Logarithm map on S^d.
 
     Compute the logarithm map on the sphere according to the formula:
@@ -284,7 +300,9 @@ class Sphere(Manifold):
     theta = jnp.arccos(cos_theta)
     return (y - cos_theta * x) / unnormalized_sinc(theta)
 
-  def dist(self, x: DataArray, y: DataArray) -> LossOutput:  # pyrefly: ignore[not-a-type]
+  def dist(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Loss[Batch]:
     """Distance on S^d.
 
     Compute the distance on the sphere according to the formula:
@@ -303,7 +321,9 @@ class Sphere(Manifold):
     cos_theta = jnp.clip(cos_theta, -1.0 + EPSILON, 1.0 - EPSILON)
     return jnp.arccos(cos_theta)
 
-  def project(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def project(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Project vector v to tangent space at x.
 
     Compute the projection of v onto the tangent space at x according to the
@@ -321,7 +341,9 @@ class Sphere(Manifold):
     non_batch_axes = tuple(range(1, x.ndim))
     return v - jnp.sum(x * v, axis=non_batch_axes, keepdims=True) * x
 
-  def random_uniform(self, key: PRNGKey, shape: tuple[int, ...]) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def random_uniform(
+      self, key: PRNGKey, shape: tuple[int, ...]
+  ) -> hd_api.Data[Batch]:
     # Samples from N(0, I) and normalizes on the sphere.
     non_batch_axes = tuple(range(1, len(shape)))
     z = jax.random.normal(key, shape)
@@ -330,10 +352,10 @@ class Sphere(Manifold):
 
   def velocity(
       self,
-      x: DataArray,  # pyrefly: ignore[not-a-type]
-      y: DataArray,  # pyrefly: ignore[not-a-type]
-      t: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[Batch],
+      y: hd_api.Data[Batch],
+      t: hd_api.Time[Batch],
+  ) -> hd_api.Data[Batch]:
     """Velocity of the geodesic between x and y at time t.
 
     Compute the velocity of the geodesic between x and y at time t according to
@@ -361,6 +383,7 @@ class Sphere(Manifold):
     v = (y - cos_theta * x) / unnormalized_sinc(theta)
 
     # theta is mathematically equivalent to |v|
+    t = jax_helpers.bcast_right(t, x.ndim)
     return -theta * jnp.sin(t * theta) * x + jnp.cos(t * theta) * v
 
 
@@ -369,7 +392,7 @@ class Sphere(Manifold):
 ################################################################################
 
 
-def _hat(v: Array['*batch 3']) -> Array['*batch 3 3']:  # pyrefly: ignore[not-a-type]
+def _hat(v: jax.Array) -> jax.Array:
   """Hat map: R^3 -> so(3). Maps a 3D vector to a skew-symmetric matrix.
 
   Note that the operation is vectorized over the first dimension.
@@ -401,7 +424,7 @@ def _hat(v: Array['*batch 3']) -> Array['*batch 3 3']:  # pyrefly: ignore[not-a-
   )
 
 
-def _vee(omega: Array['*batch 3 3']) -> Array['*batch 3']:  # pyrefly: ignore[not-a-type]
+def _vee(omega: jax.Array) -> jax.Array:
   """Vee map: so(3) -> R^3. Maps a skew-symmetric matrix back to a 3D vector.
 
   Note that the operation is vectorized over the first dimension.
@@ -437,7 +460,9 @@ class SO3(Manifold):
   skew-symmetric matrix in the Lie algebra so(3).
   """
 
-  def exp(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def exp(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Exponential map on SO(3).
 
     Computes the exact exponential map using Rodrigues' rotation formula.
@@ -483,7 +508,9 @@ class SO3(Manifold):
     )
     return jnp.matmul(x, exp_mat)
 
-  def log(self, x: DataArray, y: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def log(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Logarithm map on SO(3).
 
     This is the inverse of the exponential map.
@@ -536,7 +563,9 @@ class SO3(Manifold):
     )
     return jnp.matmul(x, omega_mat)
 
-  def dist(self, x: DataArray, y: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def dist(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Loss[Batch]:
     """Computes the shortest geodesic distance between rotations x and y.
 
     Let y = exp(x, v) = x @ exp(Omega). Then the distance is given by theta,
@@ -559,7 +588,9 @@ class SO3(Manifold):
     # theta away from pi, since in those cases the distance is ill-defined.
     return jnp.arccos(cos_theta)
 
-  def project(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def project(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Project ambient matrix v to tangent space at x.
 
     Project the ambient matrix v to the tangent space at x by first shifting v
@@ -586,7 +617,9 @@ class SO3(Manifold):
     skew_omega_mat = 0.5 * (omega_mat - jnp.swapaxes(omega_mat, -1, -2))
     return jnp.matmul(x, skew_omega_mat)
 
-  def random_uniform(self, key: PRNGKey, shape: tuple[int, ...]) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def random_uniform(
+      self, key: PRNGKey, shape: tuple[int, ...]
+  ) -> hd_api.Data[Batch]:
     """Haar measure on SO(3).
 
     Samples rotation matrices uniformly via quaternions.
@@ -629,10 +662,10 @@ class SO3(Manifold):
 
   def velocity(
       self,
-      x: DataArray,  # pyrefly: ignore[not-a-type]
-      y: DataArray,  # pyrefly: ignore[not-a-type]
-      t: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[Batch],
+      y: hd_api.Data[Batch],
+      t: hd_api.Time[Batch],
+  ) -> hd_api.Data[Batch]:
     """Velocity of the geodesic between x and y at time t.
 
     This computes the time derivative (tangent vector) along the shortest path
@@ -680,6 +713,7 @@ class SO3(Manifold):
     v = self.log(x, y)
 
     # Find the point on the geodesic at time t: x(t) = x @ exp(t * Omega)
+    t = jax_helpers.bcast_right(t, v.ndim)
     xt = self.exp(x, t * v)
 
     # Extract the Lie algebra skew-symmetric matrix: Omega = x^T @ v
@@ -697,28 +731,38 @@ class SO3(Manifold):
 class Torus(Manifold):
   """T-dimensional Torus [0, 1]^d with periodic boundary conditions."""
 
-  def exp(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def exp(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     return (x + v) % 1.0
 
-  def log(self, x: DataArray, y: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def log(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Shortest displacement on the torus."""
     return (y - x + 0.5) % 1.0 - 0.5
 
-  def dist(self, x: DataArray, y: DataArray) -> LossOutput:  # pyrefly: ignore[not-a-type]
+  def dist(
+      self, x: hd_api.Data[Batch], y: hd_api.Data[Batch]
+  ) -> hd_api.Loss[Batch]:
     return jnp.linalg.norm(self.log(x, y), axis=-1)
 
-  def project(self, x: DataArray, v: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def project(
+      self, x: hd_api.Data[Batch], v: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     return v  # Tangent space is R^d
 
-  def random_uniform(self, key: DataArray, shape: tuple[int, ...]) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def random_uniform(
+      self, key: PRNGKey, shape: tuple[int, ...]
+  ) -> hd_api.Data[Batch]:
     return jax.random.uniform(key, shape)
 
   def velocity(
       self,
-      x: DataArray,  # pyrefly: ignore[not-a-type]
-      y: DataArray,  # pyrefly: ignore[not-a-type]
-      t: DataArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[Batch],
+      y: hd_api.Data[Batch],
+      t: hd_api.Time[Batch],
+  ) -> hd_api.Data[Batch]:
     # Geodesics on the flat torus are straight lines (with periodic wrapping),
     # so the velocity is constant and independent of time t.
     del t  # Unused.

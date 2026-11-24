@@ -14,19 +14,19 @@
 
 """MLP blocks."""
 
-from typing import Literal, Sequence
+from typing import Literal, Sequence, TypeAlias
 from flax import linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-FFNType = Literal["dense", "swiglu"]
+DType: TypeAlias = jax_helpers.DType
+FFNType: TypeAlias = Literal["dense", "swiglu"]
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: MLP
@@ -45,10 +45,13 @@ class MLP(nn.Module):
   zero_init_output: bool = False
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float['batch *other_dims num_inputs'], *, is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float['batch *other_dims num_features']:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Float[jt.Array, "b *other_dims num_inputs"],
+      *,
+      is_training: bool,
+  ) -> jt.Float[jt.Array, "b *other_dims num_features"]:
     """Applies MLP blocks to the input tensor.
 
     Args:
@@ -109,8 +112,10 @@ class GatingSwiGLU(nn.Module):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
-  def __call__(self, x: Float["*batch d_in"]) -> Float["*batch features"]:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, x: jt.Float[jt.Array, "*b d_in"]
+  ) -> jt.Float[jt.Array, "*b features"]:
     # Project to double feature width
     gate_and_val = nn.Dense(
         features=self.features * 2,
@@ -178,10 +183,13 @@ class FeedForward(nn.Module):
     )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float["batch *other_dims output_size"], *, is_training: bool  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch *other_dims output_size"]:  # pyrefly: ignore[not-a-type]
+      self,
+      x: jt.Float[jt.Array, "b *other_dims output_size"],
+      *,
+      is_training: bool,
+  ) -> jt.Float[jt.Array, "b *other_dims output_size"]:
     # Up-projection step
     if self.ffn_type == "swiglu":
       # Project to double feature width

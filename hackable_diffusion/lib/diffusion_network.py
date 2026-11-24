@@ -15,9 +15,10 @@
 """Diffusion network."""
 
 import dataclasses
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol, TYPE_CHECKING, TypeAlias, cast
+
 import flax.linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import conditioning_encoder
 from hackable_diffusion.lib.corruption import discrete
@@ -25,30 +26,33 @@ from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.corruption import simplicial
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-PRNGKey = hd_typing.PRNGKey
-PyTree = hd_typing.PyTree
+Batch: TypeAlias = hd_api.Batch
+DType: TypeAlias = jax_helpers.DType
+PRNGKey: TypeAlias = hd_api.PRNGKey
+GaussianSchedule: TypeAlias = gaussian.GaussianSchedule
+typechecked = jax_helpers.typechecked
 
-GaussianSchedule = gaussian.GaussianSchedule
+Conditioning: TypeAlias = hd_api.Conditioning
+ConditioningEmbeddings: TypeAlias = conditioning_encoder.ConditioningEmbeddings
 
-Conditioning = hd_typing.Conditioning
-ConditioningEmbeddings = hd_typing.ConditioningEmbeddings
-DataArray = hd_typing.DataArray
-DataTree = hd_typing.DataTree
-TargetInfo = hd_typing.TargetInfo
-TargetInfoTree = hd_typing.TargetInfoTree
-TimeArray = hd_typing.TimeArray
-TimeTree = hd_typing.TimeTree
+Shape: TypeAlias = jax_helpers.Shape
+ShapeTree: TypeAlias = jax_helpers.ShapeTree
+ConditioningShape: TypeAlias = dict[str, Shape]
 
-ConditioningShape = hd_typing.ConditioningShape
-Shape = hd_typing.Shape
-ShapeTree = hd_typing.ShapeTree
+if TYPE_CHECKING:
+  _MultiModalData: TypeAlias = jt.PyTree[hd_api.Data[Batch]]
+  _MultiModalTime: TypeAlias = jt.PyTree[hd_api.Time[Batch]]
+  _MultiModalTarget: TypeAlias = hd_api.TargetInfo[Any]
+else:
+  _MultiModalData = jt.PyTree[jt.Num[jt.Array, 'b ?*data'], 'T']
+  _MultiModalTime = jt.PyTree[jt.Float[jt.Array, 'b ?*#data'], 'T']
+  _MultiModalTarget = jt.PyTree[jt.Shaped[jt.Array, 'b ...']]
 
 
 ################################################################################
@@ -59,14 +63,16 @@ ShapeTree = hd_typing.ShapeTree
 class InputRescaler(Protocol):
   """Rescales the input in a schedule-dependent way."""
 
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def __call__(
+      self, time: hd_api.Time[Batch], inputs: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     ...
 
 
 class TimeRescaler(Protocol):
   """Rescales the time, optionally in a schedule-dependent way."""
 
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def __call__(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     ...
 
 
@@ -80,28 +86,28 @@ class ConditionalBackbone(Protocol):
 
   def __call__(
       self,
-      x: DataArray,  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[Batch],
       conditioning_embeddings: ConditioningEmbeddings,
       *,
       is_training: bool,
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.Data[Batch]:
     ...
 
 
-class DiffusionNetwork(Protocol):
+class DiffusionNetwork[Operand](Protocol):
   """Base diffusion network."""
 
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Operand],
+      xt: hd_api.Data[Operand],
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.TargetInfo[Operand]:
     ...
 
 
-class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
+class StandardDiffusionNetwork(nn.Module, DiffusionNetwork[Batch]):
   """Diffusion network.
 
   This class is responsible for orchestrating the different components of the
@@ -132,7 +138,7 @@ class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
   """
 
   backbone_network: ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.ConditioningEncoder
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder[Batch]
   prediction_type: str
   data_dtype: DType = jnp.float32
   input_rescaler: InputRescaler | None = None
@@ -144,7 +150,7 @@ class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
       conditioning_shape: ConditioningShape,
       key: PRNGKey,
       is_training: bool = False,
-  ) -> PyTree:  # pyrefly: ignore[not-a-type]
+  ) -> jt.PyTree:
     """Initializes the variables of the model from shapes."""
     dummy_xt = jax_helpers.get_dummy_batch_fixed_dtype(
         input_shape, dtype=self.data_dtype
@@ -152,8 +158,12 @@ class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
     dummy_conditioning = jax_helpers.get_dummy_batch_fixed_dtype(
         conditioning_shape, dtype=jnp.float32
     )
-    dummy_time = jax_helpers.get_dummy_batch_fixed_dtype(
-        input_shape, only_first_axis=True, dtype=jnp.float32
+    dummy_time = jax.tree.map(
+        lambda s: jnp.zeros(
+            jax_helpers.get_broadcastable_shape(s, (0,)), dtype=jnp.float32
+        ),
+        input_shape,
+        is_leaf=jax_helpers.is_tuple_of_ints,
     )
 
     params_key, dropout_key = jax.random.split(key)
@@ -166,14 +176,14 @@ class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
     )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfo:
+  ) -> hd_api.TargetInfo[Batch]:
 
     # Rescale time and input.
 
@@ -199,7 +209,9 @@ class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
         is_training=is_training,
     )
 
-    return {self.prediction_type: backbone_outputs}
+    return cast(
+        hd_api.TargetInfo[Batch], {self.prediction_type: backbone_outputs}
+    )
 
 
 ################################################################################
@@ -207,7 +219,7 @@ class StandardDiffusionNetwork(nn.Module, DiffusionNetwork):
 ################################################################################
 
 
-class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
+class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork[Batch]):
   """DiffusionNetwork with self-conditioning on predicted logits.
 
   Implements self-conditioning from the discrete diffusion literature
@@ -251,7 +263,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
   """
 
   backbone_network: ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.ConditioningEncoder
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder[Batch]
   prediction_type: str
   process: discrete.CategoricalProcess | simplicial.SimplicialProcess
   self_cond_prob: float = 0.5
@@ -276,7 +288,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
       conditioning_shape: ConditioningShape,
       key: PRNGKey,
       is_training: bool = False,
-  ) -> PyTree:  # pyrefly: ignore[not-a-type]
+  ) -> jt.PyTree:
     """Initializes the variables of the model from shapes."""
     dummy_xt = jax_helpers.get_dummy_batch_fixed_dtype(
         input_shape, dtype=self.data_dtype
@@ -284,8 +296,12 @@ class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
     dummy_conditioning = jax_helpers.get_dummy_batch_fixed_dtype(
         conditioning_shape, dtype=jnp.float32
     )
-    dummy_time = jax_helpers.get_dummy_batch_fixed_dtype(
-        input_shape, only_first_axis=True, dtype=jnp.float32
+    dummy_time = jax.tree.map(
+        lambda s: jnp.zeros(
+            jax_helpers.get_broadcastable_shape(s, (0,)), dtype=jnp.float32
+        ),
+        input_shape,
+        is_leaf=jax_helpers.is_tuple_of_ints,
     )
 
     params_key, sc_key, dropout_key = jax.random.split(key, 3)
@@ -302,14 +318,14 @@ class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
     )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      time: hd_api.Time[Batch],
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfo:
+  ) -> hd_api.TargetInfo[Batch]:
 
     time_rescaled = (
         self.time_rescaler(time) if self.time_rescaler is not None else time
@@ -377,7 +393,9 @@ class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
         is_training=is_training,
     )
 
-    return {self.prediction_type: backbone_outputs}
+    return cast(
+        hd_api.TargetInfo[Batch], {self.prediction_type: backbone_outputs}
+    )
 
 
 ################################################################################
@@ -385,7 +403,7 @@ class SelfConditioningDiffusionNetwork(nn.Module, DiffusionNetwork):
 ################################################################################
 
 
-class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
+class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork[Any]):
   """Multi-modal diffusion network.
 
   This DiffusionNetwork is a generalization of the DiffusionNetwork to
@@ -412,11 +430,11 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
   """
 
   backbone_network: ConditionalBackbone
-  conditioning_encoder: conditioning_encoder.ConditioningEncoder
-  prediction_type: PyTree[str]  # pyrefly: ignore[not-a-type]
-  data_dtype: PyTree[DType]  # pyrefly: ignore[not-a-type]
-  input_rescaler: PyTree[InputRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
-  time_rescaler: PyTree[TimeRescaler | None] | None = None  # pyrefly: ignore[not-a-type]
+  conditioning_encoder: conditioning_encoder.ConditioningEncoder[Any]
+  prediction_type: jt.PyTree[str]
+  data_dtype: jt.PyTree[DType]
+  input_rescaler: jt.PyTree[InputRescaler | None] | None = None
+  time_rescaler: jt.PyTree[TimeRescaler | None] | None = None
 
   def initialize_variables(
       self,
@@ -424,13 +442,17 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
       conditioning_shape: ConditioningShape,
       key: PRNGKey,
       is_training: bool = False,
-  ) -> PyTree:  # pyrefly: ignore[not-a-type]
+  ) -> jt.PyTree:
     dummy_xt = jax_helpers.get_dummy_batch(input_shape, dtype=self.data_dtype)
     dummy_conditioning = jax_helpers.get_dummy_batch_fixed_dtype(
         conditioning_shape, dtype=jnp.float32
     )
-    dummy_time = jax_helpers.get_dummy_batch_fixed_dtype(
-        input_shape, only_first_axis=True, dtype=jnp.float32
+    dummy_time = jax.tree.map(
+        lambda s: jnp.zeros(
+            jax_helpers.get_broadcastable_shape(s, (0,)), dtype=jnp.float32
+        ),
+        input_shape,
+        is_leaf=jax_helpers.is_tuple_of_ints,
     )
 
     params_key, dropout_key = jax.random.split(key)
@@ -443,14 +465,14 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
     )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      time: TimeTree,  # pyrefly: ignore[not-a-type]
-      xt: DataTree,  # pyrefly: ignore[not-a-type]
+      time: _MultiModalTime,
+      xt: _MultiModalData,
       conditioning: Conditioning | None,
       is_training: bool,
-  ) -> TargetInfoTree:  # pyrefly: ignore[not-a-type]
+  ) -> _MultiModalTarget:
     if self.time_rescaler is not None:
       time_rescaled = jax_helpers.lenient_map(
           lambda time, time_rescaler: time_rescaler(time)
@@ -458,6 +480,7 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
           else time,
           time,
           self.time_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       time_rescaled = time
@@ -470,6 +493,7 @@ class MultiModalDiffusionNetwork(nn.Module, DiffusionNetwork):
           time,
           xt,
           self.input_rescaler,
+          is_leaf=lambda x: x is None,
       )
     else:
       xt_rescaled = xt
@@ -506,10 +530,12 @@ class LogSnrTimeRescaler(TimeRescaler):
   """Time rescaler that uses the logsnr of the process."""
 
   schedule: GaussianSchedule
-  postprocess_fn: Callable[[TimeArray], TimeArray] | None = None  # pyrefly: ignore[not-a-type]
+  postprocess_fn: Callable[[hd_api.Time[Batch]], hd_api.Time[Batch]] | None = (
+      None
+  )
 
-  @kt.typechecked
-  def __call__(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Returns the time rescaled by the logsnr of the process."""
     if self.postprocess_fn is None:
       postprocess_fn = lambda x: x
@@ -529,12 +555,12 @@ class MagnitudeScheduleInputRescaler(InputRescaler):
 
   schedule: GaussianSchedule
 
-  @kt.typechecked
-  def __call__(self, time: TimeArray, inputs: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(
+      self, time: hd_api.Time[Batch], inputs: hd_api.Data[Batch]
+  ) -> hd_api.Data[Batch]:
     """Returns the inputs rescaled by the magnitude of the schedule."""
     alpha_t = self.schedule.alpha(time)
     sigma_t = self.schedule.sigma(time)
-    alpha_t = jax_helpers.bcast_right(alpha_t, inputs.ndim)
-    sigma_t = jax_helpers.bcast_right(sigma_t, inputs.ndim)
     magnitude = jnp.sqrt(jnp.square(alpha_t) + jnp.square(sigma_t))
     return inputs / magnitude

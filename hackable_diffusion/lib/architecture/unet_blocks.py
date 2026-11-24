@@ -16,32 +16,35 @@
 
 import dataclasses
 import functools
-from typing import Callable, Protocol
+from typing import Callable, Protocol, TypeAlias
 import flax.linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import attention
 from hackable_diffusion.lib.architecture import normalization
 from hackable_diffusion.lib.architecture import sequence_embedders
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DType = hd_typing.DType
-Float = hd_typing.Float
-
-ActivationFn = Callable[[jax.Array], jax.Array]
-RoPEPositionsFn = sequence_embedders.RoPEPositionsFn
+DType: TypeAlias = jax_helpers.DType
+ActivationFn: TypeAlias = Callable[[jax.Array], jax.Array]
+RoPEPositionsFn: TypeAlias = sequence_embedders.RoPEPositionsFn
 SquareRoPEPositions = sequence_embedders.SquareRoPEPositions
+typechecked = jax_helpers.typechecked
 
 
-SpatialInput = Float["batch height width input_channels"]
-SpatialOutput = Float["batch height width output_channels"]
-UpsampleOutput = Float["batch height*2 width*2 output_channels"]
-DownsampleOutput = Float["batch height/2 width/2 output_channels"]
+SpatialInput: TypeAlias = jt.Float[jt.Array, "b height width input_channels"]
+SpatialOutput: TypeAlias = jt.Float[jt.Array, "b height width output_channels"]
+UpsampleOutput: TypeAlias = jt.Float[
+    jt.Array, "b height*2 width*2 output_channels"
+]
+DownsampleOutput: TypeAlias = jt.Float[
+    jt.Array, "b height//2 width//2 output_channels"
+]
 
 # Reusable NN Components
 kernel_init = nn.initializers.lecun_normal()
@@ -66,9 +69,9 @@ class SkipConnectionFn(Protocol):
 
   def __call__(
       self,
-      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-      skip: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
+      x: jt.Float[jt.Array, "b height width channels"],
+      skip: jt.Float[jt.Array, "b height width channels"],
+  ) -> jt.Float[jt.Array, "b height width channels"]:
     ...
 
 
@@ -76,8 +79,8 @@ class DownsampleFn(Protocol):
   """Protocol for downsample functions."""
 
   def __call__(
-      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "b height width channels"]
+  ) -> jt.Float[jt.Array, "b height//2 width//2 channels"]:
     ...
 
 
@@ -85,8 +88,8 @@ class UpsampleFn(Protocol):
   """Protocol for upsample functions."""
 
   def __call__(
-      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height*2 width*2 channels"]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "b height width channels"]
+  ) -> jt.Float[jt.Array, "b height*2 width*2 channels"]:
     ...
 
 
@@ -94,12 +97,12 @@ class UpsampleFn(Protocol):
 class UnnormalizedAddSkip(SkipConnectionFn):
   """Unnormalized addition skip connection (x + skip)."""
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-      skip: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
+      x: jt.Float[jt.Array, "b height width channels"],
+      skip: jt.Float[jt.Array, "b height width channels"],
+  ) -> jt.Float[jt.Array, "b height width channels"]:
     return x + skip
 
 
@@ -107,12 +110,12 @@ class UnnormalizedAddSkip(SkipConnectionFn):
 class NormalizedAddSkip(SkipConnectionFn):
   """Normalized addition skip connection ((x + skip) / sqrt(2))."""
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-      skip: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
+      x: jt.Float[jt.Array, "b height width channels"],
+      skip: jt.Float[jt.Array, "b height width channels"],
+  ) -> jt.Float[jt.Array, "b height width channels"]:
     return (x + skip) / jnp.sqrt(2)
 
 
@@ -123,10 +126,10 @@ class MaxPoolDownsample(DownsampleFn):
   window_shape: tuple[int, int] = (2, 2)
   strides: tuple[int, int] = (2, 2)
 
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "b height width channels"]
+  ) -> jt.Float[jt.Array, "b height//2 width//2 channels"]:
     return nn.max_pool(x, window_shape=self.window_shape, strides=self.strides)
 
 
@@ -137,10 +140,10 @@ class AvgPoolDownsample(DownsampleFn):
   window_shape: tuple[int, int] = (2, 2)
   strides: tuple[int, int] = (2, 2)
 
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height/2 width/2 channels"]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "b height width channels"]
+  ) -> jt.Float[jt.Array, "b height//2 width//2 channels"]:
     return nn.avg_pool(x, window_shape=self.window_shape, strides=self.strides)
 
 
@@ -150,9 +153,10 @@ class ImageResizeUpsample(UpsampleFn):
 
   resize_method: str
 
+  @typechecked
   def __call__(
-      self, x: Float["batch height width channels"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch height*2 width*2 channels"]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "b height width channels"]
+  ) -> jt.Float[jt.Array, "b height*2 width*2 channels"]:
     return jax.image.resize(
         x,
         (x.shape[0], 2 * x.shape[1], 2 * x.shape[2], x.shape[3]),
@@ -179,8 +183,8 @@ class InputConvBlock(nn.Module):
   dtype: DType = jnp.float32
 
   @nn.compact
-  @kt.typechecked
-  def __call__(self, x: SpatialInput) -> SpatialOutput:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, x: SpatialInput) -> SpatialOutput:
     x = Conv3x3(
         padding="SAME",
         features=self.num_output_channels,
@@ -218,8 +222,8 @@ class OutputConvBlock(nn.Module):
       self.output_conv = Conv3x3  # default kernel init
 
   @nn.compact
-  @kt.typechecked
-  def __call__(self, x: SpatialInput) -> SpatialOutput:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def __call__(self, x: SpatialInput) -> SpatialOutput:
     """Projects the output tensor."""
 
     x = self.norm(x)
@@ -271,11 +275,11 @@ class ConvResidualBlock(nn.Module):
     self.init_output = nn.initializers.zeros_init()
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: SpatialInput,  # pyrefly: ignore[not-a-type]
-      adaptive_norm_emb: Float["batch emb_dim"],  # pyrefly: ignore[not-a-type]
+      x: SpatialInput,
+      adaptive_norm_emb: jt.Float[jt.Array, "b emb_dim"],
       is_training: bool,
   ) -> SpatialOutput | UpsampleOutput | DownsampleOutput:
     input_channels = x.shape[-1]
@@ -332,6 +336,7 @@ class AttentionResidualBlock(nn.Module):
     skip_connection_fn: The skip connection function.
     attention_heads_spec: num_heads and head_dim for the attention mecanism.
     normalize_qk: Whether to normalize query and key in attention.
+    dropout_rate: Dropout rate applied to attention weights.
     dtype: The data type of the computation.
   """
 
@@ -342,20 +347,21 @@ class AttentionResidualBlock(nn.Module):
   skip_connection_fn: SkipConnectionFn
   attention_heads_spec: attention.AttentionHeadsSpec
   normalize_qk: bool = False
+  dropout_rate: float = 0.0
   dtype: DType = jnp.float32
 
   def setup(self):
     self.norm = self.norm_strategy.build_layer(name="Norm")
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      x: Float["batch height width channels"],  # pyrefly: ignore[not-a-type]
-      cross_attention_emb: Float["batch seq cond_dim2"] | None,
+      x: jt.Float[jt.Array, "b height width channels"],
+      cross_attention_emb: jt.Float[jt.Array, "b seq cond_dim2"] | None,
       *,
       is_training: bool,
-  ) -> Float["batch height width channels"]:  # pyrefly: ignore[not-a-type]
+  ) -> jt.Float[jt.Array, "b height width channels"]:
     skip = x
     b, h, w, channels = x.shape
     x = self.norm(x)
@@ -366,8 +372,13 @@ class AttentionResidualBlock(nn.Module):
         normalize_qk=self.normalize_qk,
         rope_positions_fn=self.rope_positions_fn,
         zero_init_output=True,
+        dropout_rate=self.dropout_rate,
         dtype=self.dtype,
-    )(x=x, c=cross_attention_emb if self.cross_attention_bool else None)
+    )(
+        x=x,
+        c=cross_attention_emb if self.cross_attention_bool else None,
+        is_training=is_training,
+    )
     x = x.reshape(b, h, w, channels)
     x = self.skip_connection_fn(x, skip)
     return x

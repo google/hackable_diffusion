@@ -14,9 +14,12 @@
 
 """Tests for the conditioning encoder."""
 
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.architecture import conditioning_encoder
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
+import typeguard
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -806,6 +809,23 @@ class EncodeConditioningTest(parameterized.TestCase):
         "'conditioning_mask' is a reserved key",
     ):
       encoder.init(self.rng, t, c, is_training=False)
+
+  def test_conditioning_embeddings_typed_dict_runtime_checks(self):
+    @jax_helpers.typechecked
+    def consume(emb: conditioning_encoder.ConditioningEmbeddings) -> None:
+      del emb
+
+    consume({
+        'adaptive_norm': jnp.ones((2, 8)),
+        'cross_attention': jnp.ones((2, 4, 8)),
+        'conditioning_mask': jnp.ones((2,), dtype=jnp.bool_),
+        'custom_channel': jnp.ones((2, 3)),
+    })
+    with self.assertRaises((typeguard.TypeCheckError, jt.TypeCheckError)):
+      consume({
+          'adaptive_norm': jnp.ones((2, 8)),
+          'cross_attention': jnp.ones((3, 4, 8)),
+      })
 
 
 if __name__ == '__main__':

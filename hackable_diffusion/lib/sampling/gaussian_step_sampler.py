@@ -32,31 +32,23 @@ relevant representation, for instance score, velocity, etc.
 """
 
 import dataclasses
+from typing import TypeAlias
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.sampling import time_scheduling
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-PRNGKey = hd_typing.PRNGKey
-
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-
-DiffusionStep = hd_api.DiffusionStep
-StepInfo = hd_api.StepInfo
-SamplerStep = hd_api.SamplerStep
-
-GaussianProcess = gaussian.GaussianProcess
-TimeSchedule = time_scheduling.TimeSchedule
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+GaussianProcess: TypeAlias = gaussian.GaussianProcess
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: SDE Step
@@ -64,7 +56,7 @@ TimeSchedule = time_scheduling.TimeSchedule
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class SdeStep(SamplerStep):
+class SdeStep(hd_api.SamplerStep[Batch]):
   """Stochastic Differential Equation (SDE) sampling.
 
   Attributes:
@@ -77,33 +69,31 @@ class SdeStep(SamplerStep):
   churn: float
   stochastic_last_step: bool = False
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfo,
-  ) -> DiffusionStep:
-    return DiffusionStep(
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def _update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
       stochastic: bool = True,
-  ) -> DiffusionStep:
+  ) -> hd_api.DiffusionStep[Batch]:
     current_step_info = current_step.step_info
     xt = current_step.xt
 
     time = current_step_info.time
     next_time = next_step_info.time
-    time = jax_helpers.bcast_right(time, xt.ndim)
-    next_time = jax_helpers.bcast_right(next_time, xt.ndim)
 
     f = self.corruption_process.schedule.f(time)
     g = self.corruption_process.schedule.g(time)
@@ -131,19 +121,19 @@ class SdeStep(SamplerStep):
     else:
       new_xt = mean
 
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self._update(
         prediction,
         current_step,
@@ -151,13 +141,13 @@ class SdeStep(SamplerStep):
         stochastic=True,
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      last_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self._update(
         prediction,
         current_step,
@@ -172,7 +162,7 @@ class SdeStep(SamplerStep):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class AdjustedDDIMStep(SamplerStep):
+class AdjustedDDIMStep(hd_api.SamplerStep[Batch]):
   """Adjusted DDIM sampler from https://arxiv.org/pdf/2403.06807.
 
   We refer to Algorithm 3 of the paper. The strategy used to estimate the
@@ -185,32 +175,30 @@ class AdjustedDDIMStep(SamplerStep):
 
   corruption_process: GaussianProcess
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfo,
-  ) -> DiffusionStep:
-    return DiffusionStep(
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     current_step_info = current_step.step_info
     xt = current_step.xt
 
     time = current_step_info.time
     next_time = next_step_info.time
-    time = jax_helpers.bcast_right(time, xt.ndim)
-    next_time = jax_helpers.bcast_right(next_time, xt.ndim)
 
     alpha = self.corruption_process.schedule.alpha(time)
     sigma = self.corruption_process.schedule.sigma(time)
@@ -227,28 +215,31 @@ class AdjustedDDIMStep(SamplerStep):
 
     # Estimation according to page 7 of the paper.
     xt_var = 0.1 / (2 + jnp.square(alpha / sigma))
-    # Ajusted DDIM update.
+    # Adjusted DDIM update.
     next_xt_var = jnp.square(next_alpha - alpha * next_sigma / sigma) * xt_var
-    norm_epsilon = jnp.mean(jnp.square(epsilon), keepdims=True)
+    non_batch_axes = tuple(range(1, epsilon.ndim))
+    norm_epsilon = jnp.mean(
+        jnp.square(epsilon), axis=non_batch_axes, keepdims=True
+    )
     new_xt = (
-        alpha * x0
+        next_alpha * x0
         + jnp.sqrt(jnp.square(next_sigma) + next_xt_var / norm_epsilon)
         * epsilon
     )
 
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      last_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self.update(
         prediction,
         current_step,
@@ -262,7 +253,7 @@ class AdjustedDDIMStep(SamplerStep):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class DDIMStep(SamplerStep):
+class DDIMStep(hd_api.SamplerStep[Batch]):
   """DDIM sampler from https://arxiv.org/abs/2010.02502.
 
   stoch_coeff controls the interpolation between DDIM and DDPM:
@@ -284,33 +275,31 @@ class DDIMStep(SamplerStep):
   noise_frac: float = 0.0
   stochastic_last_step: bool = False
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfo,
-  ) -> DiffusionStep:
-    return DiffusionStep(
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
       stochastic: bool = True,
-  ) -> DiffusionStep:
+  ) -> hd_api.DiffusionStep[Batch]:
     current_step_info = current_step.step_info
     xt = current_step.xt
 
     time = current_step_info.time
     next_time = next_step_info.time
-    time = jax_helpers.bcast_right(time, xt.ndim)
-    next_time = jax_helpers.bcast_right(next_time, xt.ndim)
 
     x0 = self.corruption_process.convert_predictions(
         prediction=prediction,
@@ -354,19 +343,19 @@ class DDIMStep(SamplerStep):
     else:
       new_xt = new_mean
 
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      last_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self.update(
         prediction,
         current_step,
@@ -381,7 +370,7 @@ class DDIMStep(SamplerStep):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class VelocityStep(SamplerStep):
+class VelocityStep(hd_api.SamplerStep[Batch]):
   """DDIM sampler from https://arxiv.org/abs/2010.02502.
 
   stoch_coeff controls the interpolation between DDIM and DDPM:
@@ -398,33 +387,31 @@ class VelocityStep(SamplerStep):
   stoch_coeff: float
   stochastic_last_step: bool = False
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfo,
-  ) -> DiffusionStep:
-    return DiffusionStep(
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def _update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
       stochastic: bool = True,
-  ) -> DiffusionStep:
+  ) -> hd_api.DiffusionStep[Batch]:
     current_step_info = current_step.step_info
     xt = current_step.xt
 
     time = current_step_info.time
     next_time = next_step_info.time
-    time = jax_helpers.bcast_right(time, xt.ndim)
-    next_time = jax_helpers.bcast_right(next_time, xt.ndim)
 
     g = self.corruption_process.schedule.g(time)
 
@@ -448,19 +435,19 @@ class VelocityStep(SamplerStep):
     else:
       new_xt = new_mean
 
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux=dict(),
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self._update(
         prediction,
         current_step,
@@ -468,13 +455,13 @@ class VelocityStep(SamplerStep):
         stochastic=True,
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      last_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self._update(
         prediction,
         current_step,
@@ -489,7 +476,7 @@ class VelocityStep(SamplerStep):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class HeunStep(SamplerStep):
+class HeunStep(hd_api.SamplerStep[Batch]):
   """Heun sampler, adapted from https://arxiv.org/abs/2206.00364.
 
   Importantly, since the Heun sampler is a multi-step sampler and contains one
@@ -504,10 +491,14 @@ class HeunStep(SamplerStep):
   """
 
   corruption_process: GaussianProcess
-  time_schedule: TimeSchedule
+  time_schedule: time_scheduling.TimeSchedule[Batch]
   num_steps: int
 
   def __post_init__(self):
+    if self.num_steps < 2:
+      raise ValueError(
+          f"Number of steps must be at least 2, got {self.num_steps}."
+      )
     if self.num_steps % self.num_internal_steps != 0:
       raise ValueError(
           "The number of steps should be divisible by"
@@ -518,23 +509,25 @@ class HeunStep(SamplerStep):
   def num_internal_steps(self):
     return 2
 
-  def _get_all_step_infos(self, rng: PRNGKey, data_spec: DataArray) -> StepInfo:  # pyrefly: ignore[not-a-type]
+  def _get_all_step_infos(
+      self, rng: PRNGKey, data_spec: hd_api.Data[Batch]
+  ) -> hd_api.StepInfo[Batch]:
     return self.time_schedule.all_step_infos(
         rng=rng, num_steps=self.num_steps, data_spec=data_spec
     )
 
   def _get_specific_step_info(
-      self, rng: PRNGKey, data_spec: DataArray, step: int  # pyrefly: ignore[not-a-type]
+      self, rng: PRNGKey, data_spec: hd_api.Data[Batch], step: int | jax.Array
   ):
     all_step_infos = self._get_all_step_infos(rng=rng, data_spec=data_spec)
     return jax.tree.map(lambda x: x[step], all_step_infos)
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: StepInfo,
-  ) -> DiffusionStep:
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     """Initializes the Heun sampler.
 
     Note that DiffusionStep contains an auxiliary dictionary which is used to
@@ -564,12 +557,12 @@ class HeunStep(SamplerStep):
       The initial step.
     """
 
-    current_update = DiffusionStep(
+    current_update = hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(),
     )
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux=dict(
@@ -579,13 +572,13 @@ class HeunStep(SamplerStep):
         ),
     )
 
-  @kt.typechecked
+  @typechecked
   def first_step(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     """First step of the Heun sampler.
 
     This is the first internal step. It should be called when the internal
@@ -613,8 +606,6 @@ class HeunStep(SamplerStep):
 
     time = current_step_info.time
     next_next_time = next_next_step_info.time
-    time = jax_helpers.bcast_right(time, xt.ndim)
-    next_next_time = jax_helpers.bcast_right(next_next_time, xt.ndim)
 
     # Perform the intermediate step.
     dt = time - next_next_time
@@ -630,7 +621,7 @@ class HeunStep(SamplerStep):
     )
 
     # Note that we output next_next_step_info and not next_step_info.
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_next_step_info,
         aux=dict(
@@ -640,13 +631,13 @@ class HeunStep(SamplerStep):
         ),
     )
 
-  @kt.typechecked
+  @typechecked
   def second_step(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     """Second step of the Heun sampler.
 
     This is the second internal step. It should be called when the internal
@@ -665,8 +656,6 @@ class HeunStep(SamplerStep):
     prev_update = current_step.aux["current_update"]
     old_time = prev_update.step_info.time
     next_time = next_step_info.time
-    old_time = jax_helpers.bcast_right(old_time, xt.ndim)
-    next_time = jax_helpers.bcast_right(next_time, xt.ndim)
 
     old_velocity = current_step.aux["current_velocity_step_one"]
     intermediate_velocity = self.corruption_process.convert_predictions(
@@ -687,12 +676,12 @@ class HeunStep(SamplerStep):
         current_step.aux["internal_counter"] + 1, self.num_internal_steps
     )
 
-    return DiffusionStep(
+    return hd_api.DiffusionStep(
         xt=new_xt,
         step_info=next_step_info,
         aux=dict(
             internal_counter=internal_counter,
-            current_update=DiffusionStep(
+            current_update=hd_api.DiffusionStep(
                 xt=new_xt,
                 step_info=next_step_info,
                 aux=dict(),
@@ -703,13 +692,13 @@ class HeunStep(SamplerStep):
         ),
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      next_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     """Update function for the Heun sampler.
 
     Depending on the internal counter, we call either `first_step` or
@@ -732,13 +721,13 @@ class HeunStep(SamplerStep):
         next_step_info,
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,
-      current_step: DiffusionStep,
-      last_step_info: StepInfo,
-  ) -> DiffusionStep:
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return self.update(
         prediction,
         current_step,
