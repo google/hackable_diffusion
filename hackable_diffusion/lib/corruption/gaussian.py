@@ -144,28 +144,22 @@ from __future__ import annotations
 
 import dataclasses
 import math
-from typing import Protocol
+from typing import Protocol, TypeAlias, cast
 
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import jax_helpers
 import immutabledict
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-PRNGKey = hd_typing.PRNGKey
-
-DataArray = hd_typing.DataArray
-TimeArray = hd_typing.TimeArray
-TargetInfo = hd_typing.TargetInfo
-
-CorruptionProcess = hd_api.CorruptionProcess
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -173,36 +167,36 @@ CorruptionProcess = hd_api.CorruptionProcess
 ################################################################################
 
 
-class GaussianSchedule(hd_api.CorruptionSchedule, Protocol):
+class GaussianSchedule(hd_api.CorruptionSchedule[Batch], Protocol):
   """Protocol for Gaussian schedules (alpha, sigma, logsnr)."""
 
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """The alpha parameter for xt = alpha * x0 + sigma * epsilon."""
     ...
 
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """The sigma parameter for xt = alpha * x0 + sigma * epsilon."""
     ...
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """The log signal-to-noise ratio at time t."""
     return 2.0 * (jnp.log(self.alpha(time)) - jnp.log(self.sigma(time)))
 
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """The inverse of the logsnr, i.e., inverse_logsnr(logsnr(t))=t."""
     ...
 
-  @kt.typechecked
-  def f(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def f(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jax_helpers.egrad(self.alpha)(time) / self.alpha(time)
 
-  @kt.typechecked
-  def g(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def g(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.sigma(time) * jnp.sqrt(-jax_helpers.egrad(self.logsnr)(time))
 
-  @kt.typechecked
-  def evaluate(self, time: TimeArray) -> dict[str, TimeArray]:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def evaluate(self, time: hd_api.Time[Batch]) -> hd_api.ScheduleInfo[Batch]:
     return {
         'time': time,
         'alpha': self.alpha(time),
@@ -214,32 +208,32 @@ class GaussianSchedule(hd_api.CorruptionSchedule, Protocol):
 class RFSchedule(GaussianSchedule):
   """Rectified Flow schedule."""
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jax.nn.sigmoid(-0.5 * logsnr)
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return 1.0 - time
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return time
 
 
 class CosineSchedule(GaussianSchedule):
   """Cosine diffusion schedule."""
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return (2 / jnp.pi) * jnp.arctan(jnp.exp(-0.5 * logsnr))
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.cos(0.5 * jnp.pi * time)
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.sin(0.5 * jnp.pi * time)
 
 
@@ -247,52 +241,52 @@ class InverseCosineSchedule(GaussianSchedule):
   """Inverse Cosine diffusion schedule from https://arxiv.org/abs/2311.17901."""
 
   @jax_helpers.CustomGradient
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[bad-override, not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:  # pyrefly: ignore[bad-override]
     """Shift and scale the inverse cosine function."""
     return jnp.sqrt(self._v(time) / jnp.pi)
 
   @alpha.derivative
-  def alpha_der(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def alpha_der(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     v = self._v(time)
     return -1.0 / (2.0 * jnp.sqrt(jnp.pi * v) * self._sqrt_t_m_t2(time))
 
   @jax_helpers.CustomGradient
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[bad-override, not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:  # pyrefly: ignore[bad-override]
     return jnp.sqrt(1.0 - jnp.square(self.alpha(time)))
 
   @sigma.derivative
-  def sigma_der(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def sigma_der(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     t = time
     v = self._v(t)
     denom = 2.0 * jnp.sqrt(jnp.pi * (jnp.pi - v)) * self._sqrt_t_m_t2(t)
     return 1.0 / denom
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return (jnp.cos(jnp.pi * jax.scipy.special.expit(logsnr)) + 1.0) * 0.5
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     u = self._v(time) / jnp.pi
     return jax.scipy.special.logit(u)
 
-  @kt.typechecked
-  def f(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def f(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return -1.0 / (2.0 * self._v(time) * self._sqrt_t_m_t2(time))
 
-  @kt.typechecked
-  def g(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def g(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     t = time
     denominator = jnp.sqrt(self._v(t) * self._sqrt_t_m_t2(t))
     return 1.0 / denominator
 
-  def _v(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def _v(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """A common term in many of the functions."""
     return jnp.arccos(2.0 * time - 1)
 
-  def _sqrt_t_m_t2(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def _sqrt_t_m_t2(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """A common term in many of the functions."""
     return jnp.sqrt(time - jnp.square(time))
 
@@ -309,28 +303,28 @@ class LinearDiffusionSchedule(GaussianSchedule):
     return self.beta_max - self.beta_min
 
   @jax_helpers.CustomGradient
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[bad-override, not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:  # pyrefly: ignore[bad-override]
     return jnp.exp(
         -0.5 * (self.beta_min * time + 0.5 * jnp.square(time) * self.beta_diff)
     )
 
   @alpha.derivative
-  def alpha_der(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def alpha_der(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     r = -0.5 * (time * self.beta_diff + self.beta_min)
     return self.alpha(time) * r
 
   @jax_helpers.CustomGradient
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[bad-override, not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:  # pyrefly: ignore[bad-override]
     return jnp.sqrt(1.0 - jnp.square(self.alpha(time)))
 
   @sigma.derivative
-  def sigma_der(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def sigma_der(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return -self.alpha_der(time) * self.alpha(time) / self.sigma(time)  # pyrefly: ignore[bad-argument-count]
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Inverse of logsnr."""
 
     # The quadratic eqn is: 0.5 (bmax-bmin)t^2 + bmin t - log(1 + 1/snr) = 0
@@ -340,20 +334,20 @@ class LinearDiffusionSchedule(GaussianSchedule):
     denominator = self.beta_diff
     return numerator / denominator
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return -jnp.log(
         jnp.expm1(
             self.beta_min * time + 0.5 * jnp.square(time) * self.beta_diff
         )
     )
 
-  @kt.typechecked
-  def f(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def f(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return -0.5 * (self.beta_min + time * self.beta_diff)
 
-  @kt.typechecked
-  def g(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def g(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.sqrt(self.beta_min + time * self.beta_diff)
 
 
@@ -371,31 +365,31 @@ class GeometricSchedule(GaussianSchedule):
   def log_ratio(self) -> float:
     return math.log(self.sigma_max) - math.log(self.sigma_min)
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.ones_like(time)
 
   @jax_helpers.CustomGradient
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[bad-override, not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:  # pyrefly: ignore[bad-override]
     return self.sigma_min * jnp.exp(time * self.log_ratio)
 
   @sigma.derivative
-  def sigma_der(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  def sigma_der(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.log_ratio * self.sigma(time)
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     numerator = logsnr + 2 * jnp.log(self.sigma_min)
     denominator = 2 * self.log_ratio
     return -numerator / denominator
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return -2.0 * jnp.log(self.sigma_min) - 2.0 * time * self.log_ratio
 
-  @kt.typechecked
-  def g(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def g(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.sqrt(2.0 * self.sigma(time) * self.sigma_der(time))  # pyrefly: ignore[bad-argument-count]
 
 
@@ -418,25 +412,25 @@ class PowerSchedule(GaussianSchedule):
     _inv_p = 1.0 / self.p
     return self.sigma_max**_inv_p - self.sigma_min**_inv_p
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map time to logSNR."""
     sigma_t = (self.sigma_min**(1.0 / self.p) + time * self._interp)**self.p
     return -2.0 * jnp.log(sigma_t)
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Exact closed-form inverse mapping logSNR to time."""
     _inv_p = 1.0 / self.p
     sigma_t = jnp.exp(-0.5 * logsnr)
     return (sigma_t**_inv_p - self.sigma_min**_inv_p) / self._interp
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.sqrt(jax.nn.sigmoid(self.logsnr(time)))
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return jnp.sqrt(jax.nn.sigmoid(-self.logsnr(time)))
 
 
@@ -467,28 +461,28 @@ class ClampedSchedule(GaussianSchedule):
     """The maximum time for the original schedule."""
     return self.original_schedule.inverse_logsnr(jnp.array([self.logsnr_min]))
 
-  @kt.typechecked
-  def rescaled_time(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def rescaled_time(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Rescales time from [0, 1] to [tmin, tmax]."""
     return time * (self.tmax - self.tmin) + self.tmin
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map time to logSNR of the clamped schedule."""
     return self.original_schedule.logsnr(self.rescaled_time(time))
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map logSNR of the clamped schedule to time."""
     time = self.original_schedule.inverse_logsnr(logsnr)
     return (time - self.tmin) / (self.tmax - self.tmin)
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.original_schedule.alpha(self.rescaled_time(time))
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.original_schedule.sigma(self.rescaled_time(time))
 
 
@@ -526,32 +520,32 @@ class OffsetSchedule(GaussianSchedule):
         ' provided.'
     )
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map time to logSNR of the offset schedule."""
     return self.original_schedule.logsnr(time) + self.logsnr_offset
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map logSNR of the offset schedule to time."""
     return self.original_schedule.inverse_logsnr(logsnr - self.logsnr_offset)
 
-  @kt.typechecked
-  def time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def time_change(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Time change from offset to original process."""
     return self.original_schedule.inverse_logsnr(self.logsnr(time))
 
-  @kt.typechecked
-  def inverse_time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_time_change(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Time change from original to offset process."""
     return self.inverse_logsnr(self.original_schedule.logsnr(time))
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.original_schedule.alpha(self.time_change(time))
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.original_schedule.sigma(self.time_change(time))
 
 
@@ -613,18 +607,18 @@ class ShiftedSchedule(GaussianSchedule):
     """The maximum time for the original schedule."""
     return self.clamped_schedule.tmax
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map time to logSNR of the shifted schedule."""
     return self.offset_schedule.logsnr(time)
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map logSNR of the shifted schedule to time."""
     return self.offset_schedule.inverse_logsnr(logsnr)
 
-  @kt.typechecked
-  def time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def time_change(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Time change from shifted to original process.
 
     For a given input time `t`, finds logSNR(t) of the shifted schedule, and
@@ -640,17 +634,17 @@ class ShiftedSchedule(GaussianSchedule):
     """
     return self.original_schedule.inverse_logsnr(self.logsnr(time))
 
-  @kt.typechecked
-  def inverse_time_change(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_time_change(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Time change from original to shifted process."""
     return self.inverse_logsnr(self.original_schedule.logsnr(time))
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.offset_schedule.alpha(time)
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     return self.offset_schedule.sigma(time)
 
 
@@ -672,26 +666,26 @@ class BlendSchedule(GaussianSchedule):
   schedule_1: GaussianSchedule
   num_solver_steps: int = 5
 
-  @kt.typechecked
-  def logsnr(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def logsnr(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Map time to blended logSNR."""
     return (
         (1.0 - time) * self.schedule_0.logsnr(time)
         + time * self.schedule_1.logsnr(time)
     )
 
-  @kt.typechecked
-  def alpha(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def alpha(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     logsnr = self.logsnr(time)
     return jnp.sqrt(jax.nn.sigmoid(logsnr))
 
-  @kt.typechecked
-  def sigma(self, time: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def sigma(self, time: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     logsnr = self.logsnr(time)
     return jnp.sqrt(jax.nn.sigmoid(-logsnr))
 
-  @kt.typechecked
-  def inverse_logsnr(self, logsnr: TimeArray) -> TimeArray:  # pyrefly: ignore[not-a-type]
+  @typechecked
+  def inverse_logsnr(self, logsnr: hd_api.Time[Batch]) -> hd_api.Time[Batch]:
     """Invert logSNR to time using Newton-Raphson iterations."""
     t = jnp.clip(self.schedule_0.inverse_logsnr(logsnr), 0.0, 1.0)
     grad_fn = jax_helpers.egrad(self.logsnr)
@@ -708,7 +702,7 @@ class BlendSchedule(GaussianSchedule):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class GaussianProcess:
+class GaussianProcess(hd_api.CorruptionProcess[Batch]):
   """Gaussian corruption process.
 
   Takes the following form with epsilon ~ N(0, 1):
@@ -721,25 +715,24 @@ class GaussianProcess:
 
   schedule: GaussianSchedule
 
-  @kt.typechecked
+  @typechecked
   def sample_from_invariant(
       self,
       key: PRNGKey,
-      data_spec: DataArray,  # pyrefly: ignore[not-a-type]
-  ) -> DataArray:  # pyrefly: ignore[not-a-type]
+      data_spec: hd_api.Data[Batch],
+  ) -> hd_api.Data[Batch]:
     """Sample from the invariant distribution."""
     return jax.random.normal(key, shape=data_spec.shape)
 
-  @kt.typechecked
+  @typechecked
   def corrupt(
       self,
       key: PRNGKey,
-      x0: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> tuple[DataArray, TargetInfo]:  # pyrefly: ignore[not-a-type]
+      x0: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> tuple[hd_api.Data[Batch], hd_api.TargetInfo[Batch]]:
     epsilon = self.sample_from_invariant(key, data_spec=x0)
 
-    time = jax_helpers.bcast_right(time, x0.ndim)
     alpha, sigma, alpha_der, sigma_der = self._get_alpha_sigma_and_der(time)
 
     xt = alpha * x0 + sigma * epsilon
@@ -754,13 +747,13 @@ class GaussianProcess:
 
     return xt, target_info
 
-  @kt.typechecked
+  @typechecked
   def convert_predictions(
       self,
-      prediction: TargetInfo,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:
+      prediction: hd_api.TargetInfo[Batch],
+      xt: hd_api.Data[Batch],
+      time: hd_api.Time[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     if len(prediction) != 1:
       raise KeyError(
           f'Exactly one prediction is required. Got: {prediction.keys()=}'
@@ -768,25 +761,32 @@ class GaussianProcess:
 
     source_type, source_value = next(iter(prediction.items()))
     converters = CONVERTERS[source_type]
-    time = jax_helpers.bcast_right(time, xt.ndim)
     alpha, sigma, alpha_der, sigma_der = self._get_alpha_sigma_and_der(time)
 
-    return {
-        pred_type: converter(
-            source_value,
-            xt=xt,
-            alpha=alpha,
-            sigma=sigma,
-            alpha_der=alpha_der,
-            sigma_der=sigma_der,
-        )
-        for pred_type, converter in converters.items()
-    }
+    return cast(
+        hd_api.TargetInfo[Batch],
+        {
+            pred_type: converter(
+                source_value,
+                xt=xt,
+                alpha=alpha,
+                sigma=sigma,
+                alpha_der=alpha_der,
+                sigma_der=sigma_der,
+            )
+            for pred_type, converter in converters.items()
+        },
+    )
 
-  @kt.typechecked
+  @typechecked
   def _get_alpha_sigma_and_der(
-      self, time: TimeArray  # pyrefly: ignore[not-a-type]
-  ) -> tuple[TimeArray, TimeArray, TimeArray, TimeArray]:  # pyrefly: ignore[not-a-type]
+      self, time: hd_api.Time[Batch]
+  ) -> tuple[
+      hd_api.Time[Batch],
+      hd_api.Time[Batch],
+      hd_api.Time[Batch],
+      hd_api.Time[Batch],
+  ]:
     """Get the alpha, sigma and their derivatives for the given time."""
     alpha = self.schedule.alpha(time)
     sigma = self.schedule.sigma(time)

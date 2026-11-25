@@ -15,6 +15,7 @@
 """Tests for Gaussian loss functions."""
 
 import itertools
+from typing import Any
 
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import gaussian as gaussian_corrupt
@@ -162,18 +163,22 @@ class PredictionConverterTest(parameterized.TestCase):
 
     converted_pred = converter(pred, **kwargs)  # pytype: disable=wrong-keyword-args
     converted_target = converter(target, **kwargs)  # pytype: disable=wrong-keyword-args
+    preds_start: Any = {start_type: pred}
+    targets_start: Any = {start_type: target}
     scaled_loss = gaussian_loss.compute_continuous_diffusion_loss(
-        preds={start_type: pred},
-        targets={start_type: target},
+        preds=preds_start,
+        targets=targets_start,
         time=time,
         schedule=schedule,
         loss_type=target_type,
         prediction_type=start_type,
         # start_type != target_type trigger scaling
     )
+    preds_target: Any = {target_type: converted_pred}
+    targets_target: Any = {target_type: converted_target}
     converted_loss = gaussian_loss.compute_continuous_diffusion_loss(
-        preds={target_type: converted_pred},
-        targets={target_type: converted_target},
+        preds=preds_target,
+        targets=targets_target,
         time=time,
         schedule=schedule,
         loss_type=target_type,

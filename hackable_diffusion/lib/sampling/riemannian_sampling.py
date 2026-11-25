@@ -15,17 +15,19 @@
 """Riemannian Flow Matching sampler step."""
 
 import dataclasses
+from typing import TypeAlias
+
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import riemannian
-import kauldron.ktyping as kt
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
+Batch: TypeAlias = hd_api.Batch
+typechecked = jax_helpers.typechecked
+
 
 ################################################################################
 # MARK: Sampler Step
@@ -33,30 +35,30 @@ TargetInfo = hd_typing.TargetInfo
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class RiemannianFlowSamplerStep(hd_api.SamplerStep):
+class RiemannianFlowSamplerStep(hd_api.SamplerStep[Batch]):
   """Euler integration on Riemannian manifold for Flow Matching."""
 
   corruption_process: riemannian.RiemannianProcess
 
-  @kt.typechecked
+  @typechecked
   def initialize(
       self,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
-      initial_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
-  ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
+      initial_noise: hd_api.Data[Batch],
+      initial_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     return hd_api.DiffusionStep(
         xt=initial_noise,
         step_info=initial_step_info,
         aux={},
     )
 
-  @kt.typechecked
+  @typechecked
   def update(
       self,
-      prediction: TargetInfo,  # pyrefly: ignore[not-a-type]
-      current_step: hd_api.DiffusionStep,
-      next_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
-  ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      next_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
     xt = current_step.xt
     t = current_step.step_info.time
     next_t = next_step_info.time
@@ -74,11 +76,11 @@ class RiemannianFlowSamplerStep(hd_api.SamplerStep):
         aux={},
     )
 
-  @kt.typechecked
+  @typechecked
   def finalize(
       self,
-      prediction: TargetInfo,  # pyrefly: ignore[not-a-type]
-      current_step: hd_api.DiffusionStep,
-      last_step_info: hd_api.StepInfo,  # pyrefly: ignore[not-a-type]
-  ) -> hd_api.DiffusionStep:  # pyrefly: ignore[not-a-type]
-    return current_step
+      prediction: hd_api.TargetInfo[Batch],
+      current_step: hd_api.DiffusionStep[Batch],
+      last_step_info: hd_api.StepInfo[Batch],
+  ) -> hd_api.DiffusionStep[Batch]:
+    return self.update(prediction, current_step, last_step_info)

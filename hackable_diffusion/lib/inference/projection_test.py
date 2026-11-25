@@ -14,6 +14,7 @@
 
 """Tests for projection."""
 
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.corruption import gaussian
 from hackable_diffusion.lib.inference import projection
@@ -43,8 +44,10 @@ class ProjectionTest(parameterized.TestCase):
     # create some fake outputs for testing
     x0 = jnp.arange(3) + 1.0  # [1.0, 2.0, 3.0]
     x0 *= jnp.ones_like(self.xt)
-    self.x0_outputs = {'x0': x0}
-    self.v_outputs = {'v': jnp.ones_like(self.xt) * 1.5}
+    self.x0_outputs: hd_api.TargetInfo[hd_api.Batch] = {'x0': x0}
+    self.v_outputs: hd_api.TargetInfo[hd_api.Batch] = {
+        'v': jnp.ones_like(self.xt) * 1.5
+    }
 
     self.nested_xt = {
         'data_continuous_1': jnp.ones((self.batch_size, *self.data_shape)),

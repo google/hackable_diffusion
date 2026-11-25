@@ -31,7 +31,8 @@ loop). This introduces a negligible error, but the samplers are 10x faster.
 """
 
 import functools
-from hackable_diffusion.lib import hd_typing
+from typing import TypeAlias
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
 
@@ -40,7 +41,7 @@ import jax.numpy as jnp
 ################################################################################
 
 
-PRNGKey = hd_typing.PRNGKey
+PRNGKey: TypeAlias = jax_helpers.PRNGKey
 
 ################################################################################
 # MARK: Fast Log-Gamma Sampler
@@ -169,13 +170,16 @@ def log_dirichlet_fast(
   Args:
     key: The PRNGKey.
     alpha: The shape parameters of the Dirichlet distribution.
-    shape: The shape of the output.
+    shape: Leading batch shape prepended to `alpha.shape` (the output shape is
+      `shape + alpha.shape`). `()` or `None` adds no extra leading dimensions.
 
   Returns:
     The log of the Dirichlet sample.
   """
   alpha = jnp.array(alpha)
-  total_shape = shape + alpha.shape  # pyrefly: ignore[unsupported-operation]
+  if shape is None:
+    shape = ()
+  total_shape = shape + alpha.shape
   log_gammas = log_gamma_fast(key, alpha, shape=total_shape)
   return jax.nn.log_softmax(log_gammas, axis=-1)
 
@@ -198,7 +202,7 @@ def sample_log_beta_joint(
     key: PRNGKey,
     alpha: jax.Array,
     beta: jax.Array,
-    shape: tuple[int, ...] | None = (),
+    shape: tuple[int, ...] | None = None,
 ) -> tuple[jax.Array, jax.Array]:
   """Samples W ~ Beta(alpha, beta) and returns (log(W), log(1-W)).
 
@@ -209,12 +213,15 @@ def sample_log_beta_joint(
     key: The PRNGKey.
     alpha: The first shape parameter of the Beta distribution.
     beta: The second shape parameter of the Beta distribution.
-    shape: The shape of the output.
+    shape: The shape of the output. If `None`, defaults to the broadcast shape
+      of `alpha` and `beta`.
 
   Returns:
     The log of the Beta sample.
   """
   k1, k2 = jax.random.split(key)
+  if shape is None:
+    shape = jnp.broadcast_shapes(jnp.shape(alpha), jnp.shape(beta))
 
   log_ga = log_gamma_fast(k1, alpha, shape)
   log_gb = log_gamma_fast(k2, beta, shape)

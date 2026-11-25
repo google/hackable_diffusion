@@ -18,10 +18,10 @@ import dataclasses
 from typing import Protocol, Sequence
 
 import flax.linen as nn
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 import numpy as np
 
 
@@ -29,9 +29,7 @@ import numpy as np
 # MARK: Type Aliases
 ################################################################################
 
-Float = hd_typing.Float
-Int = hd_typing.Int
-Num = hd_typing.Num
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -51,10 +49,10 @@ class SinusoidalSequenceEmbedding(nn.Module):
       raise ValueError("Number of features must be positive.")
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, inputs: Num["batch *#data_shape"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch num_features"]:  # pyrefly: ignore[not-a-type]
+      self, inputs: jt.Num[jt.Array, "b *#data_shape"]
+  ) -> jt.Float[jt.Array, "b num_features"]:
     if inputs.size != inputs.shape[0]:
       raise ValueError("Inputs must be a (maybe broadcasted) 1D array.")
     inputs = inputs.reshape((inputs.shape[0],))
@@ -91,10 +89,10 @@ class RandomFourierSequenceEmbedding(nn.Module):
     )
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, inputs: Num["batch *#data_shape"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["batch num_features"]:  # pyrefly: ignore[not-a-type]
+      self, inputs: jt.Num[jt.Array, "b *#data_shape"]
+  ) -> jt.Float[jt.Array, "b num_features"]:
     if inputs.size != inputs.shape[0]:
       raise ValueError("Inputs must be a (maybe broadcasted) 1D array.")
     inputs = inputs.reshape((inputs.shape[0],))
@@ -117,8 +115,8 @@ class RoPEPositionsFn(Protocol):
   """Protocol for RoPE position functions."""
 
   def __call__(
-      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
-  ) -> Sequence[Int["*batch sequence"]]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "*b seq dim"]
+  ) -> Sequence[jt.Int[jt.Array, "*b seq"]]:
     ...
 
 
@@ -126,10 +124,10 @@ class RoPEPositionsFn(Protocol):
 class LinearRoPEPositions(RoPEPositionsFn):
   """Computes 1D linear positions for Rotary Position Embeddings (RoPE)."""
 
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
-  ) -> Sequence[Int["*batch sequence"]]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "*b seq dim"]
+  ) -> Sequence[jt.Int[jt.Array, "*b seq"]]:
     *b, t, _ = x.shape
     n_batch_dims = len(b)
     b = tuple(b)
@@ -143,10 +141,10 @@ class LinearRoPEPositions(RoPEPositionsFn):
 class SquareRoPEPositions(RoPEPositionsFn):
   """Computes 2D square grid positions for Rotary Position Embeddings (RoPE)."""
 
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
-  ) -> Sequence[Int["*batch sequence"]]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "*b seq dim"]
+  ) -> Sequence[jt.Int[jt.Array, "*b seq"]]:
     *b, t, _ = x.shape
     n_batch_dims = len(b)
     b = tuple(b)
@@ -182,10 +180,10 @@ class RoPESequenceEmbedding(nn.Module):
   max_rotary_wavelength: int = 10_000
 
   @nn.compact
-  @kt.typechecked
+  @typechecked
   def __call__(
-      self, x: Float["*batch sequence dim"]  # pyrefly: ignore[not-a-type]
-  ) -> Float["*batch sequence dim"]:  # pyrefly: ignore[not-a-type]
+      self, x: jt.Float[jt.Array, "*b seq dim"]
+  ) -> jt.Float[jt.Array, "*b seq dim"]:
     positions = self.rope_positions_fn(x)
     # list of elements of shape [*b, t]
 

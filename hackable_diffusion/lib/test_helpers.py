@@ -20,7 +20,7 @@ import flax
 from flax import linen as nn
 
 from hackable_diffusion.lib import diffusion_network
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import hd_api
 import jax
 
 
@@ -30,7 +30,6 @@ import jax
 
 VariableDict = flax.core.scope.VariableDict
 DictKey = jax.tree_util.DictKey
-Float = hd_typing.Float
 GetAttrKey = jax.tree_util.GetAttrKey
 Path = Sequence[DictKey | GetAttrKey]
 
@@ -90,8 +89,8 @@ class IdentityBackbone(nn.Module, diffusion_network.ConditionalBackbone):
   @nn.compact
   def __call__(
       self,
-      x: hd_typing.DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning_embeddings: hd_typing.ConditioningEmbeddings,
+      x: hd_api.Data[hd_api.Batch],
+      conditioning_embeddings: diffusion_network.ConditioningEmbeddings,
       is_training: bool,
-  ) -> hd_typing.DataArray:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.Data[hd_api.Batch]:
     return x

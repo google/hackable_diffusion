@@ -17,9 +17,17 @@
 from hackable_diffusion.lib.corruption import discrete
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
+import typeguard
 
 from absl.testing import absltest
 from absl.testing import parameterized
+
+_CHECK_ERRORS = (
+    typeguard.TypeCheckError,
+    jt.TypeCheckError,
+    TypeError,
+)
 
 
 ################################################################################
@@ -66,9 +74,16 @@ class CategoricalProcessTest(parameterized.TestCase):
       raise ValueError(f'Unknown process type: {process_type}')
 
     x0 = jnp.ones((2, 2, 1), dtype=jnp.int32) * 2
-    time_05 = jnp.ones((1,)) * 0.5
+    time_05 = jnp.full((2, 1, 1), 0.5)
     xt, _ = process.corrupt(self.key, x0, time_05)
     self.assertFalse(jnp.array_equal(xt[0], xt[1]))
+
+  def test_corrupt_rejects_wrong_rank_time(self):
+    x0 = jnp.ones((2, 2, 1), dtype=jnp.int32)
+    with self.assertRaises(ValueError):
+      self.process.corrupt(self.key, x0, jnp.full((2,), 0.5))
+    with self.assertRaises(_CHECK_ERRORS):
+      self.process.corrupt(self.key, x0, jnp.full((2, 7, 1), 0.5))
 
   def test_corrupt_different_results_with_batched_time(self):
     # At t=0, alpha=1, so xt should be x0.
@@ -76,7 +91,7 @@ class CategoricalProcessTest(parameterized.TestCase):
         schedule=self.schedule, num_categories=self.num_categories
     )
     x0 = jnp.ones((2, 2, 10, 1), dtype=jnp.int32) * 2
-    time_05 = jnp.ones((2,)) * 0.5
+    time_05 = jnp.full((2, 1, 1, 1), 0.5)
     xt, _ = process.corrupt(self.key, x0, time_05)
     expected_val_0 = jnp.ones((2, 10, 1), dtype=jnp.int32) * xt[0, 0, 0, 0]
     expected_val_1 = jnp.ones((2, 10, 1), dtype=jnp.int32) * xt[1, 0, 0, 0]
@@ -203,7 +218,7 @@ class CategoricalProcessTest(parameterized.TestCase):
   def test_convert_predictions_raises_for_wrong_prediction_key(self):
     prediction = {'bad_key': jnp.zeros((self.batch_size, self.num_categories))}
     xt = jnp.empty_like(self.x0)
-    time = jnp.empty((self.batch_size, 1))
+    time = jnp.empty((self.batch_size, 1, 1))
     with self.assertRaises(KeyError):
       self.process.convert_predictions(prediction, xt, time)
 
@@ -324,7 +339,7 @@ class CategoricalProcessTest(parameterized.TestCase):
 
   def test_corrupt_raises_for_invalid_trailing_dimension(self):
     x0_bad = jnp.zeros((self.batch_size, self.seq_len, 3), dtype=jnp.int32)
-    time = jnp.ones((self.batch_size,)) * 0.5
+    time = jnp.ones((self.batch_size, 1, 1)) * 0.5
     with self.assertRaisesRegex(
         ValueError, 'Expected x0 to have a trailing dimension of 1'
     ):
@@ -353,7 +368,7 @@ class CategoricalProcessTest(parameterized.TestCase):
 
     x0 = jnp.reshape(x0, (1, -1, 1))
     for t in [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
-      time = jnp.ones((1,)) * t
+      time = jnp.ones((1, 1, 1)) * t
       _, target_info = process.corrupt(self.key, x0, time)
       # Check that the unused mask remains the same no matter what.
       is_unused_mask = target_info['is_unused'].reshape((-1,)).tolist()
