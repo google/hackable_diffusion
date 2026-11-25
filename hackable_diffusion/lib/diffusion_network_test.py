@@ -17,6 +17,7 @@
 import chex
 from flax import linen as nn
 from hackable_diffusion.lib import diffusion_network
+from hackable_diffusion.lib import hd_api
 from hackable_diffusion.lib import hd_typing
 from hackable_diffusion.lib import multimodal
 from hackable_diffusion.lib import test_helpers
@@ -40,7 +41,6 @@ from absl.testing import parameterized
 # MARK: Type Aliases
 ################################################################################
 
-Float = hd_typing.Float
 TimeRescaler = diffusion_network.TimeRescaler
 InputRescaler = diffusion_network.InputRescaler
 GaussianProcess = gaussian.GaussianProcess
@@ -100,7 +100,8 @@ class DiffusionNetworkTest(parameterized.TestCase):
     self.discrete_img_shape = (self.batch_size, 32, 32, 3, 1)
     self.is_training = True
 
-    self.t = jnp.ones((self.batch_size,))
+    self.t = jnp.ones((self.batch_size, 1, 1, 1))
+    self.discrete_t = jnp.ones((self.batch_size, 1, 1, 1, 1))
     self.xt = jnp.ones(self.img_shape)
     self.discrete_xt = jnp.ones(self.discrete_img_shape, dtype=jnp.int32)
     self.conditioning = {
@@ -242,10 +243,18 @@ class DiffusionNetworkTest(parameterized.TestCase):
         data_dtype=jnp.int32,
     )
     variables = layer.init(
-        self.key, self.t, self.discrete_xt, self.conditioning, self.is_training
+        self.key,
+        self.discrete_t,
+        self.discrete_xt,
+        self.conditioning,
+        self.is_training,
     )
     output = layer.apply(
-        variables, self.t, self.discrete_xt, self.conditioning, self.is_training
+        variables,
+        self.discrete_t,
+        self.discrete_xt,
+        self.conditioning,
+        self.is_training,
     )
     self.assertIsInstance(output, dict)
     self.assertIn('logits', output)
@@ -259,7 +268,9 @@ class DiffusionNetworkTest(parameterized.TestCase):
 ################################################################################
 
 
-class SelfConditioningBackbone(nn.Module, diffusion_network.ConditionalBackbone):
+class SelfConditioningBackbone(
+    nn.Module, diffusion_network.ConditionalBackbone
+):
   """Backbone for self-conditioning tests.
 
   Accepts input of shape (B, ..., input_channels + num_classes) and returns
@@ -272,10 +283,10 @@ class SelfConditioningBackbone(nn.Module, diffusion_network.ConditionalBackbone)
   @nn.compact
   def __call__(
       self,
-      x: hd_typing.DataArray,  # pyrefly: ignore[not-a-type]
+      x: hd_api.Data[hd_api.Batch],
       conditioning_embeddings: hd_typing.ConditioningEmbeddings,
       is_training: bool,
-  ) -> hd_typing.DataArray:  # pyrefly: ignore[not-a-type]
+  ) -> hd_api.Data[hd_api.Batch]:
     return nn.Dense(features=self.num_classes)(x)
 
 
@@ -298,7 +309,6 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
       def convert_predictions(self, prediction, xt, time):
         raise NotImplementedError()
 
-
     self.key = jax.random.PRNGKey(0)
     self.batch_size = 2
     self.input_channels = 1
@@ -307,7 +317,7 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
     self.xt_shape = (
         self.batch_size, *self.spatial_shape, self.input_channels
     )
-    self.t = jnp.ones((self.batch_size,))
+    self.t = jnp.ones((self.batch_size, 1, 1, 1))
     self.xt = jnp.ones(self.xt_shape)
     self.conditioning = {
         'label1': jnp.arange(self.batch_size),
@@ -448,7 +458,7 @@ class SelfConditioningDiffusionNetworkTest(parameterized.TestCase):
     batch_size = 100
     xt_shape = (batch_size, *self.spatial_shape, self.input_channels)
     xt = jnp.ones(xt_shape)
-    t = jnp.ones((batch_size,))
+    t = jnp.ones((batch_size, 1, 1, 1))
     conditioning = {'label1': jnp.zeros((batch_size,), dtype=jnp.int32)}
 
     network_zero = self._make_network(self_cond_prob=0.0)
@@ -598,8 +608,8 @@ class MultiModalDiffusionNetworkTest(parameterized.TestCase):
 
     if input_type == 'dict':
       t = {
-          'data_1': jnp.ones((self.batch_size,)),
-          'data_2': {'data_3': jnp.ones((self.batch_size,))},
+          'data_1': jnp.ones((self.batch_size, 1, 1, 1)),
+          'data_2': {'data_3': jnp.ones((self.batch_size, 1, 1, 1))},
       }
       xt = {
           'data_1': jnp.ones(self.img_shape),
@@ -616,7 +626,10 @@ class MultiModalDiffusionNetworkTest(parameterized.TestCase):
       prediction_type = {'data_1': 'x0', 'data_2': {'data_3': 'velocity'}}
       data_dtype = {'data_1': jnp.float32, 'data_2': {'data_3': jnp.float32}}
     elif input_type == 'list':
-      t = [jnp.ones((self.batch_size,)), jnp.ones((self.batch_size,))]
+      t = [
+          jnp.ones((self.batch_size, 1, 1, 1)),
+          jnp.ones((self.batch_size, 1, 1, 1)),
+      ]
       xt = [jnp.ones(self.img_shape), jnp.ones(self.img_shape)]
       conditioning = {
           'label1': jnp.arange(self.batch_size),
@@ -626,7 +639,10 @@ class MultiModalDiffusionNetworkTest(parameterized.TestCase):
       prediction_type = ['x0', 'velocity']
       data_dtype = [jnp.float32, jnp.float32]
     elif input_type == 'tuple':
-      t = (jnp.ones((self.batch_size,)), jnp.ones((self.batch_size,)))
+      t = (
+          jnp.ones((self.batch_size, 1, 1, 1)),
+          jnp.ones((self.batch_size, 1, 1, 1)),
+      )
       xt = (jnp.ones(self.img_shape), jnp.ones(self.img_shape))
       conditioning = {
           'label1': jnp.arange(self.batch_size),
@@ -745,8 +761,8 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
     )
 
     self.nested_t = {
-        'data_1': jnp.ones((self.batch_size,)),
-        'data_2': {'data_3': jnp.ones((self.batch_size,))},
+        'data_1': jnp.ones((self.batch_size, 1, 1, 1)),
+        'data_2': {'data_3': jnp.ones((self.batch_size, 1, 1, 1))},
     }
     self.nested_xt = {
         'data_1': jnp.ones(self.img_shape),
@@ -778,7 +794,6 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
             'data_2': {'data_3': projection.IdentityProjectionFn()},
         }
     )
-
 
   def test_nested_inference(self):
     layer = diffusion_network.MultiModalDiffusionNetwork(
@@ -816,6 +831,47 @@ class NestedDiffusionInferenceTest(parameterized.TestCase):
     )
 
     chex.assert_trees_all_equal_structs(output, modified_nested_t)
+
+  def test_nested_partial_none_rescalers(self):
+    time_rescaler = {
+        'data_1': None,
+        'data_2': {'data_3': lambda t: t * 2.0},
+    }
+    input_rescaler = {
+        'data_1': lambda t, x: x * 0.5,
+        'data_2': {'data_3': None},
+    }
+    layer = diffusion_network.MultiModalDiffusionNetwork(
+        backbone_network=self.nested_backbone,
+        conditioning_encoder=self.nested_cond_encoder,
+        prediction_type=self.nested_prediction_type,
+        data_dtype=self.nested_data_dtype,
+        time_rescaler=time_rescaler,  # pyrefly: ignore[bad-argument-type]
+        input_rescaler=input_rescaler,  # pyrefly: ignore[bad-argument-type]
+    )
+    variables = layer.init(
+        self.key,
+        time=self.nested_t,
+        xt=self.nested_xt,
+        conditioning=self.nested_conditioning,
+        is_training=self.is_training,
+    )
+    output = layer.apply(
+        variables,
+        time=self.nested_t,
+        xt=self.nested_xt,
+        conditioning=self.nested_conditioning,
+        is_training=self.is_training,
+    )
+    chex.assert_trees_all_close(
+        output,
+        {
+            'data_1': {'x0': 0.5 * self.nested_xt['data_1']},
+            'data_2': {
+                'data_3': {'velocity': self.nested_xt['data_2']['data_3']}
+            },
+        },
+    )
 
 
 if __name__ == '__main__':

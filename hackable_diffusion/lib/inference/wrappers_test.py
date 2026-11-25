@@ -92,8 +92,8 @@ class WrappersTest(absltest.TestCase):
     )
 
     xt = jnp.ones((16, 16))
-    time1 = jnp.array([0.2])
-    time2 = jnp.array([0.8])
+    time1 = jnp.full((16, 1), 0.2)
+    time2 = jnp.full((16, 1), 0.8)
 
     out1 = inference_fn(time=time1, xt=xt, conditioning=None)
     out2 = inference_fn(time=time2, xt=xt, conditioning=None)

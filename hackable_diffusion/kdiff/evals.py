@@ -15,11 +15,11 @@
 """Sampling evaluator for Diffusion models."""
 
 import dataclasses
-from typing import Any
+from typing import Any, TypeAlias, cast
+
 from flax import linen as nn
 import flax.struct
 from hackable_diffusion import hd
-from hackable_diffusion.lib import hd_typing
 import jax
 from kauldron import kd
 import kauldron.data.utils as data_utils
@@ -29,9 +29,9 @@ import kauldron.data.utils as data_utils
 # MARK: Type Aliases
 ################################################################################
 
-Array = hd_typing.Array
-Conditioning = hd_typing.Conditioning
-DataTree = hd_typing.DataTree
+Batch: TypeAlias = hd.hd_api.Batch
+Conditioning: TypeAlias = hd.hd_api.Conditioning
+PRNGKey: TypeAlias = hd.hd_api.PRNGKey
 
 ################################################################################
 # MARK: InferenceFnFactory
@@ -48,11 +48,12 @@ class KDiffInferenceFn:
   """
 
   network_path: str = "network"
-  guidance_fn: hd.inference.GuidanceFn | None = None
+  guidance_fn: hd.inference.GuidanceFn[hd.hd_api.Batch] | None = None
 
   def from_model_and_context(
       self, model: nn.Module, context: kd.train.Context
-  ) -> hd.inference.InferenceFn:
+  ) -> hd.inference.InferenceFn[hd.hd_api.Batch]:
+    """Builds an InferenceFn from the Kauldron model and eval context."""
     network = kd.kontext.get_by_path(model, self.network_path)
     params = kd.kontext.get_by_path(context.params, self.network_path)
 
@@ -109,7 +110,7 @@ class SamplingEvaluator(kd.evals.Evaluator):
     ```
   """
 
-  sampler: hd.sampling.SampleFn
+  sampler: hd.sampling.SampleFn[hd.hd_api.Batch]
 
   num_batches: int | None
 
@@ -134,11 +135,11 @@ class SamplingEvaluator(kd.evals.Evaluator):
       self,
       model: nn.Module,
       context: kd.train.Context,
-      key: hd.hd_typing.PRNGKey,
-  ) -> tuple[DataTree, Array["batch *cond_shape"]]:  # pyrefly: ignore[not-a-type, unknown-name]
+      key: PRNGKey,
+  ) -> tuple[hd.hd_api.Data[Batch], Conditioning | None]:
     _, kwargs = data_utils.get_model_inputs(model, context)
     x0 = kwargs["x0"]
-    cond = kwargs.get("cond", None)  # cond is optional
+    cond = cast(Conditioning | None, kwargs.get("cond", None))
     x1 = model.corruption_process.sample_from_invariant(key, x0)
     return x1, cond
 
