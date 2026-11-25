@@ -16,4 +16,7 @@
 
 # pylint: disable=g-importing-member
 from hackable_diffusion.kdiff.core import Diffusion
+from hackable_diffusion.kdiff.core import KauldronLossWrapper
+from hackable_diffusion.kdiff.evals import KDiffInferenceFn
+from hackable_diffusion.kdiff.evals import SamplingEvaluator
 # pylint: enable=g-importing-member

@@ -19,29 +19,42 @@ import enum
 import functools
 import logging
 from types import FunctionType  # pylint: disable=g-importing-member
-from typing import Any, Callable, Iterator, cast
+from typing import Any, Callable, Iterator, TypeAlias, TypeVar, cast
 import zlib
 from hackable_diffusion.lib import hd_typing
 import jax
 import jax.numpy as jnp
+import jaxtyping as jt
 import kauldron.ktyping as kt
 import numpy as np
+import typeguard
 
 ################################################################################
-# MARK: Type Aliases
+# MARK: Type Checking & Type Aliases
 ################################################################################
 
-Array = hd_typing.Array
-PRNGKey = hd_typing.PRNGKey
-PyTree = hd_typing.PyTree
+typechecked = jt.jaxtyped(typechecker=typeguard.typechecked)
 
-PointwiseFn = Callable[[Array["..."]], Array["..."]]  # pyrefly: ignore[bad-index, not-a-type]
-PointwiseMethod = Callable[[Any, Array["..."]], Array["..."]]  # pyrefly: ignore[bad-index, not-a-type]
 
-DataTree = hd_typing.DataTree
-ShapeTree = hd_typing.ShapeTree
-DType = hd_typing.DType
-DTypeTree = hd_typing.DTypeTree
+@dataclasses.dataclass(frozen=True)
+class subscriptable:  # pylint: disable=invalid-name
+  """Wraps `fn(arg)` so it can be called as `fn[arg]` in type annotations."""
+
+  fn: Callable[[Any], Any]
+
+  def __getitem__(self, arg: Any) -> Any:
+    return Any if isinstance(arg, TypeVar) else self.fn(arg)
+
+
+PRNGKey: TypeAlias = jt.Key[jt.Array, ""] | jt.UInt32[jt.Array, "2"]
+
+PointwiseFn: TypeAlias = Callable[[kt.Array["..."]], kt.Array["..."]]  # pyrefly: ignore[bad-index, not-a-type]
+PointwiseMethod: TypeAlias = Callable[[Any, kt.Array["..."]], kt.Array["..."]]  # pyrefly: ignore[bad-index, not-a-type]
+
+DataTree: TypeAlias = hd_typing.DataTree
+ShapeTree: TypeAlias = hd_typing.ShapeTree
+DType: TypeAlias = hd_typing.DType
+DTypeTree: TypeAlias = hd_typing.DTypeTree
 
 ################################################################################
 # MARK: Enums
@@ -153,8 +166,10 @@ def lenient_map(
     fn: The function to apply to each leaf.
     tree: The tree to map.
     *rest: Additional arguments to pass to fn.
-    is_leaf: A function that takes a leaf and returns True if it should be
-      mapped. If None, all leaves are mapped.
+    is_leaf: Optional predicate called at each flattening step; nodes for which
+      it returns `True` are treated as leaves rather than flattened (same
+      semantics as `jax.tree.map`, e.g. `lambda x: x is None` keeps `None`
+      entries as leaves).
 
   Returns:
     The tree resulting from applying fn to each leaf in `tree`.
@@ -176,10 +191,10 @@ def lenient_map(
 
     restructured_rest.append(jax.tree.unflatten(struct, r_leaves))
     del r_struct
-  return jax.tree.map(fn, tree, *restructured_rest)
+  return jax.tree.map(fn, tree, *restructured_rest, is_leaf=is_leaf)
 
 
-@kt.typechecked
+@typechecked
 def tree_map_with_key(
     fn: Callable[..., Any],
     key: PRNGKey,
@@ -195,8 +210,10 @@ def tree_map_with_key(
     key: The PRNG key from which to split all the leaf-keys.
     tree: The tree to map.
     *rest: Additional arguments to pass to fn.
-    is_leaf: A function that takes a leaf and returns True if it should be
-      mapped. If None, all leaves are mapped.
+    is_leaf: Optional predicate called at each flattening step; nodes for which
+      it returns `True` are treated as leaves rather than flattened (same
+      semantics as `jax.tree.map`, e.g. `lambda x: x is None` keeps `None`
+      entries as leaves).
 
   Returns:
     The tree resulting from applying fn to each leaf.
@@ -256,7 +273,7 @@ def egrad(g):
 
 
 @kt.typechecked
-def flatten_non_batch_dims(x: Array["batch ..."]):  # pyrefly: ignore[not-a-type]
+def flatten_non_batch_dims(x: kt.Array["batch ..."]):  # pyrefly: ignore[not-a-type]
   """Reshapes the array with `B` as the first dimension to (B, ...).
 
   If the array has only one batched dimension, the result has shape (B, 1). If
@@ -272,7 +289,7 @@ def flatten_non_batch_dims(x: Array["batch ..."]):  # pyrefly: ignore[not-a-type
 
 
 @kt.typechecked
-def bcast_right(value: Array["*shape"], ndim: int) -> Array["*out_shape"]:  # pyrefly: ignore[not-a-type]
+def bcast_right(value: kt.Array["*shape"], ndim: int) -> kt.Array["*out_shape"]:  # pyrefly: ignore[not-a-type]
   """Broadcast by adding singleton axes to the right, instead of to the left."""
   if value.ndim > ndim:
     raise ValueError(
@@ -295,7 +312,7 @@ _to_fp32_from_bf16 = (  # pylint: disable=invalid-name
 )
 
 
-def to_bf16_from_fp32(x: PyTree) -> PyTree:  # pyrefly: ignore[not-a-type]
+def to_bf16_from_fp32(x: jt.PyTree) -> jt.PyTree:
   """Converts a PyTree of arrays to bfloat16.
 
   Leaves of the PyTree are converted to bfloat16 if they are float32.
@@ -310,7 +327,7 @@ def to_bf16_from_fp32(x: PyTree) -> PyTree:  # pyrefly: ignore[not-a-type]
   return jax.tree.map(_to_bf16_from_fp32, x)
 
 
-def optional_bf16_to_fp32(x: PyTree) -> PyTree:  # pyrefly: ignore[not-a-type]
+def optional_bf16_to_fp32(x: jt.PyTree) -> jt.PyTree:
   """Converts a PyTree of arrays from bfloat16.
 
   Leaves of the PyTree are converted to float32 if they are bfloat16.

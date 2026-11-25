@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for unet_blocks."""
+"""Unit tests for UNet residual, resampling, and attention blocks."""
 
 from typing import Literal, Tuple
 
@@ -242,6 +242,66 @@ class AttentionResidualBlockTest(parameterized.TestCase):
         rngs={'dropout': self.key},
     )
     self.assertEqual(output.shape, x_shape)  # pyrefly: ignore[missing-attribute]
+
+  def test_attention_residual_block_eval_is_deterministic_with_dropout(self):
+    uncond_norm_strategy, _ = _get_norm_strategy('default_rms_norm')
+    block = unet_blocks.AttentionResidualBlock(
+        norm_strategy=uncond_norm_strategy,
+        skip_connection_fn=unet_blocks.UnnormalizedAddSkip(),
+        cross_attention_bool=False,
+        dropout_rate=0.5,
+        dtype=jnp.float32,
+        attention_heads_spec=attention.AttentionHeadsSpec(head_dim=8),
+        normalize_qk=False,
+        use_rope=False,
+        rope_positions_fn=SquareRoPEPositions(),
+    )
+    x = jax.random.normal(self.key, (2, 4, 4, 16))
+    variables = block.init(
+        {'params': self.key, 'dropout': self.key},
+        x=x,
+        cross_attention_emb=None,
+        is_training=True,
+    )
+    # Give Dense_Output non-zero weights so attention output affects result.
+    params = dict(variables['params'])
+    mha = dict(params['MultiHeadAttention_0'])
+    mha['Dense_Output'] = {
+        **mha['Dense_Output'],
+        'kernel': jnp.ones_like(mha['Dense_Output']['kernel']),
+    }
+    params['MultiHeadAttention_0'] = mha
+    variables = {**variables, 'params': params}
+
+    # Eval mode must be deterministic without requiring a dropout RNG stream.
+    eval_a = block.apply(
+        variables, x=x, cross_attention_emb=None, is_training=False
+    )
+    eval_b = block.apply(
+        variables,
+        x=x,
+        cross_attention_emb=None,
+        is_training=False,
+        rngs={'dropout': jax.random.PRNGKey(99)},
+    )
+    self.assertTrue(jnp.allclose(eval_a, eval_b))  # pyrefly: ignore[bad-argument-type]
+
+    # Training mode with different dropout keys differs.
+    train_a = block.apply(
+        variables,
+        x=x,
+        cross_attention_emb=None,
+        is_training=True,
+        rngs={'dropout': jax.random.PRNGKey(1)},
+    )
+    train_b = block.apply(
+        variables,
+        x=x,
+        cross_attention_emb=None,
+        is_training=True,
+        rngs={'dropout': jax.random.PRNGKey(2)},
+    )
+    self.assertFalse(jnp.allclose(train_a, train_b))  # pyrefly: ignore[bad-argument-type]
 
 
 if __name__ == '__main__':

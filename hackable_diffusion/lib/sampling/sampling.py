@@ -21,47 +21,39 @@ It defines a sampling loop that orchestrates three key components:
 """
 
 import dataclasses
+from typing import Any, TypeAlias
+
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 from hackable_diffusion.lib.sampling import conditioning as conditioning_lib
 from hackable_diffusion.lib.sampling import diffusion_early_stopping
 from hackable_diffusion.lib.sampling import time_scheduling
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
+import jaxtyping as jt
 
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-PRNGKey = hd_typing.PRNGKey
-PyTree = hd_typing.PyTree
-
-Conditioning = hd_typing.Conditioning
-DataTree = hd_typing.DataTree
-DataArray = hd_typing.DataArray
-TimeTree = hd_typing.TimeTree
-TimeArray = hd_typing.TimeArray
-
-DiffusionStep = hd_api.DiffusionStep
-StepInfo = hd_api.StepInfo
-SamplerStep = hd_api.SamplerStep
-
-DiffusionStepTree = PyTree[DiffusionStep]
-
-
-InferenceFn = hd_api.InferenceFn
-TimeSchedule = time_scheduling.TimeSchedule
-DiffusionEarlyStoppingFn = diffusion_early_stopping.DiffusionEarlyStoppingFn
-UpdateConditioningFn = conditioning_lib.UpdateConditioningFn
+Batch: TypeAlias = hd_api.Batch
+PRNGKey: TypeAlias = hd_api.PRNGKey
+Conditioning: TypeAlias = hd_api.Conditioning
+DiffusionEarlyStoppingFn: TypeAlias = (
+    diffusion_early_stopping.DiffusionEarlyStoppingFn
+)
+DiffusionStepTree: TypeAlias = jt.PyTree[hd_api.DiffusionStep[Any]]
+typechecked = jax_helpers.typechecked
 
 ################################################################################
 # MARK: Helper Functions
 ################################################################################
 
 
-def _split_pytree(full_pytree: PyTree) -> tuple[PyTree, PyTree, PyTree]:  # pyrefly: ignore[not-a-type]
+def _split_pytree(
+    full_pytree: jt.PyTree,
+) -> tuple[jt.PyTree, jt.PyTree, jt.PyTree]:
   """Splits a PyTree into first, middle, and last slices of each leaf."""
   return (
       jax.tree_util.tree_map(lambda x: x[0], full_pytree),
@@ -71,8 +63,8 @@ def _split_pytree(full_pytree: PyTree) -> tuple[PyTree, PyTree, PyTree]:  # pyre
 
 
 def _concat_pytree(
-    first: PyTree, intermediates: PyTree, last: PyTree  # pyrefly: ignore[not-a-type]
-) -> PyTree:  # pyrefly: ignore[not-a-type]
+    first: jt.PyTree, intermediates: jt.PyTree, last: jt.PyTree
+) -> jt.PyTree:
   """Concatenates first, middle, and last slices of each leaf into a single PyTree."""
 
   def concat_leaf(first_, intermediates_, last_):
@@ -85,14 +77,14 @@ def _concat_pytree(
   return jax.tree.map(concat_leaf, first, intermediates, last)
 
 
-def _is_diffusion_leaf(x: PyTree) -> bool:  # pyrefly: ignore[not-a-type]
+def _is_diffusion_leaf(x: jt.PyTree) -> bool:
   """Returns True if the leaf is a DiffusionStep."""
   return isinstance(x, hd_api.DiffusionStep)
 
 
 def _get_input_inference_fn(
-    step_carry: DiffusionStepTree,  # pyrefly: ignore[not-a-type]
-) -> tuple[DataTree, TimeTree]:  # pyrefly: ignore[not-a-type]
+    step_carry: DiffusionStepTree,
+) -> tuple[jt.PyTree[hd_api.Data[Batch]], jt.PyTree[hd_api.Time[Batch]]]:
   """Returns the input to the inference function for a given step."""
   xt = jax.tree.map(
       lambda x: x.xt,
@@ -107,16 +99,16 @@ def _get_input_inference_fn(
   return xt, time
 
 
-def _index_pytree(pytree: PyTree, idx: int) -> PyTree:  # pyrefly: ignore[not-a-type]
+def _index_pytree(pytree: jt.PyTree, idx: int) -> jt.PyTree:
   """Indexes into the leading axis of every leaf in a PyTree."""
   return jax.tree.map(lambda x: x[idx], pytree)
 
 
 def _freeze_done_elements(
-    new_step: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
-    old_step: PyTree[DiffusionStep],  # pyrefly: ignore[not-a-type]
+    new_step: DiffusionStepTree,
+    old_step: DiffusionStepTree,
     done: jax.Array,
-) -> PyTree[DiffusionStep]:  # pyrefly: ignore[not-a-type]
+) -> DiffusionStepTree:
   """Keeps old values for batch elements that are already done.
 
   For each leaf array with a leading batch dimension, elements where
@@ -150,7 +142,7 @@ def _freeze_done_elements(
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class DiffusionSampler(hd_api.SampleFn):
+class DiffusionSampler[Operand](hd_api.SampleFn[Operand]):
   """Returns a sampling function.
 
   Attributes:
@@ -165,20 +157,33 @@ class DiffusionSampler(hd_api.SampleFn):
       each step.
   """
 
-  time_schedule: TimeSchedule
-  stepper: SamplerStep
+  time_schedule: time_scheduling.TimeSchedule[Operand]
+  stepper: hd_api.SamplerStep[Operand]
   num_steps: int
   store_trajectory: bool = True
-  update_conditioning_fn: UpdateConditioningFn | None = None
+  update_conditioning_fn: (
+      conditioning_lib.UpdateConditioningFn[Operand] | None
+  ) = None
 
-  @kt.typechecked
+  def __post_init__(self):
+    # TODO(b/587283362): Revisit num_steps convention so num_steps >= 1 counts
+    # denoising transitions (producing num_steps + 1 trajectory states) across
+    # DiffusionSampler, DiffusionSamplerWithEarlyStopping, and HeunStep.
+    if self.num_steps < 2:
+      raise ValueError(
+          f'Number of steps must be at least 2 (1 initial state + at least 1'
+          f' denoising transition), got {self.num_steps}. Pass num_steps=2 for'
+          ' single-step denoising.'
+      )
+
+  @typechecked
   def __call__(
       self,
-      inference_fn: InferenceFn,
+      inference_fn: hd_api.InferenceFn[Operand],
       rng: PRNGKey,
-      initial_noise: DataTree,  # pyrefly: ignore[not-a-type]
+      initial_noise: hd_api.Data[Operand],
       conditioning: Conditioning | None = None,
-  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:  # pyrefly: ignore[not-a-type]
+  ) -> tuple[DiffusionStepTree, DiffusionStepTree | None]:
     """Performs a full reverse diffusion sampling loop for a single sample.
 
     This function orchestrates the denoising process, starting from an initial
@@ -196,11 +201,6 @@ class DiffusionSampler(hd_api.SampleFn):
         - A `PyTree[DiffusionStep]` PyTree containing the full trajectory of all
         steps, or None if `store_trajectory` is False.
     """
-    if self.num_steps < 2:
-      raise ValueError(
-          f'Number of steps must be at least 2, got {self.num_steps}.'
-      )
-
     all_step_infos = self.time_schedule.all_step_infos(
         rng, self.num_steps, initial_noise
     )
@@ -214,12 +214,15 @@ class DiffusionSampler(hd_api.SampleFn):
         first_step_info,
     )
 
-    def _step(step_carry: PyTree[DiffusionStep], next_step_info: PyTree[StepInfo]):  # pyrefly: ignore[not-a-type]
+    def _step(
+        step_carry: jt.PyTree[hd_api.DiffusionStep[Operand]],
+        next_step_info: jt.PyTree[hd_api.StepInfo[Operand]],
+    ):
       xt, time = _get_input_inference_fn(step_carry)
       updated_conditioning = conditioning
       if self.update_conditioning_fn is not None:
         updated_conditioning = self.update_conditioning_fn(
-            conditioning, step_carry  # pyrefly: ignore[bad-argument-type]
+            conditioning, step_carry
         )
       prediction = inference_fn(
           xt=xt,
@@ -245,7 +248,7 @@ class DiffusionSampler(hd_api.SampleFn):
     last_conditioning = conditioning
     if self.update_conditioning_fn is not None:
       last_conditioning = self.update_conditioning_fn(
-          conditioning, before_last_step  # pyrefly: ignore[bad-argument-type]
+          conditioning, before_last_step
       )
     last_prediction = inference_fn(
         xt=xt,
@@ -272,7 +275,7 @@ class DiffusionSampler(hd_api.SampleFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
+class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn[Batch]):
   """Samples via reverse diffusion using ``jax.lax.while_loop``.
 
   This sampler replaces ``jax.lax.scan`` with ``jax.lax.while_loop`` which
@@ -293,23 +296,33 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
       pythonic one.
   """
 
-  time_schedule: TimeSchedule
-  stepper: SamplerStep
+  time_schedule: time_scheduling.TimeSchedule[Batch]
+  stepper: hd_api.SamplerStep[Batch]
   num_steps: int
-  update_conditioning_fn: UpdateConditioningFn | None = None
+  update_conditioning_fn: (
+      conditioning_lib.UpdateConditioningFn[Batch] | None
+  ) = None
   early_stopping_fn: DiffusionEarlyStoppingFn = (
       diffusion_early_stopping.DiffusionNoEarlyStopFn()
   )
   use_lax_while_loop: bool = True
 
-  @kt.typechecked
+  def __post_init__(self):
+    if self.num_steps < 2:
+      raise ValueError(
+          f'Number of steps must be at least 2 (1 initial state + at least 1'
+          f' denoising transition), got {self.num_steps}. Pass num_steps=2 for'
+          ' single-step denoising.'
+      )
+
+  @typechecked
   def __call__(
       self,
-      inference_fn: InferenceFn,
+      inference_fn: hd_api.InferenceFn[Batch],
       rng: PRNGKey,
-      initial_noise: DataArray,  # pyrefly: ignore[not-a-type]
+      initial_noise: hd_api.Data[Batch],
       conditioning: Conditioning | None = None,
-  ) -> tuple[DiffusionStep, DiffusionStep | None]:
+  ) -> tuple[hd_api.DiffusionStep[Batch], hd_api.DiffusionStep[Batch] | None]:
     """Performs a full reverse diffusion sampling loop for a single sample.
 
     Uses ``jax.lax.while_loop`` instead of ``jax.lax.scan``.
@@ -327,19 +340,13 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
     Returns:
       A tuple containing:
         - The last ``DiffusionStep`` of the sampling process.  Its
-          ``step_info.step`` field records the actual number of update steps
-          executed.
+          ``step_info.step`` field records the actual number of denoising
+          transitions executed (intermediate updates + finalize).
         - ``None`` (trajectory storage is not supported).
-
-    Raises:
-      ValueError: If ``num_steps < 1``.
     """
-    if self.num_steps < 1:
-      raise ValueError(
-          f'Number of steps must be at least 1, got {self.num_steps}.'
-      )
-
-    # Pre-compute all step infos: shape [num_steps, ...] for each leaf.
+    # Pre-compute all step infos: shape [num_steps, ...] for each leaf
+    # (1 initial state + (num_steps - 2) intermediate updates + 1 finalize),
+    # matching DiffusionSampler.
     all_step_infos = self.time_schedule.all_step_infos(
         rng, self.num_steps, initial_noise
     )
@@ -347,8 +354,8 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
     first_step_info = _index_pytree(all_step_infos, 0)
     first_step = self.stepper.initialize(initial_noise, first_step_info)
 
-    # The total number of intermediate update steps excluding finalize.
-    num_intermediate_steps = self.num_steps - 1
+    # The total number of intermediate update steps excluding init and finalize.
+    num_intermediate_steps = self.num_steps - 2
 
     # done: per-element bool tracking which batch elements have converged.
     batch_size = initial_noise.shape[0]
@@ -373,7 +380,7 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
       updated_conditioning = conditioning
       if self.update_conditioning_fn is not None:
         updated_conditioning = self.update_conditioning_fn(
-            conditioning, step_carry  # pyrefly: ignore[bad-argument-type]
+            conditioning, step_carry
         )
       prediction = inference_fn(
           xt=xt,
@@ -408,13 +415,13 @@ class DiffusionSamplerWithEarlyStopping(hd_api.SampleFn):
         carry = _body_fn(carry)
       before_last_step, steps_executed, done = carry
 
-    # Finalize: run the last step.
-    last_step_info = _index_pytree(all_step_infos, num_intermediate_steps)
+    # Finalize: run the last step across the final schedule interval.
+    last_step_info = _index_pytree(all_step_infos, self.num_steps - 1)
     xt, time = _get_input_inference_fn(before_last_step)
     last_conditioning = conditioning
     if self.update_conditioning_fn is not None:
       last_conditioning = self.update_conditioning_fn(
-          conditioning, before_last_step  # pyrefly: ignore[bad-argument-type]
+          conditioning, before_last_step
       )
     last_prediction = inference_fn(
         xt=xt,

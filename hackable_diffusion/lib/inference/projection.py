@@ -15,22 +15,20 @@
 """Projection."""
 
 import dataclasses
-from typing import Protocol
+from typing import Protocol, TypeAlias
 from hackable_diffusion.lib import hd_api
-from hackable_diffusion.lib import hd_typing
+from hackable_diffusion.lib import jax_helpers
 import jax
 import jax.numpy as jnp
-import kauldron.ktyping as kt
 
 
 ################################################################################
 # MARK: Type Aliases
 ################################################################################
 
-Conditioning = hd_typing.Conditioning
-DataArray = hd_typing.DataArray
-TargetInfo = hd_typing.TargetInfo
-TimeArray = hd_typing.TimeArray
+Batch: TypeAlias = hd_api.Batch
+Conditioning: TypeAlias = hd_api.Conditioning
+typechecked = jax_helpers.typechecked
 
 
 ################################################################################
@@ -38,16 +36,16 @@ TimeArray = hd_typing.TimeArray
 ################################################################################
 
 
-class ProjectionFn(Protocol):
+class ProjectionFn[Operand](Protocol):
   """Projection function protocol."""
 
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      outputs: TargetInfo,  # pyrefly: ignore[not-a-type]
-  ) -> TargetInfo:  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Operand],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Operand],
+      outputs: hd_api.TargetInfo[Operand],
+  ) -> hd_api.TargetInfo[Operand]:
     """Projection function protocol."""
     ...
 
@@ -57,13 +55,13 @@ class ProjectionFn(Protocol):
 ################################################################################
 
 
-@kt.typechecked
+@typechecked
 def _to_x0(
-    preds: TargetInfo,
-    xt: DataArray,  # pyrefly: ignore[not-a-type]
-    time: TimeArray,  # pyrefly: ignore[not-a-type]
-    process: hd_api.CorruptionProcess,
-) -> tuple[str, TargetInfo]:
+    preds: hd_api.TargetInfo[Batch],
+    xt: hd_api.Data[Batch],
+    time: hd_api.Time[Batch],
+    process: hd_api.CorruptionProcess[Batch],
+) -> tuple[str, hd_api.TargetInfo[Batch]]:
   """Converts the preds to x0 prediction.
 
   Convert the preds to x0 prediction by applying the corruption process
@@ -91,14 +89,14 @@ def _to_x0(
   return prediction_type, {"x0": all_preds["x0"]}
 
 
-@kt.typechecked
+@typechecked
 def _from_x0(
-    preds: TargetInfo,
-    xt: DataArray,  # pyrefly: ignore[not-a-type]
-    time: TimeArray,  # pyrefly: ignore[not-a-type]
-    process: hd_api.CorruptionProcess,
+    preds: hd_api.TargetInfo[Batch],
+    xt: hd_api.Data[Batch],
+    time: hd_api.Time[Batch],
+    process: hd_api.CorruptionProcess[Batch],
     prediction_type: str,
-) -> TargetInfo:
+) -> hd_api.TargetInfo[Batch]:
   """Converts the x0 prediction to prediction type.
 
   This is the inverse of `_to_x0`. Given a prediction type and the x0
@@ -131,23 +129,24 @@ def _from_x0(
 ################################################################################
 
 
-class IdentityProjectionFn(ProjectionFn):
+class IdentityProjectionFn(ProjectionFn[Batch]):
   """Identity projection function."""
 
+  @typechecked
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
+      xt: hd_api.Data[Batch],
       conditioning: Conditioning | None,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      outputs: TargetInfo,
-  ) -> TargetInfo:
+      time: hd_api.Time[Batch],
+      outputs: hd_api.TargetInfo[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     """Identity projection function."""
     del xt, conditioning, time  # unused
     return outputs
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class StaticThresholdProjectionFn(ProjectionFn):
+class StaticThresholdProjectionFn(ProjectionFn[Batch]):
   """Static threshold projection function.
 
   Attributes:
@@ -158,7 +157,7 @@ class StaticThresholdProjectionFn(ProjectionFn):
 
   min_value: float = -1.0
   max_value: float = 1.0
-  process: hd_api.CorruptionProcess
+  process: hd_api.CorruptionProcess[Batch]
 
   def __post_init__(self):
     if self.min_value > self.max_value:
@@ -167,14 +166,14 @@ class StaticThresholdProjectionFn(ProjectionFn):
           f" {self.min_value=} and {self.max_value=}"
       )
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      outputs: TargetInfo,
-  ) -> TargetInfo:
+      xt: hd_api.Data[Batch],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Batch],
+      outputs: hd_api.TargetInfo[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     """Static threshold projection function."""
     del conditioning  # unused
     prediction_type, x0_preds = _to_x0(outputs, xt, time, self.process)
@@ -185,7 +184,7 @@ class StaticThresholdProjectionFn(ProjectionFn):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class DynamicThresholdProjectionFn(ProjectionFn):
+class DynamicThresholdProjectionFn(ProjectionFn[Batch]):
   """Dynamic threshold projection function.
 
   The implementation is based on https://arxiv.org/abs/2205.11487.
@@ -197,7 +196,7 @@ class DynamicThresholdProjectionFn(ProjectionFn):
   """
 
   percentile: float = 95.0
-  process: hd_api.CorruptionProcess
+  process: hd_api.CorruptionProcess[Batch]
 
   def __post_init__(self):
     if self.percentile < 0.0 or self.percentile > 100.0:
@@ -205,7 +204,7 @@ class DynamicThresholdProjectionFn(ProjectionFn):
           f"Percentile must be between 0.0 and 100.0, got {self.percentile}"
       )
 
-  def _dynamic_threshold(self, x0: DataArray) -> DataArray:  # pyrefly: ignore[not-a-type]
+  def _dynamic_threshold(self, x0: hd_api.Data[Batch]) -> hd_api.Data[Batch]:
     """Dynamic threshold projection function."""
     axes = tuple(range(1, x0.ndim))
     s = jnp.percentile(jnp.abs(x0), self.percentile, axis=axes, keepdims=True)
@@ -213,15 +212,16 @@ class DynamicThresholdProjectionFn(ProjectionFn):
     x0 = jnp.clip(x0, -s, s) / s
     return x0
 
-  @kt.typechecked
+  @typechecked
   def __call__(
       self,
-      xt: DataArray,  # pyrefly: ignore[not-a-type]
-      conditioning: Conditioning,
-      time: TimeArray,  # pyrefly: ignore[not-a-type]
-      outputs: TargetInfo,
-  ) -> TargetInfo:
+      xt: hd_api.Data[Batch],
+      conditioning: Conditioning | None,
+      time: hd_api.Time[Batch],
+      outputs: hd_api.TargetInfo[Batch],
+  ) -> hd_api.TargetInfo[Batch]:
     """Dynamic threshold projection function."""
+    del conditioning  # unused
 
     prediction_type, x0_preds = _to_x0(outputs, xt, time, self.process)
     x0_preds = jax.tree.map(self._dynamic_threshold, x0_preds)

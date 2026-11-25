@@ -81,7 +81,7 @@ class KDiffInferenceFnTest(absltest.TestCase):
     inference_fn = factory.from_model_and_context(model, context)
 
     xt = jnp.zeros((2, 4))
-    time = jnp.array([0.5, 0.5])
+    time = jnp.array([[0.5], [0.5]])
     out = inference_fn(xt=xt, conditioning=None, time=time)
 
     mock_guidance_fn.assert_called_once()

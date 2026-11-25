@@ -48,6 +48,7 @@ class PositionalEmbedding(nn.Module):
   """Learnable additive sequence positional embedding."""
 
   init_stddev: float = 0.02
+  param_dtype: DType = jnp.float32
 
   @nn.compact
   @kt.typechecked
@@ -56,8 +57,9 @@ class PositionalEmbedding(nn.Module):
         "PositionalEmbeddingTensor",
         nn.initializers.normal(stddev=self.init_stddev),
         (1, *x.shape[1:]),
-        x.dtype,
+        self.param_dtype,
     )
+    pos_embed = jnp.asarray(pos_embed, dtype=x.dtype)
 
     # Broadcast (1, seq, dim) to (batch, seq, dim) to satisfy jaxtyping
     return jnp.broadcast_to(pos_embed, x.shape)
@@ -186,11 +188,12 @@ class DiTBlock(nn.Module):
     )
 
     # Conditional normalization.
+    norm_dtype = self.dtype if self.dtype != jnp.float32 else None
     self.conditional_norm_attention = self.norm_strategy.build_layer(
-        name='ConditionalNorm_Attention'
+        name='ConditionalNorm_Attention', dtype=norm_dtype
     )
     self.conditional_norm_mlp = self.norm_strategy.build_layer(
-        name='ConditionalNorm_MLP'
+        name='ConditionalNorm_MLP', dtype=norm_dtype
     )
 
     # Gates.
@@ -199,12 +202,14 @@ class DiTBlock(nn.Module):
           self.hidden_size,
           kernel_init=nn.initializers.zeros_init(),
           bias_init=nn.initializers.zeros_init(),
+          dtype=self.dtype,
           name='Dense_Gate_MSA',
       )
       self.gate_mlp = nn.Dense(
           self.hidden_size,
           kernel_init=nn.initializers.zeros_init(),
           bias_init=nn.initializers.zeros_init(),
+          dtype=self.dtype,
           name='Dense_Gate_MLP',
       )
 
@@ -273,7 +278,8 @@ class DiTBlockFlux(DiTBlock):  # pyrefly: ignore[bad-class-definition]
 
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalRMSNormStrategy(
-        use_shift=False
+        use_shift=False,
+        dtype=self.dtype,
     )
     super().__post_init__()
 
@@ -294,6 +300,7 @@ class DiTBlockSD3(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalRMSNormStrategy(
         use_shift=True,
+        dtype=self.dtype,
     )
     super().__post_init__()
 
@@ -314,6 +321,7 @@ class DiTBlockAdaLNZero(DiTBlock):  # pyrefly: ignore[bad-class-definition]
   def __post_init__(self):
     self.norm_strategy = normalization.ConditionalLayerNormStrategy(
         use_shift=True,
+        dtype=self.dtype,
     )
     super().__post_init__()
 
@@ -332,10 +340,12 @@ class Patchify(nn.Module):
   Attributes:
     patch_size: The size of the patches.
     embedding_dim: The dimension of the embedding.
+    dtype: The data type of the module.
   """
 
   patch_size: tuple[int, int]
   embedding_dim: int
+  dtype: DType = jnp.float32
 
   @nn.compact
   @kt.typechecked
@@ -356,9 +366,9 @@ class Patchify(nn.Module):
         hp=hp,
         wp=wp,
     )
-    reshaped = nn.Dense(features=self.embedding_dim, name="Dense_Project")(
-        reshaped
-    )
+    reshaped = nn.Dense(
+        features=self.embedding_dim, dtype=self.dtype, name="Dense_Project"
+    )(reshaped)
     return reshaped
 
 

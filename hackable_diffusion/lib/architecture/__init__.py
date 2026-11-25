@@ -33,6 +33,7 @@ from hackable_diffusion.lib.architecture.conditioning_encoder import TimeEmbedde
 from hackable_diffusion.lib.architecture.conditioning_encoder import ZeroTimeEmbedder
 from hackable_diffusion.lib.architecture.discrete import ConditionalDiscreteBackbone
 from hackable_diffusion.lib.architecture.discrete import DenseProjector
+from hackable_diffusion.lib.architecture.discrete import DenseTokenEmbedder
 from hackable_diffusion.lib.architecture.discrete import TokenEmbedder
 from hackable_diffusion.lib.architecture.discrete import TokenProjector
 from hackable_diffusion.lib.architecture.dit import DiT
@@ -42,7 +43,9 @@ from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockAdaLNZero
 from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockFlux
 from hackable_diffusion.lib.architecture.dit_blocks import DiTBlockSD3
 from hackable_diffusion.lib.architecture.dit_blocks import Patchify
+from hackable_diffusion.lib.architecture.dit_blocks import PositionalEmbedding
 from hackable_diffusion.lib.architecture.mlp import ConditionalMLP
+from hackable_diffusion.lib.architecture.mlp_blocks import FeedForward
 from hackable_diffusion.lib.architecture.mlp_blocks import MLP
 from hackable_diffusion.lib.architecture.normalization import ConditionalGroupNormStrategy
 from hackable_diffusion.lib.architecture.normalization import ConditionalLayerNormStrategy
